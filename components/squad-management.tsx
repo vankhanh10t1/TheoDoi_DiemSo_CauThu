@@ -34,9 +34,16 @@ const POSITION_OPTIONS = [
 ];
 
 export function SquadManagement() {
-  const { players, loadPlayers, addPlayer, deletePlayer, setSelectedPlayerId, setCurrentTab } = useAppContext();
+  const {
+    players,
+    playersError,
+    loadPlayers,
+    addPlayer,
+    deletePlayer,
+    setSelectedPlayerId,
+    setCurrentTab
+  } = useAppContext();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<AddPlayerForm>({
     name: '',
@@ -54,9 +61,7 @@ export function SquadManagement() {
 
   useEffect(() => {
     setLoading(true);
-    setError(null);
     loadPlayers()
-      .catch(() => setError('Failed to load players'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -208,7 +213,7 @@ export function SquadManagement() {
       )}
 
       {loading && <p>Đang tải...</p>}
-      {error && <p className="status-error">{error}</p>}
+      {playersError && <p className="status-error">{playersError}</p>}
 
       {!loading && players.length === 0 && <p>Chưa có cầu thủ nào. Hãy thêm cầu thủ mới.</p>}
 

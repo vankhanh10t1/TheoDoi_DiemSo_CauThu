@@ -26,7 +26,7 @@ function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): 
 }
 
 export function TrackerApp() {
-  const { players } = useAppContext();
+  const { players, playersError } = useAppContext();
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.playerId ?? '');
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -164,7 +164,7 @@ export function TrackerApp() {
       <section className="hero-card">
         <div>
           <p className="eyebrow">FCON Performance Tracker</p>
-          <h2>Theo dõi phong độ cầu thủ thuộc đội VanKhasnh14 trong5 trận gần nhất</h2>
+          <h2>Theo dõi phong độ cầu thủ thuộc đội VanKhasnh14 trong 5 trận gần nhất</h2>
           <p className="hero-copy">
             Bán độ không bao giờ có chỗ đứng trong môn thể thao vua.
           </p>
@@ -269,6 +269,8 @@ export function TrackerApp() {
               <p className={`inline-message ${saveState.tone}`}>{saveState.message}</p>
             ) : null}
           </form>
+
+          {playersError ? <p className="status-error" style={{ marginTop: '16px' }}>{playersError}</p> : null}
         </article>
 
         <article className="panel status-panel">

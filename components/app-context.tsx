@@ -18,6 +18,7 @@ interface AppContextType {
     season: string;
     position: string;
   }>;
+  playersError: string | null;
   loadPlayers: () => Promise<void>;
   addPlayer: (data: { name: string; season: string; position: string }) => Promise<{ ok: boolean; message?: string }>; 
   deletePlayer: (playerId: string) => Promise<{ ok: boolean; message?: string }>;
@@ -31,14 +32,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [players, setPlayers] = useState<Array<{ playerId: string; name: string; season: string; position: string }>>([]);
+  const [playersError, setPlayersError] = useState<string | null>(null);
 
   async function loadPlayers() {
     try {
       const res = await fetch('/api/players');
-      const data = (await res.json()) as Array<{ playerId: string; name: string; season: string; position: string }>;
-      setPlayers(data || []);
-    } catch {
+      const payload = (await res.json()) as
+        | Array<{ playerId: string; name: string; season: string; position: string }>
+        | { message?: string };
+
+      if (!res.ok) {
+        const message = !Array.isArray(payload)
+          ? payload.message ?? 'Failed to load players'
+          : 'Failed to load players';
+        setPlayers([]);
+        setPlayersError(message);
+        return;
+      }
+
+      setPlayers(Array.isArray(payload) ? payload : []);
+      setPlayersError(null);
+    } catch (error) {
       setPlayers([]);
+      setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
     }
   }
 
@@ -100,6 +116,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refreshTrigger,
         triggerRefresh,
         players,
+        playersError,
         loadPlayers,
         addPlayer,
         deletePlayer,

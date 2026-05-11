@@ -1,7 +1,6 @@
 import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
-import type { PlayerSummary } from '../../../lib/types';
 
 export const runtime = 'nodejs';
 
@@ -30,9 +29,12 @@ export async function GET() {
     }));
 
     return NextResponse.json(items, { status: 200 });
-  } catch {
-    // If DB unavailable, return empty list (no seeded/mock data)
-    return NextResponse.json([], { status: 200 });
+  } catch (error) {
+    console.error('Failed to load players', error);
+    return NextResponse.json(
+      { message: 'Failed to load players from DynamoDB' },
+      { status: 500 }
+    );
   }
 }
 
@@ -129,9 +131,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ message: 'Failed to create player after retries' }, { status: 500 });
-
-  return NextResponse.json(
-    { message: 'Player created successfully', playerId },
-    { status: 201 }
-  );
 }
