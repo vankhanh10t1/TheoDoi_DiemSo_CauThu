@@ -1,0 +1,298 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { PlayerSummary } from '../lib/types';
+import { useAppContext } from './app-context';
+
+type AddPlayerForm = {
+  name: string;
+  season: string;
+  position: string;
+};
+
+type EditPlayerForm = {
+  name: string;
+  position: string;
+};
+
+const POSITION_OPTIONS = [
+  { value: 'ST', label: 'ST (Tiền Đạo)' },
+  { value: 'CF', label: 'CF (Trung Phối Công)' },
+  { value: 'LW', label: 'LW (Tiền Đạo Cánh Trái)' },
+  { value: 'RW', label: 'RW (Tiền Đạo Cánh Phải)' },
+  { value: 'CAM', label: 'CAM (Hộ Công)' },
+  { value: 'CM', label: 'CM (Tiền Vệ Trung Tâm)' },
+  { value: 'CDM', label: 'CDM (Tiền Vệ Phòng Ngự)' },
+  { value: 'LM', label: 'LM (Tiền Vệ Cánh Trái)' },
+  { value: 'RM', label: 'RM (Tiền Vệ Cánh Phải)' },
+  { value: 'LWB', label: 'LWB (Hậu Vệ/wing trái)' },
+  { value: 'RWB', label: 'RWB (Hậu Vệ/wing phải)' },
+  { value: 'CB', label: 'CB (Hậu Vệ Trung Tâm)' },
+  { value: 'LB', label: 'LB (Hậu Vệ Trái)' },
+  { value: 'RB', label: 'RB (Hậu Vệ Phải)' },
+  { value: 'GK', label: 'GK (Thủ Môn)' }
+];
+
+export function SquadManagement() {
+  const { players, loadPlayers, addPlayer, deletePlayer, setSelectedPlayerId, setCurrentTab } = useAppContext();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState<AddPlayerForm>({
+    name: '',
+    season: '',
+    position: ''
+  });
+  const [saveMessage, setSaveMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(
+    null
+  );
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<EditPlayerForm>({
+    name: '',
+    position: ''
+  });
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    loadPlayers()
+      .catch(() => setError('Failed to load players'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleAddPlayer(e: React.FormEvent) {
+    e.preventDefault();
+    setSaveMessage(null);
+
+    try {
+      const result = await addPlayer({ name: formData.name, season: formData.season, position: formData.position });
+      if (!result.ok) throw new Error(result.message ?? 'Failed');
+
+      setSaveMessage({ text: 'Cầu thủ đã thêm thành công', type: 'success' });
+      setFormData({ name: '', season: '', position: '' });
+      setShowForm(false);
+    } catch (err) {
+      setSaveMessage({
+        text: err instanceof Error ? err.message : 'Không thể thêm cầu thủ',
+        type: 'error'
+      });
+    }
+  }
+
+  async function handleDeletePlayer(playerId: string) {
+    if (!confirm(`Xóa cầu thủ ${playerId}? Tất cả dữ liệu trận đấu sẽ bị xóa.`)) {
+      return;
+    }
+
+    try {
+      const result = await deletePlayer(playerId);
+      if (!result.ok) throw new Error(result.message ?? 'Failed');
+
+      setSaveMessage({ text: 'Cầu thủ đã xóa thành công', type: 'success' });
+    } catch (err) {
+      setSaveMessage({
+        text: err instanceof Error ? err.message : 'Không thể xóa cầu thủ',
+        type: 'error'
+      });
+    }
+  }
+
+  function handleStartEdit(player: PlayerSummary) {
+    setEditingPlayerId(player.playerId);
+    setEditFormData({
+      name: player.name,
+      position: player.position
+    });
+    setSaveMessage(null);
+  }
+
+  function handleCancelEdit() {
+    setEditingPlayerId(null);
+    setEditFormData({ name: '', position: '' });
+  }
+
+  async function handleUpdatePlayer(playerId: string, e: React.FormEvent) {
+    e.preventDefault();
+    setSaveMessage(null);
+
+    try {
+      const response = await fetch(`/api/players/${playerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editFormData.name,
+          position: editFormData.position
+        })
+      });
+
+      const payload = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? 'Failed to update player');
+      }
+
+      setSaveMessage({ text: 'Cầu thủ đã được cập nhật thành công', type: 'success' });
+      setEditingPlayerId(null);
+      setEditFormData({ name: '', position: '' });
+      await loadPlayers();
+    } catch (err) {
+      setSaveMessage({
+        text: err instanceof Error ? err.message : 'Không thể cập nhật cầu thủ',
+        type: 'error'
+      });
+    }
+  }
+
+  function handleViewDetail(playerId: string) {
+    setSelectedPlayerId(playerId);
+    setCurrentTab('player-detail');
+  }
+
+  return (
+    <div className="screen-panel">
+      <div className="screen-header">
+        <h2>Quản Lý Đội Hình</h2>
+        <button className="primary-button" onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'Hủy' : '+ Thêm Cầu Thủ'}
+        </button>
+      </div>
+
+      {saveMessage && (
+        <div className={`inline-message ${saveMessage.type}`}>{saveMessage.text}</div>
+      )}
+
+      {showForm && (
+        <form className="form-stack" onSubmit={handleAddPlayer} style={{ marginBottom: '20px' }}>
+          <label className="field">
+            <span>Tên Cầu Thủ</span>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="VD: C. Ronaldo"
+              required
+            />
+          </label>
+
+          <label className="field">
+            <span>Mùa Giải</span>
+            <input
+              type="text"
+              value={formData.season}
+              onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+              placeholder="VD: 21CU"
+              required
+            />
+          </label>
+
+          <label className="field">
+            <span>Vị Trí</span>
+            <select
+              value={formData.position}
+              onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+              required
+            >
+              <option value="">-- Chọn vị trí --</option>
+              {POSITION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button className="primary-button" type="submit">
+            Thêm Cầu Thủ
+          </button>
+        </form>
+      )}
+
+      {loading && <p>Đang tải...</p>}
+      {error && <p className="status-error">{error}</p>}
+
+      {!loading && players.length === 0 && <p>Chưa có cầu thủ nào. Hãy thêm cầu thủ mới.</p>}
+
+      {!loading && players.length > 0 && (
+        <div className="players-grid">
+          {players.map((player) => (
+            <div key={player.playerId} className="player-card">
+              <div className="player-card-header">
+                <h3>{player.name}</h3>
+                <span className="position-badge">{player.position}</span>
+              </div>
+              <p className="player-id">ID: {player.playerId}</p>
+              <p className="player-season">Mùa: {player.season}</p>
+              <div className="player-card-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => handleViewDetail(player.playerId)}
+                >
+                  Chi Tiết
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleStartEdit(player)}
+                >
+                  Cập Nhật
+                </button>
+                <button
+                  className="danger-button"
+                  onClick={() => handleDeletePlayer(player.playerId)}
+                >
+                  Xóa
+                </button>
+              </div>
+
+              {editingPlayerId === player.playerId && (
+                <form
+                  className="form-stack"
+                  onSubmit={(event) => void handleUpdatePlayer(player.playerId, event)}
+                  style={{ marginTop: '16px' }}
+                >
+                  <label className="field">
+                    <span>Tên Cầu Thủ</span>
+                    <input
+                      type="text"
+                      value={editFormData.name}
+                      onChange={(event) =>
+                        setEditFormData({ ...editFormData, name: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Vị Trí</span>
+                    <select
+                      value={editFormData.position}
+                      onChange={(event) =>
+                        setEditFormData({ ...editFormData, position: event.target.value })
+                      }
+                      required
+                    >
+                      <option value="">-- Chọn vị trí --</option>
+                      {POSITION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="player-card-actions">
+                    <button className="primary-button" type="submit">
+                      Lưu Cập Nhật
+                    </button>
+                    <button className="secondary-button" type="button" onClick={handleCancelEdit}>
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
