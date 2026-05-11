@@ -40,7 +40,7 @@ describe('evaluationEngine', () => {
     });
   });
 
-  it('evaluates using all available matches', () => {
+  it('evaluates the latest five matches', () => {
     const result = evaluateRecentMatches([
       { sk: 'MATCH#5', score: 9, result: 'Win' },
       { sk: 'MATCH#4', score: 8, result: 'Win' },
@@ -51,7 +51,7 @@ describe('evaluationEngine', () => {
     ]);
 
     expect(result).toEqual({
-      averageScore: 6,
+      averageScore: 7,
       status: 'Stable',
       action: 'Tiếp tục tin dùng',
       color: 'white'

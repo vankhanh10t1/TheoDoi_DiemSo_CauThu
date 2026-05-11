@@ -45,8 +45,9 @@ export function evaluateRecentMatches(matches: RecentMatch[]): PlayerAssessment 
     return classifyAverageScore(0);
   }
 
+  const latestFive = matches.slice(0, 5);
   const averageScore =
-    matches.reduce((sum, match) => sum + match.score, 0) / matches.length;
+    latestFive.reduce((sum, match) => sum + match.score, 0) / latestFive.length;
 
   return classifyAverageScore(averageScore);
 }

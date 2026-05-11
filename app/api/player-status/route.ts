@@ -16,14 +16,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Player not found' }, { status: 404 });
   }
 
-  const recentMatches = await getRecentMatches(playerId);
+  const allMatches = await getRecentMatches(playerId);
+  const recentMatches = allMatches.slice(0, 5);
 
-  if (recentMatches.length === 0) {
+  if (allMatches.length === 0) {
     return NextResponse.json(
       {
         playerId,
         name: player.name,
-        matchCount: recentMatches.length,
+        matchCount: 0,
         status: 'Đang theo dõi',
         message: 'Chưa có dữ liệu trận để đánh giá'
       },
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
       playerId,
       name: player.name,
       averageScore: assessment.averageScore,
-      matchCount: recentMatches.length,
+      matchCount: allMatches.length,
       status: assessment.status,
       action: assessment.action,
       color: assessment.color,

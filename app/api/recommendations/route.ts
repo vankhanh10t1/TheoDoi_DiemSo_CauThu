@@ -40,16 +40,18 @@ export async function GET() {
         );
 
         const matches = (matchResponse.Items ?? []) as StoredMatchItem[];
-        const recentMatches = matches
+        const allMatches = matches
           .sort((a, b) => (b.SK > a.SK ? 1 : -1))
           .map((m) => ({
             sk: m.SK,
             score: m.Score,
             result: m.Result
           }));
+        const recentMatches = allMatches.slice(0, 5);
 
         const rec = generateTransferRecommendation(playerId, playerName, recentMatches);
         if (rec) {
+          rec.matchCount = allMatches.length;
           recommendations.push(rec);
         }
       } catch {
