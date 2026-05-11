@@ -35,26 +35,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [playersError, setPlayersError] = useState<string | null>(null);
 
   async function loadPlayers() {
+    const requestStartedAt = Date.now();
+
     try {
+      console.info('[players] loading from /api/players');
       const res = await fetch('/api/players');
       const payload = (await res.json()) as
         | Array<{ playerId: string; name: string; season: string; position: string }>
-        | { message?: string };
+        | {
+            items?: Array<{ playerId: string; name: string; season: string; position: string }>;
+            message?: string;
+            error?: string;
+            requestId?: string;
+            durationMs?: number;
+          };
+
+      console.info('[players] /api/players response', {
+        ok: res.ok,
+        status: res.status,
+        elapsedMs: Date.now() - requestStartedAt,
+        payloadKind: Array.isArray(payload) ? 'array' : 'object'
+      });
 
       if (!res.ok) {
         const message = !Array.isArray(payload)
-          ? payload.message ?? 'Failed to load players'
+          ? payload.error ?? payload.message ?? 'Failed to load players'
           : 'Failed to load players';
         setPlayers([]);
         setPlayersError(message);
+        console.error('[players] load failed', {
+          status: res.status,
+          message,
+          requestId: !Array.isArray(payload) ? payload.requestId : undefined,
+          durationMs: !Array.isArray(payload) ? payload.durationMs : undefined
+        });
         return;
       }
 
-      setPlayers(Array.isArray(payload) ? payload : []);
+      const items = Array.isArray(payload) ? payload : payload.items ?? [];
+      setPlayers(items);
       setPlayersError(null);
+      console.info('[players] load success', {
+        count: items.length,
+        elapsedMs: Date.now() - requestStartedAt,
+        requestId: Array.isArray(payload) ? undefined : payload.requestId
+      });
     } catch (error) {
       setPlayers([]);
       setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
+      console.error('[players] load exception', error);
     }
   }
 

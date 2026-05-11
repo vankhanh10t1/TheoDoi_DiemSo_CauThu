@@ -116,6 +116,8 @@ AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
 AWS_REGION=ap-southeast-1
 DYNAMODB_TABLE_NAME=FCON_Table
+# Hoặc nếu Vercel đang dùng biến cũ:
+# DYNAMODB_TABLE=FCON_Table
 # Nếu dùng local DynamoDB:
 # DYNAMODB_ENDPOINT=http://localhost:8000
 ```

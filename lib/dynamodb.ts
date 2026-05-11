@@ -3,6 +3,17 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 let cachedDocumentClient: DynamoDBDocumentClient | undefined;
 
+function getFirstAvailableEnv(names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -12,7 +23,12 @@ function getRequiredEnv(name: string): string {
 }
 
 export function getTableName(): string {
-  return getRequiredEnv('DYNAMODB_TABLE_NAME');
+  const tableName = getFirstAvailableEnv(['DYNAMODB_TABLE_NAME', 'DYNAMODB_TABLE']);
+  if (!tableName) {
+    throw new Error('Missing required environment variable: DYNAMODB_TABLE_NAME (or DYNAMODB_TABLE)');
+  }
+
+  return tableName;
 }
 
 export function getAwsRegion(): string {

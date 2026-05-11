@@ -10,20 +10,38 @@ function isValidPlayerId(id: string): boolean {
 
 // GET /api/players - list all players (from DynamoDB or fallback)
 export async function GET() {
+  const requestId = `players-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = Date.now();
+
   try {
-    // Log environment variables check
-    const envVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'DYNAMODB_TABLE_NAME'];
-    const missingVars = envVars.filter(v => !process.env[v]);
-    if (missingVars.length > 0) {
-      const error = new Error(`Missing environment variables: ${missingVars.join(', ')}`);
-      console.error('Env vars error:', error.message);
-      throw error;
+    const envChecks = {
+      AWS_ACCESS_KEY_ID: Boolean(process.env.AWS_ACCESS_KEY_ID),
+      AWS_SECRET_ACCESS_KEY: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
+      AWS_REGION: Boolean(process.env.AWS_REGION),
+      DYNAMODB_TABLE_NAME: process.env.DYNAMODB_TABLE_NAME ?? null,
+      DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null
+    };
+
+    console.info(`[${requestId}] /api/players GET start`, envChecks);
+
+    if (!envChecks.AWS_ACCESS_KEY_ID || !envChecks.AWS_SECRET_ACCESS_KEY || !envChecks.AWS_REGION) {
+      throw new Error(
+        `Missing AWS env vars: ${[
+          !envChecks.AWS_ACCESS_KEY_ID ? 'AWS_ACCESS_KEY_ID' : null,
+          !envChecks.AWS_SECRET_ACCESS_KEY ? 'AWS_SECRET_ACCESS_KEY' : null,
+          !envChecks.AWS_REGION ? 'AWS_REGION' : null
+        ]
+          .filter(Boolean)
+          .join(', ')}`
+      );
     }
 
-    console.log('Loading players from DynamoDB table:', process.env.DYNAMODB_TABLE_NAME);
+    const tableName = getTableName();
+    console.info(`[${requestId}] Using DynamoDB table`, { tableName });
+
     const response = await getDocumentClient().send(
       new ScanCommand({
-        TableName: getTableName(),
+        TableName: tableName,
         FilterExpression: 'SK = :metadata',
         ExpressionAttributeValues: {
           ':metadata': 'METADATA'
@@ -31,7 +49,12 @@ export async function GET() {
       })
     );
 
-    console.log('Scan response:', { itemCount: response.Items?.length ?? 0, scannedCount: response.ScannedCount });
+    console.info(`[${requestId}] Scan completed`, {
+      itemCount: response.Items?.length ?? 0,
+      scannedCount: response.ScannedCount,
+      count: response.Count,
+      consumedCapacity: response.ConsumedCapacity
+    });
 
     const items = (response.Items ?? []).map((item: any) => ({
       playerId: item.PK?.replace(/^PLAYER#/, ''),
@@ -40,14 +63,41 @@ export async function GET() {
       position: item.Position
     }));
 
-    return NextResponse.json(items, { status: 200 });
+    console.info(`[${requestId}] /api/players GET success`, {
+      durationMs: Date.now() - startedAt,
+      returnedCount: items.length
+    });
+
+    return NextResponse.json(
+      {
+        items,
+        meta: {
+          requestId,
+          returnedCount: items.length,
+          tableName,
+          durationMs: Date.now() - startedAt
+        }
+      },
+      { status: 200 }
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Failed to load players:', errorMessage);
+    const durationMs = Date.now() - startedAt;
+    console.error(`[${requestId}] Failed to load players`, {
+      errorMessage,
+      durationMs
+    });
     return NextResponse.json(
       {
         message: 'Failed to load players from DynamoDB',
-        error: errorMessage
+        error: errorMessage,
+        durationMs,
+        requestId,
+        hints: [
+          'Check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and DYNAMODB_TABLE_NAME/DYNAMODB_TABLE on Vercel',
+          'Confirm the IAM user has dynamodb:Scan permission on the target table',
+          'Verify the table name exists in the same AWS region configured for the app'
+        ]
       },
       { status: 500 }
     );
