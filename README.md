@@ -122,6 +122,12 @@ DYNAMODB_TABLE_NAME=FCON_Table
 # DYNAMODB_ENDPOINT=http://localhost:8000
 ```
 
+### 2.1. Cấu hình trên Vercel
+
+- Thêm các biến `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `DYNAMODB_TABLE_NAME` hoặc `DYNAMODB_TABLE` trong **Environment Variables** của project.
+- Chọn đúng scope **Production** cho deployment thật. Nếu chỉ set ở Preview/Development thì production sẽ không đọc được.
+- Sau khi thêm hoặc sửa biến môi trường, cần **redeploy** lại production deployment để runtime nhận cấu hình mới.
+
 ### 3. Tạo bảng DynamoDB
 
 - Table name: `FCON_Table`

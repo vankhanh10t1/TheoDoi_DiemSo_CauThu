@@ -15,6 +15,12 @@ export async function GET() {
 
   try {
     const envChecks = {
+      runtime: {
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+        vercelRegion: process.env.VERCEL_REGION ?? null,
+        nextRuntime: process.env.NEXT_RUNTIME ?? null
+      },
       AWS_ACCESS_KEY_ID: Boolean(process.env.AWS_ACCESS_KEY_ID),
       AWS_SECRET_ACCESS_KEY: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
       AWS_REGION: Boolean(process.env.AWS_REGION),
@@ -85,7 +91,18 @@ export async function GET() {
     const durationMs = Date.now() - startedAt;
     console.error(`[${requestId}] Failed to load players`, {
       errorMessage,
-      durationMs
+      durationMs,
+      envSnapshot: {
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+        vercelRegion: process.env.VERCEL_REGION ?? null,
+        nextRuntime: process.env.NEXT_RUNTIME ?? null,
+        hasAwsAccessKeyId: Boolean(process.env.AWS_ACCESS_KEY_ID),
+        hasAwsSecretAccessKey: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
+        hasAwsRegion: Boolean(process.env.AWS_REGION),
+        tableName: process.env.DYNAMODB_TABLE_NAME ?? null,
+        tableAlias: process.env.DYNAMODB_TABLE ?? null
+      }
     });
     return NextResponse.json(
       {
@@ -93,6 +110,19 @@ export async function GET() {
         error: errorMessage,
         durationMs,
         requestId,
+        runtime: {
+          nodeEnv: process.env.NODE_ENV ?? null,
+          vercelEnv: process.env.VERCEL_ENV ?? null,
+          vercelRegion: process.env.VERCEL_REGION ?? null,
+          nextRuntime: process.env.NEXT_RUNTIME ?? null
+        },
+        envStatus: {
+          AWS_ACCESS_KEY_ID: Boolean(process.env.AWS_ACCESS_KEY_ID),
+          AWS_SECRET_ACCESS_KEY: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
+          AWS_REGION: Boolean(process.env.AWS_REGION),
+          DYNAMODB_TABLE_NAME: process.env.DYNAMODB_TABLE_NAME ?? null,
+          DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null
+        },
         hints: [
           'Check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and DYNAMODB_TABLE_NAME/DYNAMODB_TABLE on Vercel',
           'Confirm the IAM user has dynamodb:Scan permission on the target table',
