@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAppContext } from './app-context';
+import { FormExtremesCard } from './form-extremes';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 
 
@@ -325,6 +326,8 @@ export function TrackerApp() {
           </div>
         </article>
       </section>
+
+      <FormExtremesCard />
     </div>
   );
 }
