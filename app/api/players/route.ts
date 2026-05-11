@@ -11,6 +11,16 @@ function isValidPlayerId(id: string): boolean {
 // GET /api/players - list all players (from DynamoDB or fallback)
 export async function GET() {
   try {
+    // Log environment variables check
+    const envVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'DYNAMODB_TABLE_NAME'];
+    const missingVars = envVars.filter(v => !process.env[v]);
+    if (missingVars.length > 0) {
+      const error = new Error(`Missing environment variables: ${missingVars.join(', ')}`);
+      console.error('Env vars error:', error.message);
+      throw error;
+    }
+
+    console.log('Loading players from DynamoDB table:', process.env.DYNAMODB_TABLE_NAME);
     const response = await getDocumentClient().send(
       new ScanCommand({
         TableName: getTableName(),
@@ -21,6 +31,8 @@ export async function GET() {
       })
     );
 
+    console.log('Scan response:', { itemCount: response.Items?.length ?? 0, scannedCount: response.ScannedCount });
+
     const items = (response.Items ?? []).map((item: any) => ({
       playerId: item.PK?.replace(/^PLAYER#/, ''),
       name: item.Name,
@@ -30,9 +42,13 @@ export async function GET() {
 
     return NextResponse.json(items, { status: 200 });
   } catch (error) {
-    console.error('Failed to load players', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Failed to load players:', errorMessage);
     return NextResponse.json(
-      { message: 'Failed to load players from DynamoDB' },
+      {
+        message: 'Failed to load players from DynamoDB',
+        error: errorMessage
+      },
       { status: 500 }
     );
   }
