@@ -42,7 +42,6 @@ export async function GET() {
         const matches = (matchResponse.Items ?? []) as StoredMatchItem[];
         const recentMatches = matches
           .sort((a, b) => (b.SK > a.SK ? 1 : -1))
-          .slice(0, 5)
           .map((m) => ({
             sk: m.SK,
             score: m.Score,

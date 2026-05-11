@@ -1,6 +1,6 @@
 # FCON Performance Tracker — Hệ thống quản lý đội hình và phong độ
 
-Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận, đánh giá phong độ 5 trận gần nhất và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu thực tế từ DynamoDB.
+Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận, đánh giá phong độ dựa trên toàn bộ số trận hiện có và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu thực tế từ DynamoDB.
 
 ## Tính Năng
 
@@ -9,7 +9,7 @@
 - Nhập điểm trận từ 1.0 đến 10.0
 - Chọn kết quả: Win / Draw / Loss
 - Chọn đá chính hoặc dự bị
-- Tự động tính phong độ dựa trên 5 trận gần nhất
+- Tự động tính phong độ dựa trên toàn bộ số trận hiện có
 
 ### 2. Squad Management (`👥 Đội Hình`)
 - Xem danh sách cầu thủ lấy từ DynamoDB
@@ -20,7 +20,7 @@
 - Xem chi tiết cầu thủ
 
 ### 3. Transfer Recommendation (`🎯 Đề Xuất`)
-Dựa trên 5 trận gần nhất, hệ thống phân loại cầu thủ thành 3 nhóm:
+Dựa trên toàn bộ số trận hiện có, hệ thống phân loại cầu thủ thành 3 nhóm:
 
 | Mã Đề Xuất | Tiêu Chí | Hành Động Đề Nghị | Ưu Tiên |
 | :-- | :-- | :-- | :-- |
@@ -31,7 +31,7 @@ Dựa trên 5 trận gần nhất, hệ thống phân loại cầu thủ thành 
 ### 4. Player Detail (`🔍 Chi Tiết Cầu Thủ`)
 - Xem thông tin cầu thủ
 - Nhập điểm trận mới
-- Xem 5 trận gần nhất và điểm trung bình
+- Xem lịch sử trận đấu và điểm trung bình
 - Xem trạng thái phong độ hiện tại
 - Reset lịch sử điểm số của cầu thủ
 
@@ -149,7 +149,7 @@ npm start
 
 ## Phân Loại Phong Độ
 
-Dựa trên trung bình 5 trận gần nhất (`X̄`):
+Dựa trên trung bình toàn bộ số trận hiện có (`X̄`):
 
 | X̄ | Status | Action |
 | :-- | :-- | :-- |
@@ -183,7 +183,7 @@ Kiểm tra:
 
 1. Thêm cầu thủ ở Squad Management
 2. Cập nhật tên/vị trí cầu thủ
-3. Nhập điểm 5 trận ở Rating
+3. Nhập điểm trận ở Rating (hệ thống đánh giá ngay khi có từ 1 trận)
 4. Xem khuyến nghị ở Transfer Recommendation
 5. Reset lịch sử điểm số trong Player Detail
 

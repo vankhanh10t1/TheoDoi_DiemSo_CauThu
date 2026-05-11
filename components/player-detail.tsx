@@ -235,7 +235,7 @@ export function PlayerDetail() {
 
                     {statusData.recentMatches.length > 0 && (
                       <>
-                        <h4 style={{ marginTop: '16px', marginBottom: '8px' }}>5 Trận Gần Nhất</h4>
+                        <h4 style={{ marginTop: '16px', marginBottom: '8px' }}>Lịch Sử Trận Đấu</h4>
                         <div className="recent-list">
                           {statusData.recentMatches.map((match) => (
                             <div key={match.sk} className="recent-item">

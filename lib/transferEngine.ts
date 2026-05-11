@@ -17,17 +17,8 @@ export function generateTransferRecommendation(
   name: string,
   recentMatches: RecentMatch[]
 ): TransferRecommendation | null {
-  if (recentMatches.length < 5) {
-    return {
-      playerId,
-      name,
-      status: 'Fraud',
-      averageScore: 0,
-      matchCount: recentMatches.length,
-      recommendation: 'MONITOR',
-      reason: `Chưa đủ dữ liệu (${recentMatches.length}/5 trận)`,
-      priority: 1
-    };
+  if (recentMatches.length === 0) {
+    return null;
   }
 
   const assessment = evaluateRecentMatches(recentMatches);
@@ -39,25 +30,25 @@ export function generateTransferRecommendation(
   switch (assessment.status) {
     case 'Star Player':
       recommendation = 'HOLD';
-      reason = `Sao sáng (${assessment.averageScore.toFixed(1)}) - giữ chặt`;
+      reason = `Sao sáng (${assessment.averageScore.toFixed(1)}) - giữ chặt (${recentMatches.length} trận)`;
       priority = 1;
       break;
 
     case 'Stable':
       recommendation = 'HOLD';
-      reason = `Ổn định (${assessment.averageScore.toFixed(1)}) - tiếp tục tin dùng`;
+      reason = `Ổn định (${assessment.averageScore.toFixed(1)}) - tiếp tục tin dùng (${recentMatches.length} trận)`;
       priority = 2;
       break;
 
     case 'Under Review':
       recommendation = 'MONITOR';
-      reason = `Phong độ giảm (${assessment.averageScore.toFixed(1)}) - cần theo dõi kỹ`;
+      reason = `Phong độ giảm (${assessment.averageScore.toFixed(1)}) - cần theo dõi kỹ (${recentMatches.length} trận)`;
       priority = 3;
       break;
 
     case 'Fraud':
       recommendation = 'SELL';
-      reason = `Phong độ kém (${assessment.averageScore.toFixed(1)}) - nên thanh lý`;
+      reason = `Phong độ kém (${assessment.averageScore.toFixed(1)}) - nên thanh lý (${recentMatches.length} trận)`;
       priority = 5;
       break;
 

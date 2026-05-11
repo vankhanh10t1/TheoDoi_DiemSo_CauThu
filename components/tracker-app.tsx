@@ -165,7 +165,7 @@ export function TrackerApp() {
       <section className="hero-card">
         <div>
           <p className="eyebrow">FCON Performance Tracker</p>
-          <h2>Theo dõi phong độ của các cầu thủ thuộc đội bóng VanKhasnh14 trong 5 trận gần nhất</h2>
+          <h2>Theo dõi phong độ của các cầu thủ thuộc đội bóng VanKhasnh14 theo toàn bộ số trận hiện có</h2>
           <p className="hero-copy">
             Bán độ không bao giờ có chỗ đứng trong môn thể thao vua.
           </p>
@@ -320,7 +320,7 @@ export function TrackerApp() {
             {!statusError && statusData && 'message' in statusData ? (
               <div className="tracking-state">
                 <p>{statusData.message}</p>
-                <span>Đợi đủ 5 trận gần nhất để tính X̄.</span>
+                <span>Nhập trận đầu tiên để bắt đầu đánh giá X̄.</span>
               </div>
             ) : null}
           </div>

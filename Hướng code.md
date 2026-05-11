@@ -118,14 +118,13 @@ DynamoDB Query:
   KeyConditionExpression: PK = "PLAYER#{id}"
                           AND SK begins_with "MATCH#"
   ScanIndexForward: false   ← Trận mới nhất lên đầu
-  Limit: 5
       │
       ▼
 Backend tính toán
       │
-      ├─ Số trận < 5 → Trả về "Đang theo dõi"
+  ├─ Số trận = 0 → Trả về "Đang theo dõi"
       │
-      └─ Số trận ≥ 5 → Tính trung bình (X̄)
+  └─ Số trận > 0 → Tính trung bình (X̄)
                              │
                              ▼
                        Phân loại phong độ
@@ -136,7 +135,7 @@ Backend tính toán
 
 ## 5. Hệ Thống Phân Loại Phong Độ
 
-Dựa trên **điểm trung bình 5 trận gần nhất (X̄)**:
+Dựa trên **điểm trung bình toàn bộ số trận hiện có (X̄)**:
 
 | Điểm X̄      | Trạng thái           | Hành động                   | Màu UI      |
 | :----------- | :------------------- | :-------------------------- | :---------- |
@@ -192,7 +191,7 @@ Tính toán và trả về phong độ hiện tại của cầu thủ.
   "playerId": "CR7",
   "name": "C. Ronaldo",
   "averageScore": 7.2,
-  "matchCount": 5,
+  "matchCount": 3,
   "status": "Stable",
   "action": "Tiếp tục tin dùng",
   "color": "white",
@@ -202,15 +201,15 @@ Tính toán và trả về phong độ hiện tại của cầu thủ.
 }
 ```
 
-**Response — Chưa đủ dữ liệu (200 OK):**
+**Response — Chưa có dữ liệu trận (200 OK):**
 
 ```json
 {
   "playerId": "CR7",
   "name": "C. Ronaldo",
-  "matchCount": 3,
+  "matchCount": 0,
   "status": "Đang theo dõi",
-  "message": "Cần thêm ít nhất 2 trận để đánh giá"
+  "message": "Chưa có dữ liệu trận để đánh giá"
 }
 ```
 
@@ -248,9 +247,9 @@ Tính toán và trả về phong độ hiện tại của cầu thủ.
 - [ ] Xây dựng `lib/dynamodb.ts` — khởi tạo DynamoDB client từ biến môi trường
 - [ ] Xây dựng `lib/evaluationEngine.ts` — hàm tính X̄ và phân loại phong độ
 - [ ] Xây dựng `POST /api/rating` với đầy đủ validation
-- [ ] Xây dựng `GET /api/player-status` với thuật toán truy vấn 5 trận gần nhất
+- [ ] Xây dựng `GET /api/player-status` với thuật toán truy vấn toàn bộ trận hiện có
 - [ ] Unit test cho logic phân loại phong độ
-- [ ] Xử lý edge case: điểm không hợp lệ, cầu thủ không tồn tại, chưa đủ 5 trận
+- [ ] Xử lý edge case: điểm không hợp lệ, cầu thủ không tồn tại, chưa có trận đấu
 
 ### Phase 3 — Deploy lên Vercel
 

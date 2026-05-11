@@ -44,10 +44,9 @@ export async function GET() {
     // Fetch form data for all players
     for (const player of players) {
       try {
-        const recentMatches = await getRecentMatches(player.playerId, 5);
+        const recentMatches = await getRecentMatches(player.playerId);
 
-        // Only include players with at least 5 matches for fair comparison
-        if (recentMatches.length >= 5) {
+        if (recentMatches.length > 0) {
           const assessment = evaluateRecentMatches(recentMatches);
 
           playerForms.push({

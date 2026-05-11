@@ -174,7 +174,7 @@ export function FormExtremesCard() {
       </div>
 
       <p style={{ fontSize: '12px', color: '#999', marginTop: '16px', textAlign: 'center' }}>
-        Dựa trên trung bình điểm của 5 trận gần nhất ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
+        Dựa trên trung bình điểm của toàn bộ số trận hiện có ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
       </p>
     </article>
   );

@@ -16,16 +16,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Player not found' }, { status: 404 });
   }
 
-  const recentMatches = await getRecentMatches(playerId, 5);
+  const recentMatches = await getRecentMatches(playerId);
 
-  if (recentMatches.length < 5) {
+  if (recentMatches.length === 0) {
     return NextResponse.json(
       {
         playerId,
         name: player.name,
         matchCount: recentMatches.length,
         status: 'Đang theo dõi',
-        message: `Cần thêm ít nhất ${5 - recentMatches.length} trận để đánh giá`
+        message: 'Chưa có dữ liệu trận để đánh giá'
       },
       { status: 200 }
     );

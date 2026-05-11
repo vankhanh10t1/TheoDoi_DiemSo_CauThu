@@ -62,7 +62,7 @@ export function TransferRecommendation() {
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
-                      <span>Trận: {rec.matchCount}/5</span>
+                      <span>Trận: {rec.matchCount}</span>
                     </div>
                     <button
                       className="tertiary-button"
@@ -89,7 +89,7 @@ export function TransferRecommendation() {
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
-                      <span>Trận: {rec.matchCount}/5</span>
+                      <span>Trận: {rec.matchCount}</span>
                     </div>
                     <button
                       className="tertiary-button"
@@ -116,7 +116,7 @@ export function TransferRecommendation() {
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
-                      <span>Trận: {rec.matchCount}/5</span>
+                      <span>Trận: {rec.matchCount}</span>
                     </div>
                     <button
                       className="tertiary-button"

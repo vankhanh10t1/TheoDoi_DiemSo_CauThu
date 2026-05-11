@@ -69,19 +69,19 @@ export async function getPlayerMetadata(playerId: string): Promise<PlayerSummary
   }
 }
 
-export async function getRecentMatches(playerId: string, limit = 5): Promise<RecentMatch[]> {
-  const response = await getDocumentClient().send(
-    new QueryCommand({
-      TableName: getTableName(),
-      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-      ExpressionAttributeValues: {
-        ':pk': `PLAYER#${playerId}`,
-        ':matchPrefix': 'MATCH#'
-      },
-      ScanIndexForward: false,
-      Limit: limit
-    })
-  );
+export async function getRecentMatches(playerId: string, limit?: number): Promise<RecentMatch[]> {
+  const queryInput = {
+    TableName: getTableName(),
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': `PLAYER#${playerId}`,
+      ':matchPrefix': 'MATCH#'
+    },
+    ScanIndexForward: false,
+    ...(typeof limit === 'number' ? { Limit: limit } : {})
+  };
+
+  const response = await getDocumentClient().send(new QueryCommand(queryInput));
 
   return (response.Items ?? []).map((item): RecentMatch => {
     const match = item as StoredMatchItem;
