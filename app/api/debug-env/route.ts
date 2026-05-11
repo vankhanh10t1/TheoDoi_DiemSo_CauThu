@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 export async function GET() {
+  const requiredEnvNames = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_REGION',
+    'DYNAMODB_TABLE_NAME',
+    'DYNAMODB_TABLE'
+  ] as const;
+
+  const missingRequiredEnv = requiredEnvNames.filter((name) => !process.env[name]);
+
   const snapshot = {
     runtime: {
       nodeEnv: process.env.NODE_ENV ?? null,
@@ -17,6 +27,7 @@ export async function GET() {
       DYNAMODB_TABLE_NAME: Boolean(process.env.DYNAMODB_TABLE_NAME),
       DYNAMODB_TABLE: Boolean(process.env.DYNAMODB_TABLE)
     },
+    missingRequiredEnv,
     tableValues: {
       DYNAMODB_TABLE_NAME: process.env.DYNAMODB_TABLE_NAME ?? null,
       DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null
