@@ -41,8 +41,7 @@ export function SquadManagement() {
     loadPlayers,
     addPlayer,
     deletePlayer,
-    setSelectedPlayerId,
-    setCurrentTab
+    openPlayerDetail
   } = useAppContext();
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -163,8 +162,19 @@ export function SquadManagement() {
   }
 
   function handleViewDetail(playerId: string) {
-    setSelectedPlayerId(playerId);
-    setCurrentTab('player-detail');
+    (async () => {
+      try {
+        const res = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        if (!res.ok) {
+          alert('Cầu thủ không tồn tại trong hệ thống');
+          return;
+        }
+
+        openPlayerDetail(playerId);
+      } catch (err) {
+        alert('Không thể kiểm tra thông tin cầu thủ');
+      }
+    })();
   }
 
   return (

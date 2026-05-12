@@ -6,6 +6,8 @@ export type PerformanceTrend = 'UP' | 'DOWN' | 'STABLE';
 export interface TransferRecommendation {
   playerId: string;
   name: string;
+  cardSeason: string;
+  position: string;
   status: PlayerAssessment['status'];
   averageScore: number;
   matchCount: number;
@@ -52,11 +54,19 @@ export function calculatePerformanceTrend(recentMatches: RecentMatch[]): {
   return { trend, value: trendValue };
 }
 
+export interface TransferRecommendationInput {
+  playerId: string;
+  name: string;
+  cardSeason?: string;
+  position?: string;
+  recentMatches: RecentMatch[];
+}
+
 export function generateTransferRecommendation(
-  playerId: string,
-  name: string,
-  recentMatches: RecentMatch[]
+  input: TransferRecommendationInput
 ): TransferRecommendation | null {
+  const { playerId, name, cardSeason = '', position = '', recentMatches } = input;
+
   if (recentMatches.length === 0) {
     return null;
   }
@@ -116,6 +126,8 @@ export function generateTransferRecommendation(
   return {
     playerId,
     name,
+    cardSeason,
+    position,
     status: assessment.status,
     averageScore: assessment.averageScore,
     matchCount: recentMatches.length,

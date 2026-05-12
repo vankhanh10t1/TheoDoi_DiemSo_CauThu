@@ -5,6 +5,49 @@ import { findDuplicatePlayerByName } from '../../../../lib/playerService';
 
 export const runtime = 'nodejs';
 
+// GET /api/players/[id] - return player metadata
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const playerId = id.trim();
+
+  if (!playerId) {
+    return NextResponse.json({ message: 'Missing player id' }, { status: 400 });
+  }
+
+  try {
+    const response = await getDocumentClient().send(
+      new GetCommand({
+        TableName: getTableName(),
+        Key: {
+          PK: `PLAYER#${playerId}`,
+          SK: 'METADATA'
+        }
+      })
+    );
+
+    if (!response.Item) {
+      return NextResponse.json({ message: 'Player not found' }, { status: 404 });
+    }
+
+    const item = response.Item as Record<string, unknown>;
+
+    return NextResponse.json(
+      {
+        playerId,
+        name: (item.Name as string) ?? '',
+        cardSeason: (item.CardSeason as string) ?? (item.Season as string) ?? '',
+        position: (item.Position as string) ?? ''
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Failed to load player metadata', error);
+    return NextResponse.json({ message: 'Failed to load player' }, { status: 500 });
+  }
+}
 // PATCH /api/players/[id] - update player metadata (name, cardSeason, position)
 export async function PATCH(
   request: NextRequest,

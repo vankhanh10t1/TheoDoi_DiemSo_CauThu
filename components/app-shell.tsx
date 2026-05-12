@@ -31,7 +31,7 @@ export function AppShell() {
             active={currentTab === 'recommendations'}
             onClick={() => setCurrentTab('recommendations')}
           >
-            🎯 Đề Xuất
+            📈 Phong Độ
           </NavButton>
         </nav>
       </header>

@@ -10,6 +10,8 @@ interface AppContextType {
   setCurrentTab: (tab: AppTab) => void;
   selectedPlayerId: string | null;
   setSelectedPlayerId: (id: string | null) => void;
+  openPlayerDetail: (playerId: string) => void;
+  closePlayerDetail: () => void;
   refreshTrigger: number;
   triggerRefresh: () => void;
   players: Array<{
@@ -30,6 +32,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentTab, setCurrentTab] = useState<AppTab>('tracker');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [previousTab, setPreviousTab] = useState<AppTab | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [players, setPlayers] = useState<Array<{ playerId: string; name: string; cardSeason: string; position: string }>>([]);
   const [playersError, setPlayersError] = useState<string | null>(null);
@@ -138,6 +141,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  function openPlayerDetail(playerId: string) {
+    setPreviousTab(currentTab);
+    setSelectedPlayerId(playerId);
+    setCurrentTab('player-detail');
+  }
+
+  function closePlayerDetail() {
+    setSelectedPlayerId(null);
+    setCurrentTab(previousTab ?? 'tracker');
+    setPreviousTab(null);
+  }
+
   useEffect(() => {
     void loadPlayers();
   }, []);
@@ -149,6 +164,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCurrentTab,
         selectedPlayerId,
         setSelectedPlayerId,
+        openPlayerDetail,
+        closePlayerDetail,
         refreshTrigger,
         triggerRefresh,
         players,
