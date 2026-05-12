@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PlayerSummary } from '../lib/types';
 import { useAppContext } from './app-context';
 
@@ -60,6 +60,16 @@ export function SquadManagement() {
     cardSeason: '',
     position: ''
   });
+  const [searchText, setSearchText] = useState('');
+
+  const filteredPlayers = useMemo(() => {
+    const normalizedQuery = searchText.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return players;
+    }
+
+    return players.filter((player) => player.name.trim().toLowerCase().includes(normalizedQuery));
+  }, [players, searchText]);
 
   useEffect(() => {
     setLoading(true);
@@ -161,9 +171,19 @@ export function SquadManagement() {
     <div className="screen-panel">
       <div className="screen-header">
         <h2>Quản Lý Đội Hình</h2>
-        <button className="primary-button" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Hủy' : '+ Thêm Cầu Thủ'}
-        </button>
+        <div className="squad-header-controls">
+          <label className="squad-search-field" aria-label="Tìm kiếm cầu thủ theo tên">
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Tìm cầu thủ theo tên..."
+            />
+          </label>
+          <button className="primary-button" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Hủy' : '+ Thêm Cầu Thủ'}
+          </button>
+        </div>
       </div>
 
       {saveMessage && (
@@ -221,9 +241,13 @@ export function SquadManagement() {
 
       {!loading && players.length === 0 && <p>Chưa có cầu thủ nào. Hãy thêm cầu thủ mới.</p>}
 
-      {!loading && players.length > 0 && (
+      {!loading && players.length > 0 && filteredPlayers.length === 0 && (
+        <p>Không tìm thấy cầu thủ phù hợp với từ khóa đã nhập.</p>
+      )}
+
+      {!loading && filteredPlayers.length > 0 && (
         <div className="players-grid">
-          {players.map((player) => (
+          {filteredPlayers.map((player) => (
             <div key={player.playerId} className="player-card">
               <div className="player-card-header">
                 <h3>{player.name}</h3>
