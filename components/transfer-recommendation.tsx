@@ -24,7 +24,7 @@ function getTrendLabel(trend: string): string {
       return 'GIẢM';
     case 'STABLE':
     default:
-      return 'ỔNĐỊNH';
+      return 'ỔN ĐỊNH';
   }
 }
 
