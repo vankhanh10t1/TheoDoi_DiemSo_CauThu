@@ -4,6 +4,30 @@ import { useEffect, useState } from 'react';
 import type { TransferRecommendation } from '../lib/transferEngine';
 import { useAppContext } from './app-context';
 
+function getTrendEmoji(trend: string): string {
+  switch (trend) {
+    case 'UP':
+      return '📈';
+    case 'DOWN':
+      return '⬇️';
+    case 'STABLE':
+    default:
+      return '→';
+  }
+}
+
+function getTrendLabel(trend: string): string {
+  switch (trend) {
+    case 'UP':
+      return 'TĂNG';
+    case 'DOWN':
+      return 'GIẢM';
+    case 'STABLE':
+    default:
+      return 'ỔNĐỊNH';
+  }
+}
+
 export function TransferRecommendation() {
   const { refreshTrigger, setSelectedPlayerId, setCurrentTab } = useAppContext();
   const [recommendations, setRecommendations] = useState<TransferRecommendation[]>([]);
@@ -57,12 +81,18 @@ export function TransferRecommendation() {
                   <div key={rec.playerId} className="recommendation-card red">
                     <div className="rec-header">
                       <h4>{rec.name}</h4>
-                      <span className="rec-badge sell">SELL</span>
+                      <div className="rec-badges">
+                        <span className="rec-badge sell">SELL</span>
+                        <span className={`rec-badge trend trend-${rec.trend.toLowerCase()}`}>
+                          {getTrendEmoji(rec.trend)} {getTrendLabel(rec.trend)}
+                        </span>
+                      </div>
                     </div>
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
                       <span>Trận: {rec.matchCount}</span>
+                      <span>Xu hướng: {rec.trendValue > 0 ? '+' : ''}{rec.trendValue.toFixed(1)}</span>
                     </div>
                     <button
                       className="tertiary-button"
@@ -84,12 +114,18 @@ export function TransferRecommendation() {
                   <div key={rec.playerId} className="recommendation-card orange">
                     <div className="rec-header">
                       <h4>{rec.name}</h4>
-                      <span className="rec-badge monitor">MONITOR</span>
+                      <div className="rec-badges">
+                        <span className="rec-badge monitor">MONITOR</span>
+                        <span className={`rec-badge trend trend-${rec.trend.toLowerCase()}`}>
+                          {getTrendEmoji(rec.trend)} {getTrendLabel(rec.trend)}
+                        </span>
+                      </div>
                     </div>
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
                       <span>Trận: {rec.matchCount}</span>
+                      <span>Xu hướng: {rec.trendValue > 0 ? '+' : ''}{rec.trendValue.toFixed(1)}</span>
                     </div>
                     <button
                       className="tertiary-button"
@@ -111,12 +147,18 @@ export function TransferRecommendation() {
                   <div key={rec.playerId} className="recommendation-card green">
                     <div className="rec-header">
                       <h4>{rec.name}</h4>
-                      <span className="rec-badge hold">HOLD</span>
+                      <div className="rec-badges">
+                        <span className="rec-badge hold">HOLD</span>
+                        <span className={`rec-badge trend trend-${rec.trend.toLowerCase()}`}>
+                          {getTrendEmoji(rec.trend)} {getTrendLabel(rec.trend)}
+                        </span>
+                      </div>
                     </div>
                     <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Điểm: {rec.averageScore.toFixed(1)}</span>
                       <span>Trận: {rec.matchCount}</span>
+                      <span>Xu hướng: {rec.trendValue > 0 ? '+' : ''}{rec.trendValue.toFixed(1)}</span>
                     </div>
                     <button
                       className="tertiary-button"
