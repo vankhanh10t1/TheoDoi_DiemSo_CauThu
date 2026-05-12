@@ -1,5 +1,6 @@
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient, getTableName } from './dynamodb';
+import { isDetailedPositionForGroup, isPositionGroup } from './positions';
 import type { PlayerMetadataItem, PlayerSummary, RecentMatch, StoredMatchItem } from './types';
 
 function toPlayerIdFromPk(pk: string): string {
@@ -85,10 +86,18 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
 
   return (response.Items ?? []).map((item): RecentMatch => {
     const match = item as StoredMatchItem;
+    const positionGroup = isPositionGroup(match.PositionGroup) ? match.PositionGroup : undefined;
+    const detailedPosition =
+      positionGroup && isDetailedPositionForGroup(positionGroup, match.DetailedPosition)
+        ? match.DetailedPosition
+        : undefined;
+
     return {
       sk: match.SK,
       score: match.Score,
-      result: match.Result
+      result: match.Result,
+      positionGroup,
+      detailedPosition
     };
   });
 }

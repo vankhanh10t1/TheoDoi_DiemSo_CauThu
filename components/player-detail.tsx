@@ -1,8 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  getDetailedPositionsByGroup,
+  isDetailedPositionForGroup,
+  POSITION_GROUPS
+} from '../lib/positions';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
+
+type EntryFormState = Omit<RatingPayload, 'detailedPosition'> & {
+  detailedPosition: RatingPayload['detailedPosition'] | '';
+};
 
 export function PlayerDetail() {
   const { selectedPlayerId, setSelectedPlayerId, setCurrentTab, refreshTrigger, triggerRefresh, resetPlayerData } =
@@ -10,11 +19,13 @@ export function PlayerDetail() {
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [formState, setFormState] = useState<RatingPayload>({
+  const [formState, setFormState] = useState<EntryFormState>({
     playerId: selectedPlayerId || '',
     score: 7,
     isStarter: true,
-    result: 'Win'
+    result: 'Win',
+    positionGroup: 'GK',
+    detailedPosition: 'GK'
   });
   const [saveState, setSaveState] = useState<{ message: string; type: 'success' | 'error' } | null>(
     null
@@ -64,6 +75,17 @@ export function PlayerDetail() {
       return;
     }
 
+    const resolvedDetailedPosition =
+      formState.positionGroup === 'GK' ? 'GK' : formState.detailedPosition;
+
+    if (!isDetailedPositionForGroup(formState.positionGroup, resolvedDetailedPosition)) {
+      setSaveState({
+        message: 'Vị trí chi tiết không hợp lệ với nhóm vị trí đã chọn',
+        type: 'error'
+      });
+      return;
+    }
+
     setSaveState(null);
 
     try {
@@ -74,7 +96,9 @@ export function PlayerDetail() {
           playerId: selectedPlayerId,
           score: Number(formState.score),
           isStarter: formState.isStarter,
-          result: formState.result
+          result: formState.result,
+          positionGroup: formState.positionGroup,
+          detailedPosition: resolvedDetailedPosition
         })
       });
 
@@ -128,6 +152,7 @@ export function PlayerDetail() {
   }
 
   const statusTone = statusData && 'color' in statusData ? statusData.color : 'neutral';
+  const isDetailedPositionRequired = formState.positionGroup !== 'GK';
 
   return (
     <div className="screen-panel">
@@ -179,6 +204,52 @@ export function PlayerDetail() {
                     <option value="Loss">Thua</option>
                   </select>
                 </label>
+              </div>
+
+              <div className="field-grid">
+                <label className="field">
+                  <span>Position Group</span>
+                  <select
+                    value={formState.positionGroup}
+                    onChange={(e) => {
+                      const nextGroup = e.target.value as RatingPayload['positionGroup'];
+
+                      setFormState((prev) => ({
+                        ...prev,
+                        positionGroup: nextGroup,
+                        detailedPosition: nextGroup === 'GK' ? 'GK' : ''
+                      }));
+                    }}
+                  >
+                    {POSITION_GROUPS.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {isDetailedPositionRequired ? (
+                  <label className="field">
+                    <span>Detailed Position</span>
+                    <select
+                      value={formState.detailedPosition}
+                      onChange={(e) =>
+                        setFormState((prev) => ({
+                          ...prev,
+                          detailedPosition: e.target.value as RatingPayload['detailedPosition']
+                        }))
+                      }
+                    >
+                      <option value="">Chọn vị trí chi tiết</option>
+                      {getDetailedPositionsByGroup(formState.positionGroup).map((position) => (
+                        <option key={position} value={position}>
+                          {position}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
 
               <label className="checkbox-row">
@@ -242,6 +313,11 @@ export function PlayerDetail() {
                               <span>{match.sk}</span>
                               <strong>{match.score.toFixed(1)}</strong>
                               <em>{match.result}</em>
+                              <small>
+                                {match.positionGroup && match.detailedPosition
+                                  ? `${match.positionGroup} - ${match.detailedPosition}`
+                                  : 'N/A'}
+                              </small>
                             </div>
                           ))}
                         </div>

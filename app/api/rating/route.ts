@@ -1,6 +1,7 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { createMatchSortKey, getDocumentClient, getTableName } from '../../../lib/dynamodb';
+import { isDetailedPositionForGroup, isPositionGroup } from '../../../lib/positions';
 import { getPlayerMetadata } from '../../../lib/playerService';
 import type { MatchResult, RatingPayload } from '../../../lib/types';
 
@@ -20,8 +21,18 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
   const score = typeof candidate.score === 'number' ? candidate.score : Number.NaN;
   const isStarter = typeof candidate.isStarter === 'boolean' ? candidate.isStarter : null;
   const result = candidate.result;
+  const positionGroup = typeof candidate.positionGroup === 'string' ? candidate.positionGroup.trim() : '';
+  const detailedPosition =
+    typeof candidate.detailedPosition === 'string' ? candidate.detailedPosition.trim() : '';
 
-  if (!playerId || !Number.isFinite(score) || isStarter === null || !isMatchResult(result)) {
+  if (
+    !playerId ||
+    !Number.isFinite(score) ||
+    isStarter === null ||
+    !isMatchResult(result) ||
+    !isPositionGroup(positionGroup) ||
+    !isDetailedPositionForGroup(positionGroup, detailedPosition)
+  ) {
     return null;
   }
 
@@ -33,7 +44,9 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
     playerId,
     score,
     isStarter,
-    result
+    result,
+    positionGroup,
+    detailedPosition
   };
 }
 
@@ -50,7 +63,8 @@ export async function POST(request: NextRequest) {
   if (!payload) {
     return NextResponse.json(
       {
-        message: 'Validation failed: playerId, score, isStarter, result are required'
+        message:
+          'Validation failed: playerId, score, isStarter, result, positionGroup, detailedPosition are required'
       },
       { status: 400 }
     );
@@ -72,7 +86,9 @@ export async function POST(request: NextRequest) {
           SK: matchSortKey,
           Score: payload.score,
           IsStarter: payload.isStarter,
-          Result: payload.result
+          Result: payload.result,
+          PositionGroup: payload.positionGroup,
+          DetailedPosition: payload.detailedPosition
         },
         ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
       })

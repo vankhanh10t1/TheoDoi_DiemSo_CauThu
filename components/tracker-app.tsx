@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAppContext } from './app-context';
 import { FormExtremesCard } from './form-extremes';
+import {
+  filterPlayersByPosition,
+  getDetailedPositionsByGroup,
+  isDetailedPositionForGroup,
+  normalizeDetailedPosition,
+  POSITION_GROUPS
+} from '../lib/positions';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 
 
@@ -11,11 +18,17 @@ type SaveState = {
   tone: 'idle' | 'success' | 'error';
 };
 
-const INITIAL_FORM: RatingPayload = {
+type EntryFormState = Omit<RatingPayload, 'detailedPosition'> & {
+  detailedPosition: RatingPayload['detailedPosition'] | '';
+};
+
+const INITIAL_FORM: EntryFormState = {
   playerId: '',
   score: 7,
   isStarter: true,
-  result: 'Win'
+  result: 'Win',
+  positionGroup: 'GK',
+  detailedPosition: 'GK'
 };
 
 function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): string {
@@ -28,11 +41,11 @@ function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): 
 
 export function TrackerApp() {
   const { players, playersError } = useAppContext();
-  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.playerId ?? '');
+  const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [formState, setFormState] = useState<RatingPayload>({
+  const [formState, setFormState] = useState<EntryFormState>({
     ...INITIAL_FORM,
     playerId: players[0]?.playerId ?? ''
   });
@@ -42,16 +55,42 @@ export function TrackerApp() {
     () => players.find((player) => player.playerId === selectedPlayerId) ?? null,
     [players, selectedPlayerId]
   );
+  const isDetailedPositionRequired = formState.positionGroup !== 'GK';
+  const detailedPositionOptions = useMemo(
+    () => getDetailedPositionsByGroup(formState.positionGroup),
+    [formState.positionGroup]
+  );
+  const selectedDetailedPosition = useMemo(() => {
+    if (formState.positionGroup === 'GK') {
+      return 'GK';
+    }
+
+    return isDetailedPositionForGroup(formState.positionGroup, formState.detailedPosition)
+      ? formState.detailedPosition
+      : undefined;
+  }, [formState.detailedPosition, formState.positionGroup]);
+  const filteredPlayers = useMemo(() => {
+    return filterPlayersByPosition(
+      players,
+      formState.positionGroup,
+      selectedDetailedPosition
+    );
+  }, [formState.positionGroup, players, selectedDetailedPosition]);
 
   useEffect(() => {
     setFormState((currentState) => ({ ...currentState, playerId: selectedPlayerId }));
   }, [selectedPlayerId]);
 
   useEffect(() => {
-    if (!selectedPlayerId && players[0]) {
-      setSelectedPlayerId(players[0].playerId);
+    if (!filteredPlayers.some((player) => player.playerId === selectedPlayerId)) {
+      const nextPlayerId = filteredPlayers[0]?.playerId ?? '';
+      setSelectedPlayerId(nextPlayerId);
+      setFormState((currentState) => ({
+        ...currentState,
+        playerId: nextPlayerId
+      }));
     }
-  }, [players]);
+  }, [filteredPlayers, selectedPlayerId]);
 
   useEffect(() => {
     if (!selectedPlayerId) {
@@ -122,6 +161,34 @@ export function TrackerApp() {
       return;
     }
 
+    const resolvedDetailedPosition = (() => {
+      if (formState.positionGroup === 'GK') {
+        return 'GK';
+      }
+
+      if (selectedDetailedPosition) {
+        return selectedDetailedPosition;
+      }
+
+      return normalizeDetailedPosition(selectedPlayer?.position);
+    })();
+
+    if (!resolvedDetailedPosition || !isDetailedPositionForGroup(formState.positionGroup, resolvedDetailedPosition)) {
+      setSaveState({
+        message: 'Cầu thủ không thuộc nhóm vị trí đã chọn',
+        tone: 'error'
+      });
+      return;
+    }
+
+    if (!filteredPlayers.some((player) => player.playerId === formState.playerId)) {
+      setSaveState({
+        message: 'Cầu thủ không thuộc vị trí đã chọn',
+        tone: 'error'
+      });
+      return;
+    }
+
     setSaveState({ message: '', tone: 'idle' });
 
     try {
@@ -134,7 +201,9 @@ export function TrackerApp() {
           playerId: formState.playerId,
           score: Number(formState.score),
           isStarter: formState.isStarter,
-          result: formState.result
+          result: formState.result,
+          positionGroup: formState.positionGroup,
+          detailedPosition: resolvedDetailedPosition
         })
       });
 
@@ -191,6 +260,52 @@ export function TrackerApp() {
             </div>
           </div>
 
+          <div className="field-grid">
+              <label className="field">
+                <span>Position Group</span>
+                <select
+                  value={formState.positionGroup}
+                  onChange={(event) => {
+                    const nextGroup = event.target.value as RatingPayload['positionGroup'];
+
+                    setFormState((currentState) => ({
+                      ...currentState,
+                      positionGroup: nextGroup,
+                      detailedPosition: nextGroup === 'GK' ? 'GK' : ''
+                    }));
+                  }}
+                >
+                  {POSITION_GROUPS.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {isDetailedPositionRequired ? (
+                <label className="field">
+                  <span>Detailed Position</span>
+                  <select
+                    value={formState.detailedPosition}
+                    onChange={(event) => {
+                      setFormState((currentState) => ({
+                        ...currentState,
+                        detailedPosition: event.target.value as RatingPayload['detailedPosition']
+                      }));
+                    }}
+                  >
+                    <option value="">Chọn vị trí chi tiết</option>
+                    {detailedPositionOptions.map((position) => (
+                      <option key={position} value={position}>
+                        {position}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+
           <form className="form-stack" onSubmit={handleSubmit}>
             <label className="field">
               <span>Cầu thủ</span>
@@ -204,7 +319,7 @@ export function TrackerApp() {
                   }));
                 }}
               >
-                {players.map((player) => (
+                {filteredPlayers.map((player) => (
                   <option key={player.playerId} value={player.playerId}>
                     {player.name} ({player.playerId})
                   </option>
@@ -248,6 +363,11 @@ export function TrackerApp() {
               </label>
             </div>
 
+            
+            {filteredPlayers.length === 0 ? (
+              <p className="inline-message error">Không có cầu thủ cho vị trí đã chọn</p>
+            ) : null}
+
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -262,7 +382,11 @@ export function TrackerApp() {
               <span>Đá chính</span>
             </label>
 
-            <button className="primary-button" type="submit" disabled={!selectedPlayerId}>
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={!selectedPlayerId}
+            >
               Lưu điểm
             </button>
 
@@ -311,6 +435,11 @@ export function TrackerApp() {
                       <span>{match.sk}</span>
                       <strong>{match.score.toFixed(1)}</strong>
                       <em>{match.result}</em>
+                      <small>
+                        {match.positionGroup && match.detailedPosition
+                          ? `${match.positionGroup} - ${match.detailedPosition}`
+                          : 'N/A'}
+                      </small>
                     </div>
                   ))}
                 </div>

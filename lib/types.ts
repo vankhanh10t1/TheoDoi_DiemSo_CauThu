@@ -1,4 +1,21 @@
 export type MatchResult = 'Win' | 'Draw' | 'Loss';
+export type PositionGroup = 'GK' | 'DF' | 'MF' | 'FW';
+export type DetailedPosition =
+  | 'GK'
+  | 'CB'
+  | 'LB'
+  | 'LWB'
+  | 'RB'
+  | 'RWB'
+  | 'CM'
+  | 'CDM'
+  | 'CAM'
+  | 'LM'
+  | 'RM'
+  | 'ST'
+  | 'CF'
+  | 'LW'
+  | 'RW';
 
 export interface PlayerSeed {
   playerId: string;
@@ -23,12 +40,16 @@ export interface StoredMatchItem {
   Score: number;
   IsStarter: boolean;
   Result: MatchResult;
+  PositionGroup?: PositionGroup;
+  DetailedPosition?: DetailedPosition;
 }
 
 export interface RecentMatch {
   sk: string;
   score: number;
   result: MatchResult;
+  positionGroup?: PositionGroup;
+  detailedPosition?: DetailedPosition;
 }
 
 export interface PlayerStatusTrackingResponse {
@@ -66,4 +87,6 @@ export interface RatingPayload {
   score: number;
   isStarter: boolean;
   result: MatchResult;
+  positionGroup: PositionGroup;
+  detailedPosition: DetailedPosition;
 }
