@@ -15,12 +15,12 @@ interface AppContextType {
   players: Array<{
     playerId: string;
     name: string;
-    season: string;
+    cardSeason: string;
     position: string;
   }>;
   playersError: string | null;
   loadPlayers: () => Promise<void>;
-  addPlayer: (data: { name: string; season: string; position: string }) => Promise<{ ok: boolean; message?: string }>; 
+  addPlayer: (data: { name: string; cardSeason: string; position: string }) => Promise<{ ok: boolean; message?: string }>; 
   deletePlayer: (playerId: string) => Promise<{ ok: boolean; message?: string }>;
   resetPlayerData: (playerId: string) => Promise<{ ok: boolean; message?: string }>;
 }
@@ -31,7 +31,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentTab, setCurrentTab] = useState<AppTab>('tracker');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [players, setPlayers] = useState<Array<{ playerId: string; name: string; season: string; position: string }>>([]);
+  const [players, setPlayers] = useState<Array<{ playerId: string; name: string; cardSeason: string; position: string }>>([]);
   const [playersError, setPlayersError] = useState<string | null>(null);
 
   async function loadPlayers() {
@@ -41,9 +41,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.info('[players] loading from /api/players');
       const res = await fetch('/api/players');
       const payload = (await res.json()) as
-        | Array<{ playerId: string; name: string; season: string; position: string }>
+        | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
         | {
-            items?: Array<{ playerId: string; name: string; season: string; position: string }>;
+            items?: Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>;
             message?: string;
             error?: string;
             requestId?: string;
@@ -73,7 +73,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       const items = Array.isArray(payload) ? payload : payload.items ?? [];
-      setPlayers(items);
+      // Ensure all items have the correct field names (cardSeason, not season)
+      const normalizedItems = items.map(item => ({
+        playerId: item.playerId,
+        name: item.name,
+        cardSeason: item.cardSeason ?? item.season ?? '',
+        position: item.position
+      }));
+      setPlayers(normalizedItems);
       setPlayersError(null);
       console.info('[players] load success', {
         count: items.length,
@@ -87,12 +94,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function addPlayer(data: { name: string; season: string; position: string }) {
+  async function addPlayer(data: { name: string; cardSeason: string; position: string }) {
     try {
       const res = await fetch('/api/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ name: data.name, season: data.cardSeason, position: data.position })
       });
 
       const payload = await res.json();

@@ -6,12 +6,13 @@ import { useAppContext } from './app-context';
 
 type AddPlayerForm = {
   name: string;
-  season: string;
+  cardSeason: string;
   position: string;
 };
 
 type EditPlayerForm = {
   name: string;
+  cardSeason: string;
   position: string;
 };
 
@@ -47,7 +48,7 @@ export function SquadManagement() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<AddPlayerForm>({
     name: '',
-    season: '',
+    cardSeason: '',
     position: ''
   });
   const [saveMessage, setSaveMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(
@@ -56,6 +57,7 @@ export function SquadManagement() {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<EditPlayerForm>({
     name: '',
+    cardSeason: '',
     position: ''
   });
 
@@ -70,11 +72,11 @@ export function SquadManagement() {
     setSaveMessage(null);
 
     try {
-      const result = await addPlayer({ name: formData.name, season: formData.season, position: formData.position });
+      const result = await addPlayer({ name: formData.name, cardSeason: formData.cardSeason, position: formData.position });
       if (!result.ok) throw new Error(result.message ?? 'Failed');
 
       setSaveMessage({ text: 'Cầu thủ đã thêm thành công', type: 'success' });
-      setFormData({ name: '', season: '', position: '' });
+      setFormData({ name: '', cardSeason: '', position: '' });
       setShowForm(false);
     } catch (err) {
       setSaveMessage({
@@ -106,6 +108,7 @@ export function SquadManagement() {
     setEditingPlayerId(player.playerId);
     setEditFormData({
       name: player.name,
+      cardSeason: player.cardSeason,
       position: player.position
     });
     setSaveMessage(null);
@@ -113,7 +116,7 @@ export function SquadManagement() {
 
   function handleCancelEdit() {
     setEditingPlayerId(null);
-    setEditFormData({ name: '', position: '' });
+    setEditFormData({ name: '', cardSeason: '', position: '' });
   }
 
   async function handleUpdatePlayer(playerId: string, e: React.FormEvent) {
@@ -126,6 +129,7 @@ export function SquadManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editFormData.name,
+          cardSeason: editFormData.cardSeason,
           position: editFormData.position
         })
       });
@@ -138,7 +142,7 @@ export function SquadManagement() {
 
       setSaveMessage({ text: 'Cầu thủ đã được cập nhật thành công', type: 'success' });
       setEditingPlayerId(null);
-      setEditFormData({ name: '', position: '' });
+      setEditFormData({ name: '', cardSeason: '', position: '' });
       await loadPlayers();
     } catch (err) {
       setSaveMessage({
@@ -180,11 +184,11 @@ export function SquadManagement() {
           </label>
 
           <label className="field">
-            <span>Mùa Giải</span>
+            <span>Mùa Thẻ</span>
             <input
               type="text"
-              value={formData.season}
-              onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+              value={formData.cardSeason}
+              onChange={(e) => setFormData({ ...formData, cardSeason: e.target.value })}
               placeholder="VD: 21CU"
               required
             />
@@ -226,7 +230,7 @@ export function SquadManagement() {
                 <span className="position-badge">{player.position}</span>
               </div>
               <p className="player-id">ID: {player.playerId}</p>
-              <p className="player-season">Mùa: {player.season}</p>
+              <p className="player-season">Mùa: {player.cardSeason}</p>
               <div className="player-card-actions">
                 <button
                   className="secondary-button"
@@ -261,6 +265,18 @@ export function SquadManagement() {
                       value={editFormData.name}
                       onChange={(event) =>
                         setEditFormData({ ...editFormData, name: event.target.value })
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Mùa Thẻ</span>
+                    <input
+                      type="text"
+                      value={editFormData.cardSeason}
+                      onChange={(event) =>
+                        setEditFormData({ ...editFormData, cardSeason: event.target.value })
                       }
                       required
                     />

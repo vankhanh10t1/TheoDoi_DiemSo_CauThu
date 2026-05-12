@@ -3,7 +3,7 @@ export type MatchResult = 'Win' | 'Draw' | 'Loss';
 export interface PlayerSeed {
   playerId: string;
   name: string;
-  season: string;
+  cardSeason: string; // e.g., "21CU", "22EA" - represents the card season/version
   position: string;
 }
 
@@ -13,7 +13,7 @@ export interface PlayerMetadataItem {
   PK: string;
   SK: 'METADATA';
   Name: string;
-  Season: string;
+  CardSeason: string; // Card season/version
   Position: string;
 }
 

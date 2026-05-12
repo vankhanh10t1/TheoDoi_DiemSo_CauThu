@@ -1,10 +1,11 @@
 import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../../lib/dynamodb';
+import { findDuplicatePlayerByName } from '../../../../lib/playerService';
 
 export const runtime = 'nodejs';
 
-// PATCH /api/players/[id] - update player metadata (name + position)
+// PATCH /api/players/[id] - update player metadata (name, cardSeason, position)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,10 +26,14 @@ export async function PATCH(
 
   const candidate = body as Record<string, unknown>;
   const name = (candidate.name as string)?.trim() ?? '';
+  const cardSeason = (candidate.cardSeason as string)?.trim() ?? (candidate.season as string)?.trim() ?? '';
   const position = (candidate.position as string)?.trim() ?? '';
 
-  if (!name || !position) {
-    return NextResponse.json({ message: 'Required fields: name, position' }, { status: 400 });
+  if (!name || !cardSeason || !position) {
+    return NextResponse.json(
+      { message: 'Required fields: name, cardSeason, position' },
+      { status: 400 }
+    );
   }
 
   try {
@@ -47,6 +52,22 @@ export async function PATCH(
     }
 
     const existingItem = existingResponse.Item as Record<string, unknown>;
+    const existingName = existingItem.Name as string;
+
+    // Check for duplicate player name only if the name is changing
+    if (existingName.toLowerCase().trim() !== name.toLowerCase().trim()) {
+      const duplicatePlayerId = await findDuplicatePlayerByName(name, playerId);
+      if (duplicatePlayerId) {
+        return NextResponse.json(
+          {
+            message: `Cầu thủ "${name}" đã tồn tại trong hệ thống (ID: ${duplicatePlayerId}). Không thể cập nhật cầu thủ với tên bị trùng.`,
+            code: 'DUPLICATE_PLAYER_NAME',
+            duplicatePlayerId
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     await getDocumentClient().send(
       new PutCommand({
@@ -55,7 +76,7 @@ export async function PATCH(
           PK: `PLAYER#${playerId}`,
           SK: 'METADATA',
           Name: name,
-          Season: String(existingItem.Season ?? ''),
+          CardSeason: cardSeason,
           Position: position,
           CreatedAt: existingItem.CreatedAt ?? new Date().toISOString()
         }
@@ -67,6 +88,7 @@ export async function PATCH(
         message: 'Player updated successfully',
         playerId,
         name,
+        cardSeason,
         position
       },
       { status: 200 }

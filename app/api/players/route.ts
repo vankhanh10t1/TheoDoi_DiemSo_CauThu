@@ -1,6 +1,7 @@
 import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
+import { findDuplicatePlayerByName } from '../../../lib/playerService';
 
 export const runtime = 'nodejs';
 
@@ -65,7 +66,7 @@ export async function GET() {
     const items = (response.Items ?? []).map((item: any) => ({
       playerId: item.PK?.replace(/^PLAYER#/, ''),
       name: item.Name,
-      season: item.Season,
+      cardSeason: item.CardSeason ?? item.Season ?? '', // Support both new and legacy field names
       position: item.Position
     }));
 
@@ -190,6 +191,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Check for duplicate player name (case-insensitive, trimmed)
+  try {
+    const duplicatePlayerId = await findDuplicatePlayerByName(name);
+    if (duplicatePlayerId) {
+      return NextResponse.json(
+        {
+          message: `Cầu thủ "${name}" đã tồn tại trong hệ thống (ID: ${duplicatePlayerId}). Không thể thêm cầu thủ trùng tên.`,
+          code: 'DUPLICATE_PLAYER_NAME',
+          duplicatePlayerId
+        },
+        { status: 409 }
+      );
+    }
+  } catch (error) {
+    console.error('Error checking for duplicate player names:', error);
+    return NextResponse.json(
+      { message: 'Failed to validate player name uniqueness' },
+      { status: 500 }
+    );
+  }
+
   // Try inserting, if playerId collides generate a new one and retry a few times
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -200,7 +222,7 @@ export async function POST(request: NextRequest) {
             PK: `PLAYER#${playerId}`,
             SK: 'METADATA',
             Name: name,
-            Season: season,
+            CardSeason: season,
             Position: position,
             CreatedAt: new Date().toISOString()
           },

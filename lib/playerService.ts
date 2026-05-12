@@ -10,7 +10,7 @@ function mapMetadataItem(item: PlayerMetadataItem): PlayerSummary {
   return {
     playerId: toPlayerIdFromPk(item.PK),
     name: item.Name,
-    season: item.Season,
+    cardSeason: item.CardSeason ?? (item as any).Season ?? '', // Support both new and legacy field names
     position: item.Position
   };
 }
@@ -91,4 +91,42 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       result: match.Result
     };
   });
+}
+
+/**
+ * Normalize player name for duplicate checking (trim spaces, lowercase)
+ */
+export function normalizePlayerName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Check if a player with the same name already exists (case-insensitive, trimmed)
+ * Returns the existing player's ID if found, null otherwise
+ */
+export async function findDuplicatePlayerByName(
+  playerName: string,
+  excludePlayerId?: string
+): Promise<string | null> {
+  try {
+    const allPlayers = await listPlayers();
+    const normalizedNewName = normalizePlayerName(playerName);
+
+    for (const player of allPlayers) {
+      // Skip the player being edited (if excludePlayerId is provided)
+      if (excludePlayerId && player.playerId === excludePlayerId) {
+        continue;
+      }
+
+      const normalizedExistingName = normalizePlayerName(player.name);
+      if (normalizedExistingName === normalizedNewName) {
+        return player.playerId;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error checking for duplicate player names:', error);
+    throw error;
+  }
 }
