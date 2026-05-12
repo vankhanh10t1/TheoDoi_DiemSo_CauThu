@@ -14,7 +14,7 @@ type EntryFormState = Omit<RatingPayload, 'detailedPosition'> & {
 };
 
 export function PlayerDetail() {
-  const { selectedPlayerId, closePlayerDetail, refreshTrigger, resetPlayerData } = useAppContext();
+  const { selectedPlayerId, closePlayerDetail, refreshTrigger, resetPlayerData, triggerRefresh } = useAppContext();
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
