@@ -725,6 +725,40 @@ h2 {
   text-transform: uppercase;
 }
 
+/* Badges container for small badges in card header */
+.rec-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Trend badges (small, compact) */
+.rec-badge.trend {
+  text-transform: none;
+  font-size: 0.68rem;
+  padding: 3px 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-badge.trend-up {
+  background: var(--green);
+  color: white;
+}
+
+.rec-badge.trend-stable {
+  background: #c8aa00;
+  color: #1b1b1b;
+}
+
+.rec-badge.trend-down {
+  background: var(--red);
+  color: white;
+}
+
 .rec-badge.sell {
   background: var(--red);
   color: white;
@@ -839,6 +873,11 @@ h2 {
 
   .recommendations-list {
     grid-template-columns: 1fr;
+  }
+
+  .rec-header {
+    align-items: center;
+    gap: 6px;
   }
 
   .risk-group-header {

@@ -187,9 +187,12 @@ export function TransferRecommendation() {
                           <div className="rec-header">
                             <h4>{rec.name}</h4>
                             <div className="rec-badges">
-                              <span className={`rec-badge risk risk-${rec.riskLevel.toLowerCase()}`}>
-                                Risk {rec.riskLevel}
-                              </span>
+                                <span className={`rec-badge risk risk-${rec.riskLevel.toLowerCase()}`}>
+                                  Risk {rec.riskLevel}
+                                </span>
+                                <span className={`rec-badge trend trend-${(rec.trend || 'STABLE').toLowerCase()}`}>
+                                  {getTrendEmoji(rec.trend)} {getTrendLabel(rec.trend)}
+                                </span>
                             </div>
                           </div>
                           <div className="rec-metrics compact">
