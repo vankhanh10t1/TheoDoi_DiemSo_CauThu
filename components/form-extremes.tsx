@@ -13,9 +13,13 @@ interface PlayerFormData {
   name: string;
   position: string;
   averageScore: number;
+  wmaScore: number;
   matchCount: number;
   status: string;
   color: string;
+  trendStatus: string;
+  stabilityLevel: string;
+  momentumStatus: string;
   recentMatches: RecentMatch[];
 }
 
@@ -116,7 +120,7 @@ export function FormExtremesCard() {
                 </p>
               </div>
 
-              <div className="score-badge">{data.bestForm.averageScore.toFixed(1)}</div>
+              <div className="score-badge">WMA {data.bestForm.wmaScore.toFixed(1)}</div>
 
               <div className="status-grid" style={{ marginTop: '12px' }}>
                 <div>
@@ -126,6 +130,10 @@ export function FormExtremesCard() {
                 <div>
                   <span className="metric-label">Trung bình</span>
                   <strong>{data.bestForm.averageScore.toFixed(1)}</strong>
+                </div>
+                <div>
+                  <span className="metric-label">Trend</span>
+                  <strong>{data.bestForm.trendStatus}</strong>
                 </div>
               </div>
             </>
@@ -152,7 +160,7 @@ export function FormExtremesCard() {
                 </p>
               </div>
 
-              <div className="score-badge">{data.worstForm.averageScore.toFixed(1)}</div>
+              <div className="score-badge">WMA {data.worstForm.wmaScore.toFixed(1)}</div>
 
               <div className="status-grid" style={{ marginTop: '12px' }}>
                 <div>
@@ -162,6 +170,10 @@ export function FormExtremesCard() {
                 <div>
                   <span className="metric-label">Trung bình</span>
                   <strong>{data.worstForm.averageScore.toFixed(1)}</strong>
+                </div>
+                <div>
+                  <span className="metric-label">Trend</span>
+                  <strong>{data.worstForm.trendStatus}</strong>
                 </div>
               </div>
             </>
@@ -174,7 +186,7 @@ export function FormExtremesCard() {
       </div>
 
       <p style={{ fontSize: '12px', color: '#999', marginTop: '16px', textAlign: 'center' }}>
-        Dựa trên trung bình điểm của 5 trận gần nhất ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
+        Dựa trên WMA của 5 trận gần nhất ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
       </p>
     </article>
   );

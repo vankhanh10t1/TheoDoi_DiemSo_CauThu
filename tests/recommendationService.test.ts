@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRecommendationsFromTableItems } from '../lib/recommendationService';
 
 describe('recommendationService', () => {
-  it('includes every player that has at least one rating entry, even without metadata', () => {
+  it('builds a recommendation with the new hybrid metrics', () => {
     const recommendations = buildRecommendationsFromTableItems([
       {
         PK: 'PLAYER#P001',
@@ -44,7 +44,6 @@ describe('recommendationService', () => {
       }
     ]);
 
-    // Now we only include players that have METADATA present
     expect(recommendations.map((item) => item.playerId)).toEqual(['P001']);
 
     expect(recommendations[0]).toMatchObject({
@@ -53,8 +52,11 @@ describe('recommendationService', () => {
       cardSeason: '22EA',
       position: 'ST',
       matchCount: 3,
-      recommendation: 'HOLD',
-      trend: 'UP'
+      recommendation: 'KEEP',
+      status: 'Stable',
+      trend: 'UP',
+      wmaScore: 8.3,
+      fraudRisk: false
     });
   });
 });

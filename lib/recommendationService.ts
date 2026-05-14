@@ -1,5 +1,6 @@
-import { generateTransferRecommendation, rankTransferRecommendations, type TransferRecommendation } from './transferEngine';
-import type { MatchResult, RecentMatch } from './types';
+import { analyzeRecentMatches } from './analytics/performance';
+import { recommendationRank } from './recommendation';
+import type { MatchResult, RecentMatch, RecommendationAction } from './types';
 
 type RecommendationTableItem = {
   PK?: unknown;
@@ -18,6 +19,34 @@ interface RecommendationSourceRecord {
   cardSeason: string;
   position: string;
   recentMatches: RecentMatch[];
+}
+
+export interface TransferRecommendation {
+  playerId: string;
+  name: string;
+  cardSeason: string;
+  position: string;
+  status: string;
+  averageScore: number;
+  wmaScore: number;
+  matchCount: number;
+  recommendation: RecommendationAction;
+  reason: string;
+  priority: number;
+  trend: 'UP' | 'DOWN' | 'STABLE';
+  trendValue: number;
+  variance: number;
+  stabilityLevel: 'STABLE' | 'UNSTABLE' | 'VOLATILE';
+  momentum: number;
+  momentumStatus: 'HOT' | 'NORMAL' | 'COLD';
+  predictedScore: number;
+  confidence: number;
+  confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  riskScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  fraudRisk: boolean;
+  fraudReasons: string[];
+  lossStreak: number;
 }
 
 function isMatchResult(value: unknown): value is MatchResult {
@@ -84,7 +113,6 @@ export function buildRecommendationsFromTableItems(
 
   const recommendations = Array.from(records.values())
     .map((record) => {
-      // Only include players that have METADATA present (avoid showing pure-fake IDs)
       const hasMetadata =
         Boolean(record.cardSeason) || Boolean(record.position) || record.name !== record.playerId;
 
@@ -96,15 +124,55 @@ export function buildRecommendationsFromTableItems(
         .sort((a, b) => b.sk.localeCompare(a.sk))
         .slice(0, 5);
 
-      return generateTransferRecommendation({
+      if (recentMatches.length === 0) {
+        return null;
+      }
+
+      const analysis = analyzeRecentMatches(recentMatches);
+
+      return {
         playerId: record.playerId,
         name: record.name,
         cardSeason: record.cardSeason,
         position: record.position,
-        recentMatches
-      });
+        status:
+          analysis.recommendation === 'REPLACE'
+            ? 'Fraud'
+            : analysis.recommendation === 'SELL'
+              ? 'Under Review'
+              : 'Stable',
+        averageScore: analysis.averageScore,
+        wmaScore: analysis.wmaScore,
+        matchCount: recentMatches.length,
+        recommendation: analysis.recommendation,
+        reason: analysis.recommendationReason,
+        priority: recommendationRank(analysis.recommendation),
+        trend: analysis.trendStatus,
+        trendValue: analysis.trendValue,
+        variance: analysis.variance,
+        stabilityLevel: analysis.stabilityLevel,
+        momentum: analysis.momentum,
+        momentumStatus: analysis.momentumStatus,
+        predictedScore: analysis.predictedScore,
+        confidence: analysis.confidence,
+        confidenceLevel: analysis.confidenceLevel,
+        riskScore: analysis.riskScore,
+        riskLevel: analysis.riskLevel,
+        fraudRisk: analysis.fraudRisk,
+        fraudReasons: analysis.fraudReasons,
+        lossStreak: analysis.lossStreak
+      } satisfies TransferRecommendation;
     })
-    .filter((recommendation): recommendation is TransferRecommendation => recommendation !== null);
+    .filter((recommendation): recommendation is TransferRecommendation => recommendation !== null)
+    .sort((a, b) => {
+      const rankDiff = recommendationRank(a.recommendation) - recommendationRank(b.recommendation);
 
-  return rankTransferRecommendations(recommendations);
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+
+      return b.priority - a.priority;
+    });
+
+  return recommendations;
 }

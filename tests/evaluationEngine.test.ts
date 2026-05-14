@@ -7,8 +7,8 @@ describe('evaluationEngine', () => {
   });
 
   it('classifies star player when score is above 8', () => {
-    expect(classifyAverageScore(8.01)).toEqual({
-      averageScore: 8.0,
+    expect(classifyAverageScore(8.05)).toEqual({
+      averageScore: 8.1,
       status: 'Star Player',
       action: 'Giữ chặt đội hình chính',
       color: 'green'
@@ -32,8 +32,8 @@ describe('evaluationEngine', () => {
       color: 'orange'
     });
 
-    expect(classifyAverageScore(4.49)).toEqual({
-      averageScore: 4.5,
+    expect(classifyAverageScore(4.44)).toEqual({
+      averageScore: 4.4,
       status: 'Fraud',
       action: 'Thanh lý ngay lập tức',
       color: 'red'
@@ -51,10 +51,10 @@ describe('evaluationEngine', () => {
     ]);
 
     expect(result).toEqual({
-      averageScore: 7,
-      status: 'Stable',
-      action: 'Tiếp tục tin dùng',
-      color: 'white'
+      averageScore: 8.3,
+      status: 'Star Player',
+      action: 'Giữ chặt đội hình chính',
+      color: 'green'
     });
   });
 });

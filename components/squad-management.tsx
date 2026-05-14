@@ -263,7 +263,6 @@ export function SquadManagement() {
                 <h3>{player.name}</h3>
                 <span className="position-badge">{player.position}</span>
               </div>
-              <p className="player-id">ID: {player.playerId}</p>
               <p className="player-season">Mùa: {player.cardSeason}</p>
               <div className="player-card-actions">
                 <button

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { TransferRecommendation } from '../lib/transferEngine';
+import type { TransferRecommendation } from '../lib/recommendationService';
 import { useAppContext } from './app-context';
 
 function getTrendEmoji(trend: string): string {
@@ -28,15 +28,15 @@ function getTrendLabel(trend: string): string {
   }
 }
 
-function getRecommendationLabel(recommendation: string): string {
-  switch (recommendation) {
-    case 'SELL':
-      return 'CÂN NHẮC BÁN';
-    case 'MONITOR':
-      return 'THEO DÕI';
-    case 'HOLD':
+function getRiskTone(riskLevel: string): string {
+  switch (riskLevel) {
+    case 'HIGH':
+      return 'red';
+    case 'MEDIUM':
+      return 'orange';
+    case 'LOW':
     default:
-      return 'GIỮ';
+      return 'green';
   }
 }
 
@@ -99,26 +99,20 @@ export function TransferRecommendation() {
                 {recommendations.map((rec) => (
                   <div
                     key={rec.playerId}
-                    className={`recommendation-card ${rec.recommendation === 'SELL' ? 'red' : rec.recommendation === 'MONITOR' ? 'orange' : 'green'}`}
+                    className={`recommendation-card ${getRiskTone(rec.riskLevel)}`}
                   >
                     <div className="rec-header">
                       <h4>{rec.name}</h4>
                       <div className="rec-badges">
-                        <span className={`rec-badge ${rec.recommendation.toLowerCase()}`}>
-                          {getRecommendationLabel(rec.recommendation)}
-                        </span>
-                        <span className={`rec-badge trend trend-${rec.trend.toLowerCase()}`}>
-                          {getTrendEmoji(rec.trend)} {getTrendLabel(rec.trend)}
+                        <span className={`rec-badge risk risk-${rec.riskLevel.toLowerCase()}`}>
+                          Risk {rec.riskLevel}
                         </span>
                       </div>
                     </div>
-                    <p className="rec-reason">{rec.reason}</p>
                     <div className="rec-metrics">
                       <span>Mùa thẻ: {rec.cardSeason || 'Chưa có dữ liệu'}</span>
                       <span>Vị trí: {rec.position || 'Chưa có dữ liệu'}</span>
-                      <span>Điểm TB: {rec.averageScore.toFixed(1)}</span>
                       <span>Trận: {rec.matchCount}</span>
-                      <span>Xu hướng: {rec.trendValue > 0 ? '+' : ''}{rec.trendValue.toFixed(1)}</span>
                     </div>
                     <button
                       className="tertiary-button"

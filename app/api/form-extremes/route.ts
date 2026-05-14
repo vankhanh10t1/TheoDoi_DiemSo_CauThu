@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listPlayers, getRecentMatches } from '../../../lib/playerService';
-import { evaluateRecentMatches } from '../../../lib/evaluationEngine';
+import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import type { RecentMatch } from '../../../lib/types';
 
 export const runtime = 'nodejs';
@@ -10,9 +10,13 @@ interface PlayerFormData {
   name: string;
   position: string;
   averageScore: number;
+  wmaScore: number;
   matchCount: number;
   status: string;
   color: string;
+  trendStatus: string;
+  stabilityLevel: string;
+  momentumStatus: string;
   recentMatches: RecentMatch[];
 }
 
@@ -47,16 +51,20 @@ export async function GET() {
         const recentMatches = await getRecentMatches(player.playerId);
 
         if (recentMatches.length > 0) {
-          const assessment = evaluateRecentMatches(recentMatches);
+          const analysis = analyzeRecentMatches(recentMatches);
 
           playerForms.push({
             playerId: player.playerId,
             name: player.name,
             position: player.position,
-            averageScore: assessment.averageScore,
+            averageScore: analysis.averageScore,
+            wmaScore: analysis.wmaScore,
             matchCount: recentMatches.length,
-            status: assessment.status,
-            color: assessment.color,
+            status: analysis.averageScore > 8 ? 'Star Player' : analysis.averageScore >= 6 ? 'Stable' : analysis.averageScore >= 4.5 ? 'Under Review' : 'Fraud',
+            color: analysis.averageScore > 8 ? 'green' : analysis.averageScore >= 6 ? 'white' : analysis.averageScore >= 4.5 ? 'orange' : 'red',
+            trendStatus: analysis.trendStatus,
+            stabilityLevel: analysis.stabilityLevel,
+            momentumStatus: analysis.momentumStatus,
             recentMatches
           });
         }
@@ -71,11 +79,11 @@ export async function GET() {
 
     if (playerForms.length > 0) {
       bestForm = playerForms.reduce((best, current) =>
-        current.averageScore > best.averageScore ? current : best
+        current.wmaScore > best.wmaScore ? current : best
       );
 
       worstForm = playerForms.reduce((worst, current) =>
-        current.averageScore < worst.averageScore ? current : worst
+        current.wmaScore < worst.wmaScore ? current : worst
       );
     }
 

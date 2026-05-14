@@ -12,6 +12,40 @@ import {
 } from '../lib/positions';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 
+function getTrendLabel(status?: string): string {
+  if (status === 'UP') return 'Tăng';
+  if (status === 'DOWN') return 'Giảm';
+  return 'Ổn định';
+}
+
+function getStabilityLabel(status?: string): string {
+  if (status === 'VOLATILE') return 'Biến động';
+  if (status === 'UNSTABLE') return 'Chưa ổn định';
+  return 'Ổn định';
+}
+
+function getMomentumLabel(status?: string): string {
+  if (status === 'HOT') return 'Nóng';
+  if (status === 'COLD') return 'Lạnh';
+  return 'Bình thường';
+}
+
+function getConfidenceLabel(value: number | undefined): string {
+  if (typeof value !== 'number') return '—';
+  if (value > 0.8) return 'HIGH';
+  if (value >= 0.5) return 'MEDIUM';
+  return 'LOW';
+}
+
+function getRecommendationLabel(value?: string): string {
+  if (value === 'KEEP') return 'GIỮ';
+  if (value === 'MONITOR') return 'THEO DÕI';
+  if (value === 'BENCH') return 'DỰ BỊ';
+  if (value === 'SELL') return 'BÁN';
+  if (value === 'REPLACE') return 'THAY THẾ';
+  return '—';
+}
+
 
 type SaveState = {
   message: string;
@@ -321,7 +355,7 @@ export function TrackerApp() {
               >
                 {filteredPlayers.map((player) => (
                   <option key={player.playerId} value={player.playerId}>
-                    {player.name} ({player.playerId})
+                    {player.name} · {player.cardSeason} · {player.position}
                   </option>
                 ))}
               </select>
@@ -417,17 +451,66 @@ export function TrackerApp() {
 
             {!statusError && statusData && 'averageScore' in statusData ? (
               <>
-                <div className="score-badge">{statusData.averageScore.toFixed(1)}</div>
+                <div className="score-badge">WMA {statusData.wmaScore.toFixed(1)}</div>
                 <div className="status-grid">
                   <div>
                     <span className="metric-label">Số trận</span>
                     <strong>{statusData.matchCount}</strong>
                   </div>
                   <div>
+                    <span className="metric-label">Xu hướng</span>
+                    <strong>{getTrendLabel(statusData.trendStatus)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Variance</span>
+                    <strong>{statusData.variance.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Ổn định</span>
+                    <strong>{getStabilityLabel(statusData.stabilityLevel)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Momentum</span>
+                    <strong>{getMomentumLabel(statusData.momentumStatus)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Prediction</span>
+                    <strong>{statusData.predictedScore.toFixed(1)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Confidence</span>
+                    <strong>{getConfidenceLabel(statusData.confidence)} ({Math.round(statusData.confidence * 100)}%)</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Risk</span>
+                    <strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong>
+                  </div>
+                </div>
+
+                <div className="status-grid" style={{ marginTop: '12px' }}>
+                  <div>
                     <span className="metric-label">Hành động</span>
                     <strong>{statusData.action}</strong>
                   </div>
+                  <div>
+                    <span className="metric-label">Khuyến nghị</span>
+                    <strong>{getRecommendationLabel(statusData.recommendation)}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Fraud</span>
+                    <strong>{statusData.fraudRisk ? 'ALERT' : 'CLEAR'}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Loss streak</span>
+                    <strong>{statusData.lossStreak}</strong>
+                  </div>
                 </div>
+
+                {statusData.fraudRisk ? (
+                  <p className="inline-message error" style={{ marginTop: '12px' }}>
+                    Fraud alert: {statusData.fraudReasons.join(', ')}
+                  </p>
+                ) : null}
 
                 <div className="recent-list">
                   {statusData.recentMatches.map((match) => (

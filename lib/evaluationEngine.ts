@@ -1,53 +1,22 @@
 import type { PlayerAssessment, RecentMatch } from './types';
+import {
+  analyzeRecentMatches as analyzeRecentMatchesCore,
+  classifyAverageScore as classifyAverageScoreCore,
+  evaluateRecentMatches as evaluateRecentMatchesCore
+} from './analytics/performance';
 
 export function roundToOneDecimal(value: number): number {
   return Number(value.toFixed(1));
 }
 
 export function classifyAverageScore(averageScore: number): PlayerAssessment {
-  if (averageScore > 8) {
-    return {
-      averageScore: roundToOneDecimal(averageScore),
-      status: 'Star Player',
-      action: 'Giữ chặt đội hình chính',
-      color: 'green'
-    };
-  }
-
-  if (averageScore >= 6) {
-    return {
-      averageScore: roundToOneDecimal(averageScore),
-      status: 'Stable',
-      action: 'Tiếp tục tin dùng',
-      color: 'white'
-    };
-  }
-
-  if (averageScore >= 4.5) {
-    return {
-      averageScore: roundToOneDecimal(averageScore),
-      status: 'Under Review',
-      action: 'Đẩy lên ghế dự bị',
-      color: 'orange'
-    };
-  }
-
-  return {
-    averageScore: roundToOneDecimal(averageScore),
-    status: 'Fraud',
-    action: 'Thanh lý ngay lập tức',
-    color: 'red'
-  };
+  return classifyAverageScoreCore(averageScore);
 }
 
 export function evaluateRecentMatches(matches: RecentMatch[]): PlayerAssessment {
-  if (matches.length === 0) {
-    return classifyAverageScore(0);
-  }
+  return evaluateRecentMatchesCore(matches);
+}
 
-  const latestFive = matches.slice(0, 5);
-  const averageScore =
-    latestFive.reduce((sum, match) => sum + match.score, 0) / latestFive.length;
-
-  return classifyAverageScore(averageScore);
+export function analyzeRecentMatches(matches: RecentMatch[]) {
+  return analyzeRecentMatchesCore(matches);
 }

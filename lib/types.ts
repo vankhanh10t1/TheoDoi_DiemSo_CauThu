@@ -1,5 +1,11 @@
 export type MatchResult = 'Win' | 'Draw' | 'Loss';
 export type PositionGroup = 'GK' | 'DF' | 'MF' | 'FW';
+export type TrendStatus = 'UP' | 'STABLE' | 'DOWN';
+export type StabilityLevel = 'STABLE' | 'UNSTABLE' | 'VOLATILE';
+export type MomentumStatus = 'HOT' | 'NORMAL' | 'COLD';
+export type PredictionConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+export type RecommendationAction = 'KEEP' | 'MONITOR' | 'BENCH' | 'SELL' | 'REPLACE';
 export type DetailedPosition =
   | 'GK'
   | 'CB'
@@ -64,10 +70,27 @@ export interface PlayerStatusEvaluatedResponse {
   playerId: string;
   name: string;
   averageScore: number;
+  wmaScore: number;
   matchCount: number;
   status: 'Star Player' | 'Stable' | 'Under Review' | 'Fraud';
   action: string;
   color: 'green' | 'white' | 'orange' | 'red';
+  trendValue: number;
+  trendStatus: TrendStatus;
+  variance: number;
+  stabilityLevel: StabilityLevel;
+  momentum: number;
+  momentumStatus: MomentumStatus;
+  predictedScore: number;
+  confidence: number;
+  confidenceLevel: PredictionConfidenceLevel;
+  lossStreak: number;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  fraudRisk: boolean;
+  fraudReasons: string[];
+  recommendation: RecommendationAction;
+  recommendationReason: string;
   recentMatches: RecentMatch[];
 }
 
@@ -80,6 +103,27 @@ export interface PlayerAssessment {
   status: PlayerStatusEvaluatedResponse['status'];
   action: string;
   color: PlayerStatusEvaluatedResponse['color'];
+}
+
+export interface PerformanceAnalysis {
+  averageScore: number;
+  wmaScore: number;
+  trendValue: number;
+  trendStatus: TrendStatus;
+  variance: number;
+  stabilityLevel: StabilityLevel;
+  momentum: number;
+  momentumStatus: MomentumStatus;
+  predictedScore: number;
+  confidence: number;
+  confidenceLevel: PredictionConfidenceLevel;
+  lossStreak: number;
+  riskScore: number;
+  riskLevel: RiskLevel;
+  fraudRisk: boolean;
+  fraudReasons: string[];
+  recommendation: RecommendationAction;
+  recommendationReason: string;
 }
 
 export interface RatingPayload {

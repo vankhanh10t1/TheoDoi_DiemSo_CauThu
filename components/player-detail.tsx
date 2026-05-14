@@ -1,13 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  getDetailedPositionsByGroup,
-  isDetailedPositionForGroup,
-  POSITION_GROUPS
-} from '../lib/positions';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
+
+function getTrendLabel(status?: string): string {
+  if (status === 'UP') return 'Tăng';
+  if (status === 'DOWN') return 'Giảm';
+  return 'Ổn định';
+}
+
+function getStabilityLabel(status?: string): string {
+  if (status === 'VOLATILE') return 'Biến động';
+  if (status === 'UNSTABLE') return 'Chưa ổn định';
+  return 'Ổn định';
+}
+
+function getMomentumLabel(status?: string): string {
+  if (status === 'HOT') return 'Nóng';
+  if (status === 'COLD') return 'Lạnh';
+  return 'Bình thường';
+}
+
+function getRecommendationLabel(value?: string): string {
+  if (value === 'KEEP') return 'GIỮ';
+  if (value === 'MONITOR') return 'THEO DÕI';
+  if (value === 'BENCH') return 'DỰ BỊ';
+  if (value === 'SELL') return 'BÁN';
+  if (value === 'REPLACE') return 'THAY THẾ';
+  return '—';
+}
 
 type EntryFormState = Omit<RatingPayload, 'detailedPosition'> & {
   detailedPosition: RatingPayload['detailedPosition'] | '';
@@ -106,8 +128,20 @@ export function PlayerDetail() {
               <div>
                 <strong>{statusData.name}</strong>
                 <div style={{ marginTop: 8 }}>
-                  <div className="score-badge">{('averageScore' in statusData ? statusData.averageScore.toFixed(1) : 'N/A')}</div>
+                  <div className="score-badge">WMA {('wmaScore' in statusData ? statusData.wmaScore.toFixed(1) : 'N/A')}</div>
                 </div>
+                {'wmaScore' in statusData ? (
+                  <div className="status-grid" style={{ marginTop: 12 }}>
+                    <div><span className="metric-label">Trend</span><strong>{getTrendLabel(statusData.trendStatus)}</strong></div>
+                    <div><span className="metric-label">Variance</span><strong>{statusData.variance.toFixed(2)}</strong></div>
+                    <div><span className="metric-label">Stability</span><strong>{getStabilityLabel(statusData.stabilityLevel)}</strong></div>
+                    <div><span className="metric-label">Momentum</span><strong>{getMomentumLabel(statusData.momentumStatus)}</strong></div>
+                    <div><span className="metric-label">Predicted</span><strong>{statusData.predictedScore.toFixed(1)}</strong></div>
+                    <div><span className="metric-label">Risk</span><strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong></div>
+                    <div><span className="metric-label">Confidence</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div>
+                    <div><span className="metric-label">Recommend</span><strong>{getRecommendationLabel(statusData.recommendation)}</strong></div>
+                  </div>
+                ) : null}
               </div>
             ) : loadingStatus ? (
               <p>Đang tải...</p>
@@ -138,6 +172,11 @@ export function PlayerDetail() {
                     </div>
                   ))}
                 </div>
+                {'fraudRisk' in statusData && statusData.fraudRisk ? (
+                  <p className="inline-message error" style={{ marginTop: '12px' }}>
+                    Fraud alert: {statusData.fraudReasons.join(', ')}
+                  </p>
+                ) : null}
               </div>
             ) : null}
 

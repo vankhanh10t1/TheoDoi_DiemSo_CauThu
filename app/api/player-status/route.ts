@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evaluateRecentMatches } from '../../../lib/evaluationEngine';
+import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { getPlayerMetadata, getRecentMatches } from '../../../lib/playerService';
 
 export const runtime = 'nodejs';
@@ -32,17 +32,41 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const assessment = evaluateRecentMatches(recentMatches);
+  const analysis = analyzeRecentMatches(recentMatches);
+  const assessment = analysis.averageScore > 8
+    ? { status: 'Star Player', action: 'Giữ chặt đội hình chính', color: 'green' as const }
+    : analysis.averageScore >= 6
+      ? { status: 'Stable', action: 'Tiếp tục tin dùng', color: 'white' as const }
+      : analysis.averageScore >= 4.5
+        ? { status: 'Under Review', action: 'Đẩy lên ghế dự bị', color: 'orange' as const }
+        : { status: 'Fraud', action: 'Thanh lý ngay lập tức', color: 'red' as const };
 
   return NextResponse.json(
     {
       playerId,
       name: player.name,
-      averageScore: assessment.averageScore,
+      averageScore: analysis.averageScore,
+      wmaScore: analysis.wmaScore,
       matchCount: allMatches.length,
       status: assessment.status,
       action: assessment.action,
       color: assessment.color,
+      trendValue: analysis.trendValue,
+      trendStatus: analysis.trendStatus,
+      variance: analysis.variance,
+      stabilityLevel: analysis.stabilityLevel,
+      momentum: analysis.momentum,
+      momentumStatus: analysis.momentumStatus,
+      predictedScore: analysis.predictedScore,
+      confidence: analysis.confidence,
+      confidenceLevel: analysis.confidenceLevel,
+      lossStreak: analysis.lossStreak,
+      riskScore: analysis.riskScore,
+      riskLevel: analysis.riskLevel,
+      fraudRisk: analysis.fraudRisk,
+      fraudReasons: analysis.fraudReasons,
+      recommendation: analysis.recommendation,
+      recommendationReason: analysis.recommendationReason,
       recentMatches
     },
     { status: 200 }
