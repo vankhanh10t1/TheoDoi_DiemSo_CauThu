@@ -30,7 +30,7 @@ Dựa trên WMA, trend, variance, prediction, risk score và fraud alert, hệ t
 | **SELL** | Nên thanh lý |
 | **REPLACE** | Thay thế khẩn cấp do fraud/risk cao |
 
-Màn hình “Phong độ” hiện tại được tối giản để tập trung vào risk monitoring: chỉ hiển thị mùa thẻ, vị trí, số trận và badge Risk.
+Màn hình “Phong độ” hiện tại được nhóm theo `LOW RISK`, `MEDIUM RISK`, `HIGH RISK`, mỗi group có số lượng riêng và card chỉ hiển thị mùa thẻ, vị trí, số trận và badge Risk để tập trung vào risk monitoring trên mobile.
 
 ### 4. Player Detail (`🔍 Chi Tiết Cầu Thủ`)
 - Xem thông tin cầu thủ

@@ -605,6 +605,51 @@ h2 {
   color: var(--red);
 }
 
+.risk-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.risk-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.risk-group-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.risk-group-header h4 {
+  margin: 0;
+  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+}
+
+.risk-group-header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.risk-group-high {
+  border-color: rgba(199, 58, 57, 0.24);
+}
+
+.risk-group-medium {
+  border-color: rgba(232, 215, 0, 0.34);
+}
+
+.risk-group-low {
+  border-color: rgba(15, 125, 82, 0.22);
+}
+
 .recommendation-section.monitor .section-title {
   border-bottom-color: var(--orange);
   color: var(--orange);
@@ -626,6 +671,7 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
 }
 
 .recommendation-card.red {
@@ -641,6 +687,21 @@ h2 {
 .recommendation-card.green {
   border-color: var(--green);
   background: rgba(31, 122, 79, 0.08);
+}
+
+.rec-badge.risk-low {
+  background: var(--green);
+  color: white;
+}
+
+.rec-badge.risk-medium {
+  background: #c8aa00;
+  color: #1b1b1b;
+}
+
+.rec-badge.risk-high {
+  background: var(--red);
+  color: white;
 }
 
 .rec-header {
@@ -691,6 +752,18 @@ h2 {
   gap: 12px;
   margin-bottom: 12px;
   font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.rec-metrics.compact {
+  gap: 8px 12px;
+}
+
+.rec-metrics.compact span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .rec-metrics span {
@@ -766,6 +839,11 @@ h2 {
 
   .recommendations-list {
     grid-template-columns: 1fr;
+  }
+
+  .risk-group-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .app-nav {

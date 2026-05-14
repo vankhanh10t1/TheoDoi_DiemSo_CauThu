@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TransferRecommendation } from '../lib/recommendationService';
 import { useAppContext } from './app-context';
 
@@ -40,6 +40,47 @@ function getRiskTone(riskLevel: string): string {
   }
 }
 
+function getRiskSectionLabel(riskLevel: string): string {
+  switch (riskLevel) {
+    case 'HIGH':
+      return 'HIGH RISK';
+    case 'MEDIUM':
+      return 'MEDIUM RISK';
+    case 'LOW':
+    default:
+      return 'LOW RISK';
+  }
+}
+
+function getRiskSectionTone(riskLevel: string): string {
+  switch (riskLevel) {
+    case 'HIGH':
+      return 'high';
+    case 'MEDIUM':
+      return 'medium';
+    case 'LOW':
+    default:
+      return 'low';
+  }
+}
+
+function getRiskOrder(riskLevel: string): number {
+  switch (riskLevel) {
+    case 'HIGH':
+      return 0;
+    case 'MEDIUM':
+      return 1;
+    case 'LOW':
+    default:
+      return 2;
+  }
+}
+
+type RiskSection = {
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  items: TransferRecommendation[];
+};
+
 export function TransferRecommendation() {
   const { refreshTrigger, openPlayerDetail } = useAppContext();
   const [recommendations, setRecommendations] = useState<TransferRecommendation[]>([]);
@@ -64,6 +105,32 @@ export function TransferRecommendation() {
 
     loadRecommendations();
   }, [refreshTrigger]);
+
+  const groupedRecommendations = useMemo<RiskSection[]>(() => {
+    const sorted = [...recommendations].sort((a, b) => {
+      const riskOrderDiff = getRiskOrder(a.riskLevel) - getRiskOrder(b.riskLevel);
+
+      if (riskOrderDiff !== 0) {
+        return riskOrderDiff;
+      }
+
+      return b.riskScore - a.riskScore;
+    });
+
+    const grouped = sorted.reduce<Record<'LOW' | 'MEDIUM' | 'HIGH', TransferRecommendation[]>>(
+      (accumulator, item) => {
+        accumulator[item.riskLevel].push(item);
+        return accumulator;
+      },
+      { LOW: [], MEDIUM: [], HIGH: [] }
+    );
+
+    return [
+      { riskLevel: 'HIGH' as const, items: grouped.HIGH },
+      { riskLevel: 'MEDIUM' as const, items: grouped.MEDIUM },
+      { riskLevel: 'LOW' as const, items: grouped.LOW }
+    ].filter((section) => section.items.length > 0);
+  }, [recommendations]);
 
   function handleViewDetail(playerId: string) {
     (async () => {
@@ -92,35 +159,54 @@ export function TransferRecommendation() {
 
       {!loading && (
         <>
-          {recommendations.length > 0 ? (
+          {groupedRecommendations.length > 0 ? (
             <section className="recommendation-section">
               <h3 className="section-title">Danh sách cầu thủ đã có rating</h3>
-              <div className="recommendations-list">
-                {recommendations.map((rec) => (
-                  <div
-                    key={rec.playerId}
-                    className={`recommendation-card ${getRiskTone(rec.riskLevel)}`}
+              <div className="risk-groups">
+                {groupedRecommendations.map((section) => (
+                  <article
+                    key={section.riskLevel}
+                    className={`risk-group risk-group-${getRiskSectionTone(section.riskLevel)}`}
                   >
-                    <div className="rec-header">
-                      <h4>{rec.name}</h4>
-                      <div className="rec-badges">
-                        <span className={`rec-badge risk risk-${rec.riskLevel.toLowerCase()}`}>
-                          Risk {rec.riskLevel}
-                        </span>
+                    <div className="risk-group-header">
+                      <div>
+                        <h4>{getRiskSectionLabel(section.riskLevel)}</h4>
+                        <p>{section.items.length} cầu thủ</p>
                       </div>
+                      <span className={`rec-badge risk risk-${section.riskLevel.toLowerCase()}`}>
+                        {section.riskLevel}
+                      </span>
                     </div>
-                    <div className="rec-metrics">
-                      <span>Mùa thẻ: {rec.cardSeason || 'Chưa có dữ liệu'}</span>
-                      <span>Vị trí: {rec.position || 'Chưa có dữ liệu'}</span>
-                      <span>Trận: {rec.matchCount}</span>
+
+                    <div className="recommendations-list">
+                      {section.items.map((rec) => (
+                        <div
+                          key={rec.playerId}
+                          className={`recommendation-card ${getRiskTone(rec.riskLevel)}`}
+                        >
+                          <div className="rec-header">
+                            <h4>{rec.name}</h4>
+                            <div className="rec-badges">
+                              <span className={`rec-badge risk risk-${rec.riskLevel.toLowerCase()}`}>
+                                Risk {rec.riskLevel}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="rec-metrics compact">
+                            <span>Mùa thẻ: {rec.cardSeason || 'Chưa có dữ liệu'}</span>
+                            <span>Vị trí: {rec.position || 'Chưa có dữ liệu'}</span>
+                            <span>Trận: {rec.matchCount}</span>
+                          </div>
+                          <button
+                            className="tertiary-button"
+                            onClick={() => handleViewDetail(rec.playerId)}
+                          >
+                            Chi Tiết
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                    <button
-                      className="tertiary-button"
-                      onClick={() => handleViewDetail(rec.playerId)}
-                    >
-                      Chi Tiết
-                    </button>
-                  </div>
+                  </article>
                 ))}
               </div>
             </section>
