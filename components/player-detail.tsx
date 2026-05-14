@@ -168,6 +168,11 @@ export function PlayerDetail() {
                         {match.positionGroup && match.detailedPosition
                           ? `${match.positionGroup} - ${match.detailedPosition}`
                           : 'N/A'}
+                        <span style={{ marginLeft: 8 }}>
+                          🟨{(match as any).yellowCards ?? 0} 
+                          🟥{(match as any).redCards ?? 0} 
+                          ⚠️{(match as any).fouls ?? 0}
+                        </span>
                       </small>
                     </div>
                   ))}

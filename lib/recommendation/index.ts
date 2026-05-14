@@ -11,6 +11,9 @@ export interface RecommendationInput {
   fraudRisk: boolean;
   confidence: number;
   momentumStatus: 'HOT' | 'NORMAL' | 'COLD';
+  disciplineScore?: number;
+  aggressionIndex?: number;
+  disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
 }
 
 export interface RecommendationResult {
@@ -47,6 +50,25 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
       reason: 'Phong độ thiếu ổn định, nên cho dự bị để theo dõi',
       priority: 3
     };
+  }
+
+  // Use discipline/aggression signals: aggressive + poor discipline => higher priority bench or replace
+  if (typeof input.disciplineScore === 'number' && typeof input.aggressionIndex === 'number') {
+    if (input.disciplineScore < 50 && input.aggressionIndex >= 8) {
+      return {
+        recommendation: 'REPLACE',
+        reason: 'Vấn đề kỷ luật nghiêm trọng và hành vi hung hãn, cần thay thế',
+        priority: 5
+      };
+    }
+
+    if (input.disciplineScore < 65 && input.aggressionIndex >= 5) {
+      return {
+        recommendation: 'BENCH',
+        reason: 'Kỷ luật kém và mức độ hung hãn trung bình, đưa dự bị để theo dõi',
+        priority: 3
+      };
+    }
   }
 
   if (

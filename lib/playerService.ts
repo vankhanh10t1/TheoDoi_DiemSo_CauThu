@@ -98,6 +98,10 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       result: match.Result,
       positionGroup,
       detailedPosition
+      ,
+      yellowCards: typeof match.YellowCards === 'number' ? match.YellowCards : 0,
+      redCards: typeof match.RedCards === 'number' ? match.RedCards : 0,
+      fouls: typeof match.Fouls === 'number' ? match.Fouls : 0
     };
   });
 }

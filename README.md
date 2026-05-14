@@ -99,6 +99,12 @@ momentum = (x3 - x2) + (x2 - x1)
     └──────────┘           └───────────────┘
 ```
 
+### New analytic components
+
+- **Feature Engineering** (`lib/featureEngineering`): tổng hợp `avg_score`, `weighted_average`, `variance`, `trend`, `discipline_score`, `aggression_index`, `loss_streak`, `momentum` và các feature khác để cung cấp input cho Prediction / Risk / Recommendation engines.
+- **Discipline Engine** (`lib/analytics/discipline.ts`): tính `disciplineScore`, `aggressionIndex`, `disciplineTrend` và các chỉ số liên quan, có thể cấu hình penalty theo vị trí.
+
+
 ## API Routes
 
 - `POST /api/rating` - Lưu điểm trận
@@ -141,9 +147,14 @@ Nếu muốn đính kèm ảnh chụp màn hình cho tài liệu hoặc demo, c�
   "SK": "MATCH#20260511T140000Z",
   "Score": 7.5,
   "IsStarter": true,
-  "Result": "Win"
+  "Result": "Win",
+  "YellowCards": 1,
+  "RedCards": 0,
+  "Fouls": 2
 }
 ```
+
+Note: Match items now optionally include `YellowCards`, `RedCards`, and `Fouls` (integers >= 0). Existing items without these fields remain compatible; the analytics and UI treat missing fields as zero.
 
 ## Cấu Hình & Chạy
 

@@ -48,6 +48,9 @@ export interface StoredMatchItem {
   Result: MatchResult;
   PositionGroup?: PositionGroup;
   DetailedPosition?: DetailedPosition;
+  YellowCards?: number;
+  RedCards?: number;
+  Fouls?: number;
 }
 
 export interface RecentMatch {
@@ -56,6 +59,10 @@ export interface RecentMatch {
   result: MatchResult;
   positionGroup?: PositionGroup;
   detailedPosition?: DetailedPosition;
+  yellowCards?: number;
+  redCards?: number;
+  fouls?: number;
+  repeatedOffenses?: number;
 }
 
 export interface PlayerStatusTrackingResponse {
@@ -124,6 +131,12 @@ export interface PerformanceAnalysis {
   fraudReasons: string[];
   recommendation: RecommendationAction;
   recommendationReason: string;
+  disciplineScore?: number;
+  aggressionIndex?: number;
+  disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
+  disciplineScore?: number;
+  aggressionIndex?: number;
+  disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
 }
 
 export interface RatingPayload {
@@ -133,4 +146,7 @@ export interface RatingPayload {
   result: MatchResult;
   positionGroup: PositionGroup;
   detailedPosition: DetailedPosition;
+  yellowCards?: number;
+  redCards?: number;
+  fouls?: number;
 }

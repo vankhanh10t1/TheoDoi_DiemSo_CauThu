@@ -63,6 +63,10 @@ const INITIAL_FORM: EntryFormState = {
   result: 'Win',
   positionGroup: 'GK',
   detailedPosition: 'GK'
+  ,
+  yellowCards: 0,
+  redCards: 0,
+  fouls: 0
 };
 
 function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): string {
@@ -237,7 +241,10 @@ export function TrackerApp() {
           isStarter: formState.isStarter,
           result: formState.result,
           positionGroup: formState.positionGroup,
-          detailedPosition: resolvedDetailedPosition
+          detailedPosition: resolvedDetailedPosition,
+          yellowCards: Number(formState.yellowCards ?? 0),
+          redCards: Number(formState.redCards ?? 0),
+          fouls: Number(formState.fouls ?? 0)
         })
       });
 
@@ -291,6 +298,50 @@ export function TrackerApp() {
             <div>
               <p className="panel-kicker">Entry Flow</p>
               <h2>Nhập điểm trận đấu</h2>
+            </div>
+
+            <div className="field-grid">
+              <label className="field">
+                <span>Thẻ vàng</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={(formState.yellowCards ?? 0)}
+                  onChange={(event) => {
+                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                    setFormState((currentState) => ({ ...currentState, yellowCards: v }));
+                  }}
+                />
+              </label>
+
+              <label className="field">
+                <span>Thẻ đỏ</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={(formState.redCards ?? 0)}
+                  onChange={(event) => {
+                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                    setFormState((currentState) => ({ ...currentState, redCards: v }));
+                  }}
+                />
+              </label>
+
+              <label className="field">
+                <span>Fouls</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={(formState.fouls ?? 0)}
+                  onChange={(event) => {
+                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                    setFormState((currentState) => ({ ...currentState, fouls: v }));
+                  }}
+                />
+              </label>
             </div>
           </div>
 
@@ -522,6 +573,11 @@ export function TrackerApp() {
                         {match.positionGroup && match.detailedPosition
                           ? `${match.positionGroup} - ${match.detailedPosition}`
                           : 'N/A'}
+                        <span style={{ marginLeft: 8 }}>
+                          🟨{match.yellowCards ?? 0} 
+                          🟥{match.redCards ?? 0} 
+                          ⚠️{match.fouls ?? 0}
+                        </span>
                       </small>
                     </div>
                   ))}

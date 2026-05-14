@@ -7,6 +7,7 @@ import {
   calculateVariance,
   calculateWMA
 } from './calculations';
+import { calculateDisciplineScore, calculateAggressionIndex, calculateDisciplineTrend } from './discipline';
 import { getConfidenceLevel, predictPlayerScore } from '../prediction';
 import { calculateRiskScore } from '../risk';
 import { generateRecommendation } from '../recommendation';
@@ -81,7 +82,18 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     predictedScore: prediction.predictedScore
   });
   const fraudReasons: string[] = [];
-  const hasFraudRisk =
+  // discipline / aggression calculations (if match-level discipline data available)
+  const discipline = calculateDisciplineScore(matches);
+  const aggression = calculateAggressionIndex({
+    fouls: matches.reduce((s, m) => s + (m.fouls ?? 0), 0),
+    yellowCards: matches.reduce((s, m) => s + (m.yellowCards ?? 0), 0),
+    redCards: matches.reduce((s, m) => s + (m.redCards ?? 0), 0)
+  });
+  const disciplineTrend = calculateDisciplineTrend(matches);
+
+  const redRate = matches.length ? matches.reduce((s, m) => s + (m.redCards ?? 0), 0) / matches.length : 0;
+
+  let hasFraudRisk =
     prediction.predictedScore < 4.5 &&
     trend.trendStatus === 'DOWN' &&
     variance.stabilityLevel === 'VOLATILE' &&
@@ -92,6 +104,20 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     fraudReasons.push('trend = DOWN');
     fraudReasons.push('variance = VOLATILE');
     fraudReasons.push('lossStreak >= 3');
+  }
+
+  // Extended fraud logic (hybrid): include discipline and red card rate
+  const extendedFraud =
+    trend.trendStatus === 'DOWN' &&
+    variance.stabilityLevel !== 'STABLE' &&
+    discipline.disciplineScore < 60 &&
+    redRate >= 0.2 &&
+    lossStreak >= 3;
+
+  if (extendedFraud) {
+    hasFraudRisk = true;
+    fraudReasons.push('disciplineScore < 60');
+    fraudReasons.push('redRate >= 0.2');
   }
 
   const recommendation = generateRecommendation({
@@ -124,6 +150,10 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     fraudReasons,
     recommendation: recommendation.recommendation,
     recommendationReason: recommendation.reason
+    ,
+    disciplineScore: discipline.disciplineScore,
+    aggressionIndex: aggression.aggressionIndex,
+    disciplineTrend
   };
 }
 

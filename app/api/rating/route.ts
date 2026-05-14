@@ -24,6 +24,9 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
   const positionGroup = typeof candidate.positionGroup === 'string' ? candidate.positionGroup.trim() : '';
   const detailedPosition =
     typeof candidate.detailedPosition === 'string' ? candidate.detailedPosition.trim() : '';
+  const yellowCards = typeof candidate.yellowCards === 'number' ? candidate.yellowCards : 0;
+  const redCards = typeof candidate.redCards === 'number' ? candidate.redCards : 0;
+  const fouls = typeof candidate.fouls === 'number' ? candidate.fouls : 0;
 
   if (
     !playerId ||
@@ -40,6 +43,11 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
     return null;
   }
 
+  // validate card fields: integers >= 0
+  if (!Number.isInteger(yellowCards) || yellowCards < 0) return null;
+  if (!Number.isInteger(redCards) || redCards < 0) return null;
+  if (!Number.isInteger(fouls) || fouls < 0) return null;
+
   return {
     playerId,
     score,
@@ -47,6 +55,10 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
     result,
     positionGroup,
     detailedPosition
+    ,
+    yellowCards,
+    redCards,
+    fouls
   };
 }
 
@@ -89,6 +101,10 @@ export async function POST(request: NextRequest) {
           Result: payload.result,
           PositionGroup: payload.positionGroup,
           DetailedPosition: payload.detailedPosition
+          ,
+          YellowCards: payload.yellowCards ?? 0,
+          RedCards: payload.redCards ?? 0,
+          Fouls: payload.fouls ?? 0
         },
         ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
       })
