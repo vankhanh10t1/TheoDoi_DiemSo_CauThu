@@ -530,7 +530,7 @@ h2 {
 .player-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: flex-start;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -622,8 +622,8 @@ h2 {
 .risk-group-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .risk-group-header h4 {
@@ -707,7 +707,7 @@ h2 {
 .rec-header {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: flex-start;
   gap: 8px;
   margin-bottom: 10px;
 }

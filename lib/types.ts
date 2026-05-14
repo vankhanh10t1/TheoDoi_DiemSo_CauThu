@@ -134,9 +134,6 @@ export interface PerformanceAnalysis {
   disciplineScore?: number;
   aggressionIndex?: number;
   disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
-  disciplineScore?: number;
-  aggressionIndex?: number;
-  disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
 }
 
 export interface RatingPayload {
