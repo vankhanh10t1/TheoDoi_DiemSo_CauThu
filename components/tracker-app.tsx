@@ -7,6 +7,24 @@ import { PerformanceTable } from './PerformanceTable';
 import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
 
+type AllPlayersFormRow = {
+  name?: string;
+  cardSeason?: string;
+  season?: string;
+  playerSeason?: string;
+  cardType?: string;
+  position?: string;
+  matchCount?: number;
+  wmaScore?: number;
+  trendStatus?: TrendStatus;
+  riskLevel?: RiskLevel;
+};
+
+function getCardSeasonValue(row: AllPlayersFormRow): string {
+  const seasonValue = row.cardSeason ?? row.season ?? row.playerSeason ?? row.cardType ?? '';
+  return typeof seasonValue === 'string' ? seasonValue.trim() : '';
+}
+
 function getTrendLabel(status?: string): string {
   if (status === 'UP') return 'Tăng';
   if (status === 'DOWN') return 'Giảm';
@@ -55,7 +73,7 @@ export function TrackerApp() {
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [allPlayersFormData, setAllPlayersFormData] = useState<any[]>([]);
+  const [allPlayersFormData, setAllPlayersFormData] = useState<AllPlayersFormRow[]>([]);
   const [formDataLoading, setFormDataLoading] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [createForm, setCreateForm] = useState({
@@ -81,8 +99,8 @@ export function TrackerApp() {
       setFormDataLoading(true);
       try {
         const res = await fetch('/api/form-extremes');
-        const data = (await res.json()) as any;
-        if (data.allForms && Array.isArray(data.allForms)) {
+        const data = (await res.json()) as { allForms?: AllPlayersFormRow[] };
+        if (Array.isArray(data.allForms)) {
           setAllPlayersFormData(data.allForms);
         }
       } catch (error) {
@@ -342,8 +360,8 @@ export function TrackerApp() {
                   setFormDataLoading(true);
                   try {
                     const res = await fetch('/api/form-extremes');
-                    const data = (await res.json()) as any;
-                    if (data.allForms && Array.isArray(data.allForms)) {
+                    const data = (await res.json()) as { allForms?: AllPlayersFormRow[] };
+                    if (Array.isArray(data.allForms)) {
                       setAllPlayersFormData(data.allForms);
                     }
                   } catch (err) {
@@ -512,9 +530,9 @@ export function TrackerApp() {
 
         <PerformanceTable
           players={allPlayersFormData.map((form) => ({
-            name: form.name,
-            cardSeason: form.position,
-            position: form.position,
+            name: form.name ?? 'N/A',
+            cardSeason: getCardSeasonValue(form),
+            position: form.position ?? '',
             matchCount: form.matchCount,
             wmaScore: form.wmaScore,
             trendStatus: form.trendStatus as TrendStatus,

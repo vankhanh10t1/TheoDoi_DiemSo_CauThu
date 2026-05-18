@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 interface PlayerFormData {
   playerId: string;
   name: string;
+  cardSeason: string;
   position: string;
   averageScore: number;
   wmaScore: number;
@@ -59,6 +60,7 @@ export async function GET() {
           playerForms.push({
             playerId: player.playerId,
             name: player.name,
+            cardSeason: player.cardSeason ?? '',
             position: player.position,
             averageScore: analysis.averageScore,
             wmaScore: analysis.wmaScore,
