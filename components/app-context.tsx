@@ -77,12 +77,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const items = Array.isArray(payload) ? payload : payload.items ?? [];
       // Ensure all items have the correct field names (cardSeason, not season)
-      const normalizedItems = items.map(item => ({
-        playerId: item.playerId,
-        name: item.name,
-        cardSeason: item.cardSeason ?? item.season ?? '',
-        position: item.position
-      }));
+      const normalizedItems = items
+        .filter((item) => {
+          const playerId = typeof item.playerId === 'string' ? item.playerId.trim() : '';
+          const name = typeof item.name === 'string' ? item.name.trim() : '';
+          return playerId.length > 0 && name.length > 0;
+        })
+        .map(item => ({
+          playerId: item.playerId,
+          name: item.name,
+          cardSeason: item.cardSeason ?? item.season ?? '',
+          position: item.position ?? ''
+        }));
       setPlayers(normalizedItems);
       setPlayersError(null);
       console.info('[players] load success', {

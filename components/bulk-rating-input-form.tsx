@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { listPlayers } from '../lib/playerService';
-import type { Match, PlayerSummary, DetailedPosition } from '../lib/types';
+import type { Match, PlayerSummary, DetailedPosition, PositionGroup } from '../lib/types';
+import { useAppContext } from './app-context';
 
 interface BulkRatingInputFormProps {
   match: Match;
@@ -13,58 +13,115 @@ interface BulkRatingInputFormProps {
 interface PlayerRating {
   playerId: string;
   name: string;
+  cardSeason: string;
   position: string;
+  positionGroup: PositionGroup;
   participating: boolean;
   rating: number;
+  yellowCards: number;
+  redCards: number;
+  fouls: number;
   goals?: number;
   assists?: number;
   note?: string;
 }
 
-const DETAILED_POSITIONS_BY_GROUP = {
-  GK: ['GK'],
-  DF: ['CB', 'LB', 'LWB', 'RB', 'RWB'],
-  MF: ['CM', 'CDM', 'CAM', 'LM', 'RM'],
-  FW: ['ST', 'CF', 'LW', 'RW']
+function roundToOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function hasAtMostOneDecimalPlace(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value * 10 - Math.round(value * 10)) < 1e-9;
+}
+
+const POSITION_GROUP_ORDER: PositionGroup[] = ['GK', 'DF', 'MF', 'FW'];
+
+const POSITION_GROUP_BY_DETAIL: Record<string, PositionGroup> = {
+  GK: 'GK',
+  CB: 'DF',
+  LB: 'DF',
+  LWB: 'DF',
+  RB: 'DF',
+  RWB: 'DF',
+  CDM: 'MF',
+  CM: 'MF',
+  CAM: 'MF',
+  LM: 'MF',
+  RM: 'MF',
+  ST: 'FW',
+  CF: 'FW',
+  LW: 'FW',
+  RW: 'FW'
 };
 
+function normalizePlayerPosition(position: unknown): string {
+  if (typeof position !== 'string') return '';
+  return position.trim().toUpperCase();
+}
+
+function getPlayerPositionGroup(position: unknown): PositionGroup {
+  return POSITION_GROUP_BY_DETAIL[normalizePlayerPosition(position)] ?? 'FW';
+}
+
+function sortPlayersForEntry(playersToSort: PlayerSummary[] | undefined): PlayerSummary[] {
+  const list = Array.isArray(playersToSort) ? playersToSort : [];
+  return [...list].sort((left, right) => {
+    const leftGroup = getPlayerPositionGroup(left.position ?? '');
+    const rightGroup = getPlayerPositionGroup(right.position ?? '');
+    const leftGroupIndex = POSITION_GROUP_ORDER.indexOf(leftGroup);
+    const rightGroupIndex = POSITION_GROUP_ORDER.indexOf(rightGroup);
+
+    if (leftGroupIndex !== rightGroupIndex) {
+      return leftGroupIndex - rightGroupIndex;
+    }
+
+    const leftName = getPlayerDisplayName(left);
+    const rightName = getPlayerDisplayName(right);
+    return leftName.localeCompare(rightName, 'vi');
+  });
+}
+
+function getPlayerDisplayName(p: PlayerSummary | any): string {
+  // fallback chain: name, playerName, fullName, playerId, 'Unknown Player'
+  if (!p) return 'Unknown Player';
+  const name = (p.name ?? p.playerName ?? p.fullName ?? p.displayName ?? p.playerId) as string | undefined;
+  if (typeof name === 'string' && name.trim() !== '') return name.trim();
+  return 'Unknown Player';
+}
+
 export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }: BulkRatingInputFormProps) {
-  const [players, setPlayers] = useState<PlayerSummary[]>([]);
+  const { players, playersError, loadPlayers } = useAppContext();
   const [ratings, setRatings] = useState<PlayerRating[]>([]);
   const [loading, setLoading] = useState(false);
-  const [playerLoading, setPlayerLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Load players on mount
   useEffect(() => {
-    const loadPlayers = async () => {
-      try {
-        setPlayerLoading(true);
-        const playerList = await listPlayers();
-        setPlayers(playerList);
+    const safePlayers = Array.isArray(players) ? players : [];
 
-        // Initialize ratings with all players
-        const initialRatings = playerList.map((p) => ({
-          playerId: p.playerId,
-          name: p.name,
-          position: p.position,
-          participating: false,
-          rating: 5,
-          goals: 0,
-          assists: 0,
-          note: ''
-        }));
-        setRatings(initialRatings);
-      } catch (error) {
-        console.error('Error loading players:', error);
-        setMessage({ type: 'error', text: '❌ Không thể tải danh sách cầu thủ' });
-      } finally {
-        setPlayerLoading(false);
-      }
-    };
+    if (safePlayers.length === 0 && !playersError) {
+      void loadPlayers();
+      return;
+    }
 
-    loadPlayers();
-  }, []);
+    const playerList = sortPlayersForEntry(safePlayers);
+    setRatings(
+      playerList.map((p) => ({
+        playerId: p.playerId,
+        name: p.name ?? '',
+        cardSeason: p.cardSeason ?? '',
+        position: p.position ?? '',
+        positionGroup: getPlayerPositionGroup(p.position ?? ''),
+        participating: false,
+        rating: 5,
+        yellowCards: 0,
+        redCards: 0,
+        fouls: 0,
+        goals: 0,
+        assists: 0,
+        note: ''
+      }))
+    );
+  }, [players, playersError]);
 
   
 
@@ -74,16 +131,20 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
     );
   };
 
-  const handleRatingChange = (playerId: string, field: keyof PlayerRating, value: any) => {
+  const handleRatingChange = (playerId: string, field: keyof PlayerRating, value: string | number | boolean) => {
     setRatings((prev) =>
       prev.map((r) => {
         if (r.playerId === playerId) {
           if (field === 'rating') {
-            return { ...r, [field]: Math.max(1, Math.min(10, parseFloat(value) || 1)) };
-          } else if (field === 'goals' || field === 'assists') {
-            return { ...r, [field]: Math.max(0, parseInt(value) || 0) };
+            const n = Number(value);
+            const parsed = Number.isFinite(n) ? n : 1;
+            return { ...r, [field]: Math.max(1, Math.min(10, roundToOneDecimal(parsed))) };
+          } else if (field === 'goals' || field === 'assists' || field === 'yellowCards' || field === 'redCards' || field === 'fouls') {
+            const n = parseInt(String(value), 10);
+            const parsed = Number.isInteger(n) ? n : 0;
+            return { ...r, [field]: Math.max(0, parsed) };
           } else {
-            return { ...r, [field]: value };
+            return { ...r, [field]: value as any };
           }
         }
         return r;
@@ -108,10 +169,19 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
 
       // Validate all ratings
       for (const rating of participatingRatings) {
-        if (!rating.rating || rating.rating < 1 || rating.rating > 10) {
+        if (!Number.isFinite(rating.rating) || rating.rating < 1 || rating.rating > 10) {
           setMessage({
             type: 'error',
             text: `❌ Điểm ${rating.name} phải từ 1 đến 10`
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (!hasAtMostOneDecimalPlace(rating.rating)) {
+          setMessage({
+            type: 'error',
+            text: `❌ Điểm ${rating.name} chỉ được có tối đa 1 chữ số sau dấu phẩy`
           });
           setLoading(false);
           return;
@@ -125,11 +195,16 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
           playerId: r.playerId,
           rating: r.rating,
           position: r.position as DetailedPosition,
+          yellowCards: r.yellowCards,
+          redCards: r.redCards,
+          fouls: r.fouls,
           goals: r.goals,
           assists: r.assists,
           note: r.note
         }))
       };
+
+      console.info('[client] POST /api/matches/%s/ratings payload', match.id, payload);
 
       const response = await fetch(`/api/matches/${match.id}/ratings`, {
         method: 'POST',
@@ -138,6 +213,7 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
       });
 
       const data = await response.json();
+      console.info('[client] /api/matches/%s/ratings response', match.id, { ok: response.ok, status: response.status, body: data });
 
       if (!response.ok) {
         throw new Error(data.error || 'Lỗi khi lưu đánh giá');
@@ -153,7 +229,7 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
         onRatingsSaved({ created: data.created, updated: data.updated });
       }
 
-      // Reset message after 2 seconds
+        // Reset message after 2 seconds
       setTimeout(() => setMessage(null), 2000);
     } catch (error) {
       setMessage({
@@ -167,8 +243,12 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
 
   const participatingCount = ratings.filter((r) => r.participating).length;
 
-  if (playerLoading) {
+  if (players.length === 0 && !playersError) {
     return <div className="inline-message">Đang tải danh sách cầu thủ...</div>;
+  }
+
+  if (playersError) {
+    return <div className="inline-message error">❌ {playersError}</div>;
   }
 
   return (
@@ -238,11 +318,15 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
                 <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
                   <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Tham gia</th>
                   <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Cầu thủ</th>
-                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Vị trí</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Điểm</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Bàn</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Kiến tạo</th>
-                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Ghi chú</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Mùa thẻ</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Vị trí</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Điểm</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>🟨</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>🟥</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>⚠️</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Bàn</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Kiến tạo</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
@@ -263,16 +347,18 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
                     />
                   </td>
                   <td style={{ padding: '12px' }}>{rating.name}</td>
+                  <td style={{ padding: '12px' }}>{rating.cardSeason}</td>
                   <td style={{ padding: '12px' }}>{rating.position}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <input
                       type="number"
                       min="1"
                       max="10"
-                      step="0.5"
+                              step="0.1"
                       value={rating.rating}
                       onChange={(e) => handleRatingChange(rating.playerId, 'rating', e.target.value)}
                       disabled={!rating.participating || loading}
+                              inputMode="decimal"
                       style={{
                         width: '50px',
                         padding: '6px',
@@ -280,6 +366,39 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
                         borderRadius: '4px',
                         textAlign: 'center'
                       }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={rating.yellowCards}
+                      onChange={(e) => handleRatingChange(rating.playerId, 'yellowCards', e.target.value)}
+                      disabled={!rating.participating || loading}
+                      style={{ width: '50px', padding: '6px', border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'center' }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={rating.redCards}
+                      onChange={(e) => handleRatingChange(rating.playerId, 'redCards', e.target.value)}
+                      disabled={!rating.participating || loading}
+                      style={{ width: '50px', padding: '6px', border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'center' }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={rating.fouls}
+                      onChange={(e) => handleRatingChange(rating.playerId, 'fouls', e.target.value)}
+                      disabled={!rating.participating || loading}
+                      style={{ width: '50px', padding: '6px', border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'center' }}
                     />
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -338,11 +457,30 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
 
         {/* Submit and Cancel buttons */}
         <div className="button-group" style={{ display: 'flex', gap: '12px' }}>
-          <button type="submit" className="button button-primary" disabled={loading}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={loading}
+            aria-disabled={loading}
+          >
             {loading ? 'Đang lưu...' : 'Lưu điểm trận đấu'}
           </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              // reset participating and stats to defaults
+              setRatings((prev) => prev.map((r) => ({ ...r, participating: false, rating: 5, yellowCards: 0, redCards: 0, fouls: 0, goals: 0, assists: 0, note: '' })));
+              setMessage(null);
+            }}
+            disabled={loading}
+          >
+            Reset
+          </button>
+
           {onCancel && (
-            <button type="button" className="button button-secondary" onClick={onCancel} disabled={loading}>
+            <button type="button" className="tertiary-button" onClick={onCancel} disabled={loading}>
               Hủy
             </button>
           )}

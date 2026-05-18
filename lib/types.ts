@@ -214,6 +214,9 @@ export interface PlayerMatchRating {
   playerId: string;
   rating: number; // 1-10
   position?: DetailedPosition;
+  yellowCards?: number;
+  redCards?: number;
+  fouls?: number;
   goals?: number;
   assists?: number;
   note?: string;
@@ -230,6 +233,9 @@ export interface StoredPlayerMatchRating {
   PlayerId: string;
   Rating: number;
   Position?: DetailedPosition;
+  YellowCards?: number;
+  RedCards?: number;
+  Fouls?: number;
   Goals?: number;
   Assists?: number;
   Note?: string;
@@ -256,6 +262,9 @@ export interface SaveMatchRatingsPayload {
     playerId: string;
     rating: number;
     position?: DetailedPosition;
+    yellowCards?: number;
+    redCards?: number;
+    fouls?: number;
     goals?: number;
     assists?: number;
     note?: string;

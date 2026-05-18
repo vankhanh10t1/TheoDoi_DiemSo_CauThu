@@ -3,9 +3,23 @@ import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRatin
 import { listPlayers } from '../../../../../lib/playerService';
 import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
 
+function hasAtMostOneDecimalPlace(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value * 10 - Math.round(value * 10)) < 1e-9;
+}
+
+function parseDecimalRating(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return Math.round(parsed * 10) / 10;
+}
+
 /**
  * POST /api/matches/:id/ratings - Save multiple player ratings for a match
- * Body: { ratings: [{ playerId, rating, position?, goals?, assists?, note? }, ...] }
+ * Body: { ratings: [{ playerId, rating, position?, yellowCards?, redCards?, fouls?, goals?, assists?, note? }, ...] }
  */
 export async function POST(
   request: NextRequest,
@@ -14,6 +28,10 @@ export async function POST(
   try {
     const { id: matchId } = await params;
     const body = await request.json();
+
+    console.info(`[api] POST /api/matches/${matchId}/ratings payload`, {
+      ratingCount: Array.isArray(body.ratings) ? body.ratings.length : 0
+    });
 
     // Check if match exists
     const match = await getMatchById(matchId);
@@ -54,7 +72,9 @@ export async function POST(
         );
       }
 
-      if (typeof rating.rating !== 'number' || rating.rating < 1 || rating.rating > 10) {
+      const parsedRating = parseDecimalRating(rating.rating);
+
+      if (parsedRating === null || parsedRating < 1 || parsedRating > 10) {
         return NextResponse.json(
           {
             error: `Rating must be between 1 and 10 (got ${rating.rating})`,
@@ -63,6 +83,18 @@ export async function POST(
           { status: 400 }
         );
       }
+
+      if (!hasAtMostOneDecimalPlace(parsedRating)) {
+        return NextResponse.json(
+          {
+            error: 'Rating must have at most 1 decimal place',
+            code: 'INVALID_RATING_PRECISION'
+          },
+          { status: 400 }
+        );
+      }
+
+      rating.rating = parsedRating;
 
       if (!playerIds.has(rating.playerId.toLowerCase())) {
         return NextResponse.json(
@@ -84,6 +116,36 @@ export async function POST(
         );
       }
 
+      if (rating.yellowCards !== undefined && (!Number.isInteger(rating.yellowCards) || rating.yellowCards < 0)) {
+        return NextResponse.json(
+          {
+            error: 'Yellow cards must be non-negative integers',
+            code: 'INVALID_YELLOW_CARDS'
+          },
+          { status: 400 }
+        );
+      }
+
+      if (rating.redCards !== undefined && (!Number.isInteger(rating.redCards) || rating.redCards < 0)) {
+        return NextResponse.json(
+          {
+            error: 'Red cards must be non-negative integers',
+            code: 'INVALID_RED_CARDS'
+          },
+          { status: 400 }
+        );
+      }
+
+      if (rating.fouls !== undefined && (!Number.isInteger(rating.fouls) || rating.fouls < 0)) {
+        return NextResponse.json(
+          {
+            error: 'Fouls must be non-negative integers',
+            code: 'INVALID_FOULS'
+          },
+          { status: 400 }
+        );
+      }
+
       if (rating.assists !== undefined && (!Number.isInteger(rating.assists) || rating.assists < 0)) {
         return NextResponse.json(
           {
@@ -97,6 +159,8 @@ export async function POST(
 
     const payload: SaveMatchRatingsPayload = { ratings: body.ratings };
     const result = await saveMatchRatings(matchId, payload);
+
+    console.info(`[api] /api/matches/${matchId}/ratings saved`, { created: result.created, updated: result.updated });
 
     return NextResponse.json(
       {

@@ -1,17 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAppContext } from './app-context';
 import { FormExtremesCard } from './form-extremes';
 import { PerformanceTable } from './PerformanceTable';
-import {
-  filterPlayersByPosition,
-  getDetailedPositionsByGroup,
-  isDetailedPositionForGroup,
-  normalizeDetailedPosition,
-  POSITION_GROUPS
-} from '../lib/positions';
-import type { PlayerStatusResponse, RatingPayload, RiskLevel, TrendStatus, Match } from '../lib/types';
+import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
 
 function getTrendLabel(status?: string): string {
@@ -48,41 +41,6 @@ function getRecommendationLabel(value?: string): string {
   return '—';
 }
 
-function normalizeMarginFlags(result: RatingPayload['result'], isBigWin: boolean, isBigLoss: boolean) {
-  if (result === 'Win') {
-    return { isBigWin, isBigLoss: false };
-  }
-
-  if (result === 'Loss') {
-    return { isBigWin: false, isBigLoss };
-  }
-
-  return { isBigWin: false, isBigLoss: false };
-}
-
-type SaveState = {
-  message: string;
-  tone: 'idle' | 'success' | 'error';
-};
-
-type EntryFormState = Omit<RatingPayload, 'detailedPosition'> & {
-  detailedPosition: RatingPayload['detailedPosition'] | '';
-};
-
-const INITIAL_FORM: EntryFormState = {
-  playerId: '',
-  score: 7,
-  isStarter: true,
-  result: 'Win',
-  positionGroup: 'GK',
-  detailedPosition: 'GK',
-  yellowCards: 0,
-  redCards: 0,
-  fouls: 0,
-  isBigWin: false,
-  isBigLoss: false
-};
-
 function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): string {
   if (!status) {
     return 'Chưa có dữ liệu';
@@ -92,48 +50,31 @@ function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): 
 }
 
 export function TrackerApp() {
-  const { players, playersError } = useAppContext();
+  const { players, playersError, triggerRefresh } = useAppContext();
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [formState, setFormState] = useState<EntryFormState>({
-    ...INITIAL_FORM,
-    playerId: players[0]?.playerId ?? ''
-  });
-  const [saveState, setSaveState] = useState<SaveState>({ message: '', tone: 'idle' });
   const [allPlayersFormData, setAllPlayersFormData] = useState<any[]>([]);
   const [formDataLoading, setFormDataLoading] = useState(false);
+  const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
+  const [createForm, setCreateForm] = useState({
+    matchDate: new Date().toISOString().split('T')[0],
+    opponentName: '',
+    myScore: 0,
+    opponentScore: 0,
+    note: ''
+  });
+  const [creatingMatch, setCreatingMatch] = useState(false);
+  const [createMessage, setCreateMessage] = useState<{ tone: 'idle' | 'success' | 'error'; text: string } | null>(null);
 
-  const selectedPlayer = useMemo(
-    () => players.find((player) => player.playerId === selectedPlayerId) ?? null,
-    [players, selectedPlayerId]
-  );
-  const isDetailedPositionRequired = formState.positionGroup !== 'GK';
-  const detailedPositionOptions = useMemo(
-    () => getDetailedPositionsByGroup(formState.positionGroup),
-    [formState.positionGroup]
-  );
-  const selectedDetailedPosition = useMemo(() => {
-    if (formState.positionGroup === 'GK') {
-      return 'GK';
-    }
-
-    return isDetailedPositionForGroup(formState.positionGroup, formState.detailedPosition)
-      ? formState.detailedPosition
-      : undefined;
-  }, [formState.detailedPosition, formState.positionGroup]);
-  const filteredPlayers = useMemo(() => {
-    return filterPlayersByPosition(
-      players,
-      formState.positionGroup,
-      selectedDetailedPosition
-    );
-  }, [formState.positionGroup, players, selectedDetailedPosition]);
+  const selectedPlayer = players.find((player) => player.playerId === selectedPlayerId) ?? null;
 
   useEffect(() => {
-    setFormState((currentState) => ({ ...currentState, playerId: selectedPlayerId }));
-  }, [selectedPlayerId]);
+    if (!selectedPlayerId && players[0]?.playerId) {
+      setSelectedPlayerId(players[0].playerId);
+    }
+  }, [players, selectedPlayerId]);
 
   useEffect(() => {
     const loadAllPlayersForm = async () => {
@@ -153,17 +94,6 @@ export function TrackerApp() {
 
     loadAllPlayersForm();
   }, []);
-
-  useEffect(() => {
-    if (!filteredPlayers.some((player) => player.playerId === selectedPlayerId)) {
-      const nextPlayerId = filteredPlayers[0]?.playerId ?? '';
-      setSelectedPlayerId(nextPlayerId);
-      setFormState((currentState) => ({
-        ...currentState,
-        playerId: nextPlayerId
-      }));
-    }
-  }, [filteredPlayers, selectedPlayerId]);
 
   useEffect(() => {
     if (!selectedPlayerId) {
@@ -226,12 +156,6 @@ export function TrackerApp() {
     }
   }
 
-  // Match-first flow state
-  const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
-  const [createForm, setCreateForm] = useState({ matchDate: '', opponentName: '', myScore: 0, opponentScore: 0, note: '' });
-  const [creatingMatch, setCreatingMatch] = useState(false);
-  const [createMessage, setCreateMessage] = useState<{ tone: 'idle' | 'success' | 'error'; text: string } | null>(null);
-
   async function handleCreateMatch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateMessage(null);
@@ -293,159 +217,151 @@ export function TrackerApp() {
         </div>
       </section>
 
-      <section className="content-grid">
+      <section style={{ display: 'grid', gap: '20px' }}>
         <article className="panel">
           <div className="panel-header">
             <div>
               <p className="panel-kicker">Entry Flow</p>
-              <h2>Nhập điểm trận đấu</h2>
-            </div>
-
-            <div className="field-grid">
-              <label className="field">
-                <span>Thẻ vàng</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={(formState.yellowCards ?? 0)}
-                  onChange={(event) => {
-                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
-                    setFormState((currentState) => ({ ...currentState, yellowCards: v }));
-                  }}
-                />
-              </label>
-
-              <label className="field">
-                <span>Thẻ đỏ</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={(formState.redCards ?? 0)}
-                  onChange={(event) => {
-                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
-                    setFormState((currentState) => ({ ...currentState, redCards: v }));
-                  }}
-                />
-              </label>
-
-              <label className="field">
-                <span>Fouls</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={(formState.fouls ?? 0)}
-                  onChange={(event) => {
-                    const v = Math.max(0, Math.floor(Number(event.target.value) || 0));
-                    setFormState((currentState) => ({ ...currentState, fouls: v }));
-                  }}
-                />
-              </label>
+              <h2>Nhập trận đấu</h2>
             </div>
           </div>
 
-          <div className="field-grid">
-              <label className="field">
-                <span>Position Group</span>
-                <select
-                  value={formState.positionGroup}
-                  onChange={(event) => {
-                    const nextGroup = event.target.value as RatingPayload['positionGroup'];
-
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      positionGroup: nextGroup,
-                      detailedPosition: nextGroup === 'GK' ? 'GK' : ''
-                    }));
-                  }}
-                >
-                  {POSITION_GROUPS.map((group) => (
-                    <option key={group} value={group}>
-                      {group}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {isDetailedPositionRequired ? (
-                <label className="field">
-                  <span>Detailed Position</span>
-                  <select
-                    value={formState.detailedPosition}
-                    onChange={(event) => {
-                      setFormState((currentState) => ({
-                        ...currentState,
-                        detailedPosition: event.target.value as RatingPayload['detailedPosition']
-                      }));
-                    }}
-                  >
-                    <option value="">Chọn vị trí chi tiết</option>
-                    {detailedPositionOptions.map((position) => (
-                      <option key={position} value={position}>
-                        {position}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-
-          {/* Match-first flow: create match, then bulk rating */}
           {currentMatch ? (
-            <div>
-              <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}>
                 <div><strong>Trận:</strong> {currentMatch.opponentName || 'N/A'} — {currentMatch.myScore}-{currentMatch.opponentScore}</div>
                 <div><strong>Ngày:</strong> {new Date(currentMatch.matchDate).toLocaleDateString('vi-VN')}</div>
                 <div><strong>Kết quả:</strong> {currentMatch.result}</div>
               </div>
 
-              <BulkRatingInputForm
-                match={currentMatch}
-                onRatingsSaved={({ created, updated }) => {
-                  setCreateMessage({ tone: 'success', text: `Lưu ${created + updated} đánh giá thành công` });
-                }}
-                onCancel={() => setCurrentMatch(null)}
-              />
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => setCurrentMatch(null)}
+              >
+                Tạo trận mới
+              </button>
             </div>
           ) : (
             <form className="form-stack" onSubmit={handleCreateMatch}>
-              <label className="field">
-                <span>Ngày thi đấu (YYYY-MM-DD)</span>
-                <input type="text" value={createForm.matchDate} onChange={(e) => setCreateForm({ ...createForm, matchDate: e.target.value })} required />
-              </label>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Ngày thi đấu</span>
+                  <input
+                    type="date"
+                    value={createForm.matchDate}
+                    onChange={(e) => setCreateForm({ ...createForm, matchDate: e.target.value })}
+                    required
+                  />
+                </label>
 
-              <label className="field">
-                <span>Đối thủ</span>
-                <input type="text" value={createForm.opponentName} onChange={(e) => setCreateForm({ ...createForm, opponentName: e.target.value })} />
-              </label>
+                <label className="field">
+                  <span>Đối thủ</span>
+                  <input
+                    type="text"
+                    value={createForm.opponentName}
+                    onChange={(e) => setCreateForm({ ...createForm, opponentName: e.target.value })}
+                    placeholder="Ví dụ: Arsenal"
+                  />
+                </label>
+              </div>
 
               <div className="field-grid">
                 <label className="field">
                   <span>Tỉ số đội mình</span>
-                  <input type="number" min="0" value={createForm.myScore} onChange={(e) => setCreateForm({ ...createForm, myScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} required />
+                  <input
+                    type="number"
+                    min="0"
+                    value={createForm.myScore}
+                    onChange={(e) => setCreateForm({ ...createForm, myScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                    required
+                  />
                 </label>
                 <label className="field">
                   <span>Tỉ số đối thủ</span>
-                  <input type="number" min="0" value={createForm.opponentScore} onChange={(e) => setCreateForm({ ...createForm, opponentScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} required />
+                  <input
+                    type="number"
+                    min="0"
+                    value={createForm.opponentScore}
+                    onChange={(e) => setCreateForm({ ...createForm, opponentScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                    required
+                  />
                 </label>
               </div>
 
               <label className="field">
                 <span>Ghi chú</span>
-                <input type="text" value={createForm.note} onChange={(e) => setCreateForm({ ...createForm, note: e.target.value })} />
+                <input
+                  type="text"
+                  value={createForm.note}
+                  onChange={(e) => setCreateForm({ ...createForm, note: e.target.value })}
+                  placeholder="Ghi chú trận đấu"
+                />
               </label>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button className="primary-button" type="submit" disabled={creatingMatch}>{creatingMatch ? 'Đang tạo...' : 'Tạo trận'} </button>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <button className="primary-button" type="submit" disabled={creatingMatch}>
+                  {creatingMatch ? 'Đang tạo...' : 'Tạo trận'}
+                </button>
               </div>
 
-              {createMessage ? <p className={`inline-message ${createMessage.tone === 'error' ? 'error' : 'success'}`}>{createMessage.text}</p> : null}
+              {createMessage ? (
+                <p className={`inline-message ${createMessage.tone === 'error' ? 'error' : 'success'}`}>
+                  {createMessage.text}
+                </p>
+              ) : null}
             </form>
           )}
 
           {playersError ? <p className="status-error" style={{ marginTop: '16px' }}>{playersError}</p> : null}
+        </article>
+
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="panel-kicker">Bulk Rating Table</p>
+              <h2>Nhập điểm cầu thủ</h2>
+            </div>
+          </div>
+
+          {currentMatch ? (
+            <BulkRatingInputForm
+              match={currentMatch}
+              onRatingsSaved={async ({ created, updated }) => {
+                setCreateMessage({ tone: 'success', text: `Lưu ${created + updated} đánh giá thành công` });
+                try {
+                  // trigger global refresh for components that listen
+                  triggerRefresh();
+
+                  // refresh current selected player's status if any
+                  if (selectedPlayerId) {
+                    await refreshPlayerStatus(selectedPlayerId);
+                  }
+
+                  // reload form-extremes (all players form data)
+                  setFormDataLoading(true);
+                  try {
+                    const res = await fetch('/api/form-extremes');
+                    const data = (await res.json()) as any;
+                    if (data.allForms && Array.isArray(data.allForms)) {
+                      setAllPlayersFormData(data.allForms);
+                    }
+                  } catch (err) {
+                    console.error('Failed to reload form-extremes after save', err);
+                  } finally {
+                    setFormDataLoading(false);
+                  }
+                } catch (err) {
+                  console.error('onRatingsSaved handler failed', err);
+                }
+              }}
+              onCancel={() => setCurrentMatch(null)}
+            />
+          ) : (
+            <p className="tracking-state" style={{ margin: 0 }}>
+              Tạo trận đấu trước để nhập bảng điểm hàng loạt.
+            </p>
+          )}
         </article>
 
         <article className="panel status-panel">
@@ -454,7 +370,20 @@ export function TrackerApp() {
               <p className="panel-kicker">Evaluation Flow</p>
               <h2>Phong độ hiện tại</h2>
             </div>
-            {selectedPlayer ? <span className="player-pill">{selectedPlayer.position}</span> : null}
+            <label className="field" style={{ minWidth: 220 }}>
+              <span>Chọn cầu thủ</span>
+              <select
+                value={selectedPlayerId}
+                onChange={(event) => setSelectedPlayerId(event.target.value)}
+              >
+                <option value="">Chọn cầu thủ</option>
+                {players.map((player) => (
+                  <option key={player.playerId} value={player.playerId}>
+                    {player.name} · {player.position}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className={`status-card ${statusTone}`}>
@@ -581,24 +510,19 @@ export function TrackerApp() {
           <span className="player-pill">{allPlayersFormData.length} cầu thủ</span>
         </div>
 
-        {formDataLoading ? (
-          <p style={{ textAlign: 'center', padding: '24px' }}>Đang tải dữ liệu...</p>
-        ) : allPlayersFormData.length === 0 ? (
-          <p style={{ textAlign: 'center', padding: '24px', color: '#999' }}>Chưa có dữ liệu cầu thủ</p>
-        ) : (
-          <PerformanceTable
-            players={allPlayersFormData.map((form) => ({
-              name: form.name,
-              cardSeason: form.position,
-              position: form.position,
-              matchCount: form.matchCount,
-              wmaScore: form.wmaScore,
-              trendStatus: form.trendStatus as TrendStatus,
-              riskLevel: form.riskLevel as RiskLevel
-            }))}
-            title="Phong độ toàn đội"
-          />
-        )}
+        <PerformanceTable
+          players={allPlayersFormData.map((form) => ({
+            name: form.name,
+            cardSeason: form.position,
+            position: form.position,
+            matchCount: form.matchCount,
+            wmaScore: form.wmaScore,
+            trendStatus: form.trendStatus as TrendStatus,
+            riskLevel: form.riskLevel as RiskLevel
+          }))}
+          title="Phong độ toàn đội"
+          loading={formDataLoading}
+        />
       </article>
     </div>
   );

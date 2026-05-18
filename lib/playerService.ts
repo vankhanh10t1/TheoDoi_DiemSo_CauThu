@@ -43,7 +43,10 @@ export async function listPlayers(): Promise<PlayerSummary[]> {
     );
 
     const items = (resp.Items ?? []) as PlayerMetadataItem[];
-    return items.map(mapMetadataItem);
+    return items
+      .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
+      .map(mapMetadataItem)
+      .filter((player) => player.playerId.trim().length > 0 && player.name.trim().length > 0);
   } catch {
     // If DynamoDB is unavailable or table not present, return empty list
     return [];

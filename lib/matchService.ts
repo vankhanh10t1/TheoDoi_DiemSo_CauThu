@@ -1,5 +1,6 @@
 import { GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { getDocumentClient, getTableName, formatMatchTimestamp } from './dynamodb';
+import { getDocumentClient, getTableName, formatMatchTimestamp, createMatchSortKey } from './dynamodb';
+import { getPositionGroup } from './positions';
 import type {
   Match,
   StoredMatch,
@@ -14,6 +15,10 @@ import type {
  */
 function generateMatchId(): string {
   return `match_${formatMatchTimestamp()}`;
+}
+
+function roundToOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 /**
@@ -268,6 +273,8 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       throw new Error(`Match ${matchId} not found`);
     }
 
+    console.info('[matchService] saveMatchRatings', { matchId, ratings: payload.ratings.length });
+
     // Validate duplicate playerIds in payload
     const ids = payload.ratings.map((r) => r.playerId.toLowerCase());
     const uniqueIds = new Set(ids);
@@ -286,8 +293,11 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         PK: `MATCH#${matchId}`,
         SK: `RATING#${ratingData.playerId}`,
         PlayerId: ratingData.playerId,
-        Rating: ratingData.rating,
+        Rating: roundToOneDecimal(ratingData.rating),
         Position: ratingData.position,
+        YellowCards: ratingData.yellowCards ?? 0,
+        RedCards: ratingData.redCards ?? 0,
+        Fouls: ratingData.fouls ?? 0,
         Goals: ratingData.goals,
         Assists: ratingData.assists,
         Note: ratingData.note,
@@ -302,6 +312,44 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         })
       );
 
+      console.debug('[matchService] wrote storedRating', { PK: storedRating.PK, SK: storedRating.SK, PlayerId: storedRating.PlayerId });
+
+      // Also write per-player match entry for quick player-centric queries
+      try {
+        const playerSk = createMatchSortKey(new Date(match.matchDate));
+        const playerResultMap: Record<string, 'Win' | 'Draw' | 'Loss'> = {
+          WIN: 'Win',
+          DRAW: 'Draw',
+          LOSE: 'Loss'
+        };
+
+        const playerMatchItem: any = {
+          PK: `PLAYER#${ratingData.playerId}`,
+          SK: playerSk,
+          Score: roundToOneDecimal(ratingData.rating),
+          IsStarter: true,
+          Result: playerResultMap[(match.result as string) ?? 'LOSE'],
+          PositionGroup: getPositionGroup(ratingData.position) ?? undefined,
+          DetailedPosition: ratingData.position,
+          YellowCards: ratingData.yellowCards ?? 0,
+          RedCards: ratingData.redCards ?? 0,
+          Fouls: ratingData.fouls ?? 0,
+          IsBigWin: !!match.isBigWin,
+          IsBigLoss: !!match.isBigLoss
+        };
+
+        await getDocumentClient().send(
+          new PutCommand({
+            TableName: getTableName(),
+            Item: playerMatchItem
+          })
+        );
+
+        console.debug('[matchService] wrote player-centric match item', { PK: playerMatchItem.PK, SK: playerMatchItem.SK });
+      } catch (err) {
+        console.error('Failed to write player-centric match item:', err);
+      }
+
       if (existingRating) {
         updated++;
       } else {
@@ -309,6 +357,7 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       }
     }
 
+    console.info('[matchService] saveMatchRatings result', { matchId, created, updated });
     return { created, updated };
   } catch (error) {
     console.error('Error saving match ratings:', error);
@@ -339,6 +388,9 @@ export async function getMatchRatings(matchId: string): Promise<PlayerMatchRatin
       playerId: item.PlayerId,
       rating: item.Rating,
       position: item.Position,
+      yellowCards: typeof item.YellowCards === 'number' ? item.YellowCards : 0,
+      redCards: typeof item.RedCards === 'number' ? item.RedCards : 0,
+      fouls: typeof item.Fouls === 'number' ? item.Fouls : 0,
       goals: item.Goals,
       assists: item.Assists,
       note: item.Note,
@@ -375,6 +427,9 @@ export async function getPlayerMatchRating(matchId: string, playerId: string): P
       playerId,
       rating: item.Rating,
       position: item.Position,
+      yellowCards: typeof item.YellowCards === 'number' ? item.YellowCards : 0,
+      redCards: typeof item.RedCards === 'number' ? item.RedCards : 0,
+      fouls: typeof item.Fouls === 'number' ? item.Fouls : 0,
       goals: item.Goals,
       assists: item.Assists,
       note: item.Note,

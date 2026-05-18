@@ -63,12 +63,19 @@ export async function GET() {
       consumedCapacity: response.ConsumedCapacity
     });
 
-    const items = (response.Items ?? []).map((item: any) => ({
-      playerId: item.PK?.replace(/^PLAYER#/, ''),
-      name: item.Name,
-      cardSeason: item.CardSeason ?? item.Season ?? '', // Support both new and legacy field names
-      position: item.Position
-    }));
+    const items = (response.Items ?? [])
+      .filter((item: any) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
+      .map((item: any) => ({
+        playerId: item.PK.replace(/^PLAYER#/, ''),
+        name: item.Name,
+        cardSeason: item.CardSeason ?? item.Season ?? '', // Support both new and legacy field names
+        position: item.Position
+      }))
+      .filter(
+        (item) =>
+          typeof item.playerId === 'string' && item.playerId.length > 0 &&
+          typeof item.name === 'string' && item.name.trim().length > 0
+      );
 
     console.info(`[${requestId}] /api/players GET success`, {
       durationMs: Date.now() - startedAt,
