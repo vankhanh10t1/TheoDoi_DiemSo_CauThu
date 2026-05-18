@@ -273,7 +273,12 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       throw new Error(`Match ${matchId} not found`);
     }
 
-    console.info('[matchService] saveMatchRatings', { matchId, ratings: payload.ratings.length });
+    console.info('[matchService] saveMatchRatings START', { 
+      matchId, 
+      matchDate: match.matchDate,
+      ratingCount: payload.ratings.length,
+      message: 'Saving ratings with unique per-match keys to prevent overwrites'
+    });
 
     // Validate duplicate playerIds in payload
     const ids = payload.ratings.map((r) => r.playerId.toLowerCase());
@@ -316,7 +321,8 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
 
       // Also write per-player match entry for quick player-centric queries
       try {
-        const playerSk = createMatchSortKey(new Date(match.matchDate));
+        // Use matchId in SK to ensure uniqueness per match (fixes bug where same-day matches overwrite each other)
+        const playerSk = `MATCH#${matchId}`;
         const playerResultMap: Record<string, 'Win' | 'Draw' | 'Loss'> = {
           WIN: 'Win',
           DRAW: 'Draw',
@@ -345,7 +351,14 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
           })
         );
 
-        console.debug('[matchService] wrote player-centric match item', { PK: playerMatchItem.PK, SK: playerMatchItem.SK });
+        console.debug('[matchService] wrote player-centric match item', { 
+          PK: playerMatchItem.PK, 
+          SK: playerMatchItem.SK,
+          matchId: matchId,
+          playerId: ratingData.playerId,
+          rating: playerMatchItem.Score,
+          detail: `Unique key: PK=${playerMatchItem.PK}, SK=${playerMatchItem.SK} ensures no overwrites for same-day matches`
+        });
       } catch (err) {
         console.error('Failed to write player-centric match item:', err);
       }
@@ -357,7 +370,13 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       }
     }
 
-    console.info('[matchService] saveMatchRatings result', { matchId, created, updated });
+    console.info('[matchService] saveMatchRatings COMPLETE', { 
+      matchId, 
+      created, 
+      updated,
+      total: created + updated,
+      detail: `Each rating stored with unique SK using matchId (MATCH#${matchId}) to prevent same-day overwrite bug`
+    });
     return { created, updated };
   } catch (error) {
     console.error('Error saving match ratings:', error);
@@ -403,8 +422,46 @@ export async function getMatchRatings(matchId: string): Promise<PlayerMatchRatin
   }
 }
 
-/**
- * Get specific player rating for a match
+/** * Debug helper: List all rating records for a specific match
+ * Useful for verifying fix: each match should have unique player-centric entries
+ */
+export async function debugListMatchRatings(matchId: string) {
+  try {
+    // List match-centric ratings (primary)
+    const matchRatings = await getMatchRatings(matchId);
+    
+    // List player-centric ratings for all players in this match
+    const playerCentricRatings: any[] = [];
+    for (const rating of matchRatings) {
+      const response = await getDocumentClient().send(
+        new GetCommand({
+          TableName: getTableName(),
+          Key: {
+            PK: `PLAYER#${rating.playerId}`,
+            SK: `MATCH#${matchId}`
+          }
+        })
+      );
+      if (response.Item) {
+        playerCentricRatings.push(response.Item);
+      }
+    }
+
+    console.info('[debug] Match ratings verification', {
+      matchId,
+      matchCentricCount: matchRatings.length,
+      playerCentricCount: playerCentricRatings.length,
+      detail: 'If counts match, player-centric entries are unique per match (fix is working)'
+    });
+
+    return { matchRatings, playerCentricRatings };
+  } catch (error) {
+    console.error('Error in debugListMatchRatings:', error);
+    return null;
+  }
+}
+
+/** * Get specific player rating for a match
  */
 export async function getPlayerMatchRating(matchId: string, playerId: string): Promise<PlayerMatchRating | null> {
   try {
