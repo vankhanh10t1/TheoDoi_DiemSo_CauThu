@@ -1,39 +1,67 @@
-# FCON Performance Tracker — Hệ thống quản lý đội hình và phong độ
+# FCON Performance Tracker — Hệ thống quản lý đội hình và phong độ (May 18, 2026)
 
-Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận, đánh giá phong độ dựa trên toàn bộ số trận hiện có và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu thực tế từ DynamoDB.
+Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận (match-first flow), phân tích phong độ dựa trên WMA, phát hiện xu hướng, ước lượng rủi ro và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu thực tế từ DynamoDB.
 
 ## Tính Năng
 
 ### 1. Rating / Nhập Điểm Trận (`📊 Rating`)
-- Chọn cầu thủ từ danh sách cầu thủ thực tế đang có trong app
+
+**Match-First Flow (Current):**
+1. **Tạo trận mới:** POST `/api/matches` → nhận `matchId`
+2. **Nhập điểm cho cầu thủ:** POST `/api/matches/:matchId/ratings` với danh sách cầu thủ
+
+**Tính năng:**
+- Chọn cầu thủ từ danh sách cầu thủ thực tế trong app
 - Nhập điểm trận từ 1.0 đến 10.0
 - Chọn kết quả: Win / Draw / Loss
+- Chọn vị trí đá (Position Group + Detailed Position)
 - Chọn đá chính hoặc dự bị
-- Tự động tính phong độ dựa trên toàn bộ số trận hiện có
+- Tuỳ chọn: nhập thẻ vàng, thẻ đỏ, phạm lỗi
+- Tự động tính WMA, trend, prediction, risk, fraud alert
+
+**Note:** Endpoint cũ `POST /api/rating` deprecated (trả về 410 Gone)
 
 ### 2. Squad Management (`👥 Đội Hình`)
 - Xem danh sách cầu thủ lấy từ DynamoDB
-- Thêm cầu thủ mới với tên và vị trí, `playerId` được tạo tự động
-- Cập nhật cầu thủ: sửa tên + vị trí
-- Xóa cầu thủ và toàn bộ lịch sử trận đấu của cầu thủ đó
-- Reset lịch sử điểm số của một cầu thủ mà không xóa cầu thủ
-- Xem chi tiết cầu thủ
+- Thêm cầu thủ mới với tên, vị trí và **cardSeason**; `playerId` được tạo tự động
+- **Duplicate Check:** Tên cầu thủ được kiểm tra trùng lặp (case-insensitive, trimmed)
+  - Không thể thêm 2 cầu thủ cùng tên (trả về 409 Conflict)
+  - Thông báo lỗi tiếng Việt rõ ràng
+- Cập nhật cầu thủ: sửa tên + vị trí + cardSeason
+- Xóa cầu thủ và toàn bộ lịch sử trận đấu
+- Reset lịch sử điểm số mà không xóa cầu thủ
+- Xem chi tiết cầu thủ (link tới Player Detail)
 
 ### 3. Transfer Recommendation (`🎯 Đề Xuất`)
-Dựa trên toàn bộ số trận hiện có, hệ thống phân loại cầu thủ thành 3 nhóm:
 
-| Mã Đề Xuất | Tiêu Chí | Hành Động Đề Nghị | Ưu Tiên |
+Dựa trên WMA, trend, variance, prediction, risk, discipline và fraud alert, hệ thống phân loại cầu thủ:
+
+| Mã | Ưu Tiên | Ý Nghĩa | Điều Kiện |
 | :-- | :-- | :-- | :-- |
-| 🚨 **SELL** | Điểm < 4.5 | Thanh lý ngay | 🔴 Cao |
-| ⚠️ **MONITOR** | Điểm 4.5 - 5.9 | Theo dõi kỹ | 🟠 Trung |
-| ✅ **HOLD** | Điểm ≥ 6.0 | Giữ chặt đội hình | 🟢 Thấp |
+| 🚨 **REPLACE** | 5 | Thay thế khẩn cấp | Fraud alert bật OR (disciplineScore < 50 && aggressionIndex >= 8) |
+| 🔴 **SELL** | 4 | Thanh lý | riskScore >= 70 OR predictedScore < 4.5 |
+| ⚠️ **BENCH** | 3 | Dự bị | riskScore >= 35 OR VOLATILE OR DOWN trend OR COLD momentum |
+| 🟡 **MONITOR** | 2 | Theo dõi | riskScore >= 30 OR confidence < 0.6 |
+| ✅ **KEEP** | 1 | Giữ | riskScore < 30 AND UP trend AND confidence >= 0.6 |
+
+**Fraud Alert (REPLACE):** Bật khi **đồng thời** có 5 điều kiện:
+1. `predictedScore < 4.5`
+2. `trendStatus = DOWN`
+3. `stabilityLevel = VOLATILE`
+4. `lossStreak >= 3`
+5. `redRate > 0` (ít nhất 1 thẻ đỏ)
+
+**Ranking:** Priority cao nhất được chọn
 
 ### 4. Player Detail (`🔍 Chi Tiết Cầu Thủ`)
-- Xem thông tin cầu thủ
+- Xem thông tin cầu thủ (tên, vị trí, cardSeason)
 - Nhập điểm trận mới
-- Xem lịch sử trận đấu và điểm trung bình
-- Xem trạng thái phong độ hiện tại
-- Reset lịch sử điểm số của cầu thủ
+- Xem lịch sử trận đấu chi tiết (kể cả position, cards, fouls)
+- Xem metrics phong độ: **WMA**, trend, variance, momentum, prediction, confidence, risk score
+- Xem trạng thái hiện tại với badges: trend (📈/⬇️/→), risk level (🟢/🟠/🔴), momentum (HOT/NORMAL/COLD)
+- Xem discipline score và aggression index
+- Fraud alert status (if triggered)
+- Reset lịch sử điểm số
 
 ## Kiến Trúc Hệ Thống
 
@@ -57,25 +85,42 @@ Dựa trên toàn bộ số trận hiện có, hệ thống phân loại cầu t
     └──────────┘           └───────────────┘
 ```
 
-## API Routes
+## API Routes (Match-First Flow, May 18, 2026)
 
-- `POST /api/rating` - Lưu điểm trận
-- `GET /api/player-status?id={id}` - Tính phong độ
+### Match Management (New)
+- `POST /api/matches` - Tạo trận mới
+- `POST /api/matches/:matchId/ratings` - Lưu điểm cho cầu thủ trong trận
+- `GET /api/matches` - Danh sách trận
+- `GET /api/matches/:matchId` - Chi tiết trận (bao gồm ratings)
+
+### Player Management
 - `GET /api/players` - Danh sách cầu thủ
-- `POST /api/players` - Thêm cầu thủ
-- `PATCH /api/players/{id}` - Cập nhật tên + vị trí
-- `DELETE /api/players/{id}` - Xóa cầu thủ và toàn bộ dữ liệu trận đấu
-- `PATCH /api/players/{id}/reset` - Xóa lịch sử điểm số, giữ lại cầu thủ
-- `GET /api/recommendations` - Khuyến nghị chuyển nhượng
+- `POST /api/players` - Thêm cầu thủ (với duplicate check)
+- `PATCH /api/players/{id}` - Cập nhật tên + vị trí + cardSeason
+- `DELETE /api/players/{id}` - Xóa cầu thủ và toàn bộ dữ liệu
+- `PATCH /api/players/{id}/reset` - Xóa lịch sử điểm, giữ cầu thủ
 
-## DynamoDB Schema
+### Analytics
+- `GET /api/player-status?id={id}` - Tính WMA/trend/prediction/risk
+- `GET /api/recommendations` - Khuyến nghị (KEEP/MONITOR/BENCH/SELL/REPLACE)
+- `GET /api/form-extremes` - Top/bottom performers
+
+### Debug
+- `GET /api/debug-env` - Kiểm tra AWS config
+- `GET /api/debug-ratings?matchId={matchId}` - Verify ratings
+
+**Legacy:**
+- `POST /api/rating` - Deprecated (410 Gone)
+
+## DynamoDB Schema (Match-First, May 18, 2026)
 
 **Bảng:** `FCON_Table`
 
 | Loại Item | PK | SK | Nội dung |
 | :-- | :-- | :-- | :-- |
-| **METADATA** | `PLAYER#{id}` | `METADATA` | Thông tin cầu thủ (`Name`, `Season`, `Position`) |
-| **MATCH** | `PLAYER#{id}` | `MATCH#{ISO8601_timestamp}` | Điểm trận (`Score`, `IsStarter`, `Result`) |
+| **PLAYER METADATA** | `PLAYER#{playerId}` | `METADATA` | Thông tin cầu thủ: Name, CardSeason, Position |
+| **RATING** (Match-First) | `PLAYER#{playerId}` | `MATCH#{matchId}` | Điểm trận: Score, IsStarter, Result, PositionGroup, DetailedPosition, YellowCards, RedCards, Fouls, MatchDate |
+| **MATCH METADATA** | `MATCH#{matchId}` | `METADATA` | Thông tin trận: MatchDate, CreatedAt |
 
 **Ví dụ:**
 
@@ -84,7 +129,7 @@ Dựa trên toàn bộ số trận hiện có, hệ thống phân loại cầu t
   "PK": "PLAYER#CR7",
   "SK": "METADATA",
   "Name": "C. Ronaldo",
-  "Season": "21CU",
+  "CardSeason": "21CU",
   "Position": "ST"
 }
 ```
@@ -92,12 +137,24 @@ Dựa trên toàn bộ số trận hiện có, hệ thống phân loại cầu t
 ```json
 {
   "PK": "PLAYER#CR7",
-  "SK": "MATCH#20260511T140000Z",
+  "SK": "MATCH#20260518T140000Z",
   "Score": 7.5,
   "IsStarter": true,
-  "Result": "Win"
+  "Result": "Win",
+  "PositionGroup": "FWD",
+  "DetailedPosition": "ST",
+  "YellowCards": 0,
+  "RedCards": 0,
+  "Fouls": 1,
+  "MatchDate": "2026-05-18"
 }
 ```
+
+**Ghi Chú:**
+- `matchId` trong SK đảm bảo tính duy nhất (không bị ghi đè nếu cùng ngày)
+- `CardSeason` thay thế legacy `Season` field
+- Theo dõi vị trí per match: `PositionGroup` (DEF, MID, FWD) + `DetailedPosition` (CB, RB, ST, ...)
+- Các field Card/Fouls tùy chọn; missing = 0
 
 ## Cấu Hình & Chạy
 
@@ -147,16 +204,26 @@ npm run build
 npm start
 ```
 
-## Phân Loại Phong Độ
+## Phân Loại Phong Độ (Hybrid Analytics, May 14, 2026)
 
-Dựa trên trung bình toàn bộ số trận hiện có (`X̄`):
+Dựa trên **WMA** (Weighted Moving Average) + trend + variance + prediction + risk + discipline:
 
-| X̄ | Status | Action |
+| Metric | Formula / Tính Toán | Ngưỡng |
 | :-- | :-- | :-- |
-| > 8.0 | ⭐ Star Player | Giữ chặt đội hình chính |
-| 6.0 - 8.0 | ✅ Stable | Tiếp tục tin dùng |
-| 4.5 - 5.9 | ⚠️ Under Review | Đẩy lên ghế dự bị |
-| < 4.5 | 🚨 Fraud | Thanh lý ngay |
+| **WMA** | `(x1×0.5 + x2×0.3 + x3×0.2)` (newest first) | Current form score chính |
+| **Trend** | `x3 - x1` | UP (>1), STABLE (-1...1), DOWN (<-1) |
+| **Variance** | Độ phân tán điểm | STABLE (<1), UNSTABLE (1-4), VOLATILE (>4) |
+| **Momentum** | `(x3-x2) + (x2-x1)` | HOT (>1), NORMAL (-1...1), COLD (<-1) |
+| **Predicted Score** | `0.48×wma + 0.22×avg + 0.12×trend + 0.08×momentum - 0.14×variance - 0.25×lossStreak` | Confidence |
+| **Risk Score** | `trend×0.3 + variance×0.25 + streak×0.25 + prediction×0.2` | LOW (<35), MEDIUM (35-70), HIGH (>70) |
+| **Discipline** | `100 - (redRate + yellowRate + foulRate)` | Discipline score |
+
+**Tích Hợp vào Recommendation:**
+- Fraud alert (5 điều kiện) → **REPLACE** (priority 5)
+- Risk HIGH + predicted low → **SELL** (priority 4)
+- Risk MED OR VOLATILE OR DOWN → **BENCH** (priority 3)
+- Risk >= 30 → **MONITOR** (priority 2)
+- Risk < 30 + UP trend → **KEEP** (priority 1)
 
 ## State Management
 
@@ -187,11 +254,19 @@ Kiểm tra:
 4. Xem khuyến nghị ở Transfer Recommendation
 5. Reset lịch sử điểm số trong Player Detail
 
-## Ghi chú hiện tại
+## Ghi Chú Hiện Tại (May 18, 2026)
 
-- Không còn dữ liệu mock/default cho danh sách cầu thủ
-- `playerId` được tạo tự động khi thêm cầu thủ
-- `npm run seed` hiện không còn là luồng bắt buộc cho app
+- ✅ **Match-First Flow:** Matches created via `POST /api/matches`, then rated via `POST /api/matches/:matchId/ratings`
+- ✅ **Player Duplicate Check:** Tên cầu thủ không thể trùng lặp (case-insensitive)
+- ✅ **CardSeason Field:** Replaces legacy "Season" field
+- ✅ **Position Tracking:** Per-match position group + detailed position
+- ✅ **Discipline & Aggression:** Tracked per match (yellowCards, redCards, fouls)
+- ✅ **Fraud Detection:** 5-condition alert with REPLACE priority
+- ✅ **Trend Analysis:** Integrated into recommendations (UP/DOWN/STABLE)
+- ✅ **Bug Fixed:** Match 2 no longer overwrites Match 1 (uses matchId in SK)
+- ⚠️ **Legacy Rating Flow:** `POST /api/rating` deprecated (410 Gone)
+- 📝 **No Seeding Required:** App loads players from DynamoDB (seed script optional)
+- ✅ **Build & Test:** `npm test` passes, `npm run build` passes
 
 ## Các Tính Năng Mở Rộng
 

@@ -5,30 +5,36 @@
 ## Tính Năng
 
 ### 1. Rating / Nhập Điểm Trận (`📊 Rating`)
+- **Match-First Flow:** Tạo trận mới trước, sau đó nhập điểm từng cầu thủ
 - Chọn cầu thủ từ danh sách cầu thủ thực tế đang có trong app
 - Nhập điểm trận từ 1.0 đến 10.0
 - Chọn kết quả: Win / Draw / Loss
+- Chọn vị trí đá (Position Group + Detailed Position)
 - Chọn đá chính hoặc dự bị
-- Tự động tính phong độ dựa trên bộ analytics hybrid mới
+- Tuỳ chọn: Nhập thẻ vàng, thẻ đỏ, phạm lỗi
+- Tự động tính phong độ WMA, xu hướng, dự đoán, rủi ro dựa trên toàn bộ số trận
 
 ### 2. Squad Management (`👥 Đội Hình`)
 - Xem danh sách cầu thủ lấy từ DynamoDB
-- Thêm cầu thủ mới với tên và vị trí, `playerId` được tạo tự động
-- Cập nhật cầu thủ: sửa tên + vị trí
+- Thêm cầu thủ mới với tên, vị trí và cardSeason; `playerId` được tạo tự động
+- **Duplicate Check:** Tên cầu thủ được kiểm tra trùng lặp (case-insensitive, trimmed)
+- Cập nhật cầu thủ: sửa tên + vị trí + cardSeason
 - Xóa cầu thủ và toàn bộ lịch sử trận đấu của cầu thủ đó
 - Reset lịch sử điểm số của một cầu thủ mà không xóa cầu thủ
-- Xem chi tiết cầu thủ
+- Xem chi tiết cầu thủ (link tới Player Detail)
 
 ### 3. Transfer Recommendation (`🎯 Đề Xuất`)
 Dựa trên WMA, trend, variance, prediction, risk score và fraud alert, hệ thống phân loại cầu thủ thành các hành động:
 
-| Mã Đề Xuất | Ý nghĩa |
-| :-- | :-- |
-| **KEEP** | Giữ trong đội hình |
-| **MONITOR** | Theo dõi thêm |
-| **BENCH** | Đưa dự bị |
-| **SELL** | Nên thanh lý |
-| **REPLACE** | Thay thế khẩn cấp do fraud/risk cao |
+| Mã Đề Xuất | Ưu Tiên | Ý nghĩa |
+| :-- | :-- | :-- |
+| 🚨 **REPLACE** | 5 (Cao nhất) | Thay thế khẩn cấp do fraud alert hoặc kỷ luật/rủi ro cực cao |
+| 🔴 **SELL** | 4 | Thanh lý: rủi ro cao + phong độ thấp |
+| ⚠️ **BENCH** | 3 | Đưa dự bị: phong độ không ổn định (VOLATILE/DOWN/COLD) |
+| 🟡 **MONITOR** | 2 | Theo dõi thêm: rủi ro trung bình, chưa ổn định hoàn toàn |
+| ✅ **KEEP** | 1 (Thấp nhất) | Giữ trong đội hình: phong độ ổn định, xu hướng tốt |
+
+**Ranking:** Khi có nhiều điều kiện khớp, hệ thống chọn recommendation với priority cao nhất
 
 Màn hình “Phong độ” hiện tại được nhóm theo `LOW RISK`, `MEDIUM RISK`, `HIGH RISK`, mỗi group có số lượng riêng và card chỉ hiển thị mùa thẻ, vị trí, số trận và badge Risk để tập trung vào risk monitoring trên mobile.
 
@@ -44,16 +50,38 @@ Màn hình “Phong độ” hiện tại được nhóm theo `LOW RISK`, `MEDIU
 ### WMA
 Hệ thống dùng Weighted Moving Average làm current form score chính:
 
-## Migration note — Match-first flow (IMPORTANT)
+## Match-First Flow (Hiện Tại - May 18, 2026)
 
-- The app has migrated from a legacy per-player rating flow to a match-first flow.
-- New flow:
-  1. Create a Match using `POST /api/matches` (response includes the created `match` with `id`).
-  2. Submit multiple player ratings for that match using `POST /api/matches/:matchId/ratings` with payload `{ ratings: [...] }`.
-- The legacy `POST /api/rating` endpoint is deprecated and now returns `410 Gone` to encourage the new flow. The file implementing this route is kept for backward-compatibility and debugging.
-- Legacy per-player ratings stored under `PLAYER#...` keys will not automatically appear in match-first queries. To reuse legacy data, run a migration/backfill to convert `PLAYER#...` records into `MATCH#...` / `RATING#...` entries.
+**Ứng dụng sử dụng kiến trúc match-first để đảm bảo tính nhất quán dữ liệu và tránh ghi đè:**
 
-If you want, I can add a small migration script to backfill legacy ratings into the match-first model.
+1. **Tạo Trận:** `POST /api/matches` với payload `{ matchDate: "YYYY-MM-DD" }`
+   - Response chứa `match` object có `id` duy nhất (ISO8601 timestamp)
+   - Match ID đảm bảo không có 2 trận cùng ngày ghi đè nhau
+
+2. **Lưu Điểm Cho Trận:** `POST /api/matches/:matchId/ratings` với payload:
+   ```json
+   {
+     "ratings": [
+       {
+         "playerId": "...",
+         "score": 7.5,
+         "isStarter": true,
+         "result": "Win",
+         "positionGroup": "DEF",
+         "detailedPosition": "CB",
+         "yellowCards": 0,
+         "redCards": 0,
+         "fouls": 2
+       },
+       ...
+     ]
+   }
+   ```
+
+**Endpoint Cũ:**
+- `POST /api/rating` **không còn dùng** và trả về `410 Gone`
+- Điểm cầu thủ cũ lưu dưới `PLAYER#...` sẽ không tự động xuất hiện trong truy vấn match-first
+- Để di chuyển dữ liệu cũ, chạy script migration để chuyển `PLAYER#...` thành `MATCH#...` / `RATING#...`
 ### Trend Detection
 
 ```txt
@@ -162,62 +190,88 @@ Khi fraud alert bật => Recommendation = **REPLACE** (ưu tiên cao nhất)
     └──────────┘           └───────────────┘
 ```
 
-### New analytic components
+### Các Thành Phần Analytics Mới
 
 - **Feature Engineering** (`lib/featureEngineering`): tổng hợp `avg_score`, `weighted_average`, `variance`, `trend`, `discipline_score`, `aggression_index`, `loss_streak`, `momentum` và các feature khác để cung cấp input cho Prediction / Risk / Recommendation engines.
 - **Discipline Engine** (`lib/analytics/discipline.ts`): tính `disciplineScore`, `aggressionIndex`, `disciplineTrend` và các chỉ số liên quan, có thể cấu hình penalty theo vị trí.
 
 
-## API Routes
+## API Routes (Current - May 18, 2026)
 
-- `POST /api/rating` - Lưu điểm trận
-- `GET /api/player-status?id={id}` - Tính phong độ
+### Match Management (New)
+- `POST /api/matches` - Tạo trận mới (payload: `{ matchDate: "YYYY-MM-DD" }`)
+- `POST /api/matches/:matchId/ratings` - Lưu điểm trận cho cầu thủ (payload: `{ ratings: [...] }`)
+- `GET /api/matches` - Lấy danh sách trận đấu
+- `GET /api/matches/:matchId` - Chi tiết trận (bao gồm tất cả ratings)
+
+### Player Management
 - `GET /api/players` - Danh sách cầu thủ
-- `POST /api/players` - Thêm cầu thủ
-- `PATCH /api/players/{id}` - Cập nhật tên + vị trí
+- `POST /api/players` - Thêm cầu thủ (với duplicate name checking)
+- `PATCH /api/players/{id}` - Cập nhật tên + vị trí + cardSeason
 - `DELETE /api/players/{id}` - Xóa cầu thủ và toàn bộ dữ liệu trận đấu
 - `PATCH /api/players/{id}/reset` - Xóa lịch sử điểm số, giữ lại cầu thủ
-- `GET /api/recommendations` - Khuyến nghị chuyển nhượng
 
-## UI Screenshots
+### Analytics & Recommendations
+- `GET /api/player-status?id={id}` - Tính phong độ WMA/trend/prediction/risk
+- `GET /api/recommendations` - Khuyến nghị chuyển nhượng (KEEP/MONITOR/BENCH/SELL/REPLACE)
+- `GET /api/form-extremes` - Top performers & bottom performers
+
+### Debug Endpoints
+- `GET /api/debug-env` - Kiểm tra cấu hình AWS
+- `GET /api/debug-ratings?matchId={matchId}` - Xác minh ratings của trận
+
+**Legacy:**
+- `POST /api/rating` - **Deprecated** (returns 410 Gone)
+
+## Ảnh Chụp Màn Hình UI
 
 Nếu muốn đính kèm ảnh chụp màn hình cho tài liệu hoặc demo, có thể đặt chúng vào một thư mục như `public/screenshots/` và chèn liên kết trực tiếp trong README. Hiện tại dự án chưa bắt buộc có ảnh chụp để chạy.
 
-## DynamoDB Schema
+## DynamoDB Schema (Match-First, May 18, 2026)
 
 **Bảng:** `FCON_Table`
 
 | Loại Item | PK | SK | Nội dung |
 | :-- | :-- | :-- | :-- |
-| **METADATA** | `PLAYER#{id}` | `METADATA` | Thông tin cầu thủ (`Name`, `Season`, `Position`) |
-| **MATCH** | `PLAYER#{id}` | `MATCH#{ISO8601_timestamp}` | Điểm trận (`Score`, `IsStarter`, `Result`) |
+| **PLAYER METADATA** | `PLAYER#{playerId}` | `METADATA` | Thông tin cầu thủ: `Name`, `CardSeason`, `Position` |
+| **RATING** (Match-First) | `PLAYER#{playerId}` | `MATCH#{matchId}` | Điểm trận: `Score`, `IsStarter`, `Result`, `PositionGroup`, `DetailedPosition`, `YellowCards`, `RedCards`, `Fouls`, `MatchDate` |
+| **MATCH METADATA** | `MATCH#{matchId}` | `METADATA` | Thông tin trận: `MatchDate`, `CreatedAt` |
 
 **Ví dụ:**
 
+Player Metadata:
 ```json
 {
   "PK": "PLAYER#CR7",
   "SK": "METADATA",
   "Name": "C. Ronaldo",
-  "Season": "21CU",
+  "CardSeason": "21CU",
   "Position": "ST"
 }
 ```
 
+Rating (Match-First):
 ```json
 {
   "PK": "PLAYER#CR7",
-  "SK": "MATCH#20260511T140000Z",
+  "SK": "MATCH#20260518T140000Z",
   "Score": 7.5,
   "IsStarter": true,
   "Result": "Win",
-  "YellowCards": 1,
+  "PositionGroup": "FWD",
+  "DetailedPosition": "ST",
+  "YellowCards": 0,
   "RedCards": 0,
-  "Fouls": 2
+  "Fouls": 1,
+  "MatchDate": "2026-05-18"
 }
 ```
 
-Note: Match items now optionally include `YellowCards`, `RedCards`, and `Fouls` (integers >= 0). Existing items without these fields remain compatible; the analytics and UI treat missing fields as zero.
+**Ghi Chú:**
+- `matchId` trong SK đảm bảo tính duy nhất (không ghi đè nếu cùng ngày)
+- `CardSeason` thay thế legacy `Season` field
+- `PositionGroup` (DEF, MID, FWD) + `DetailedPosition` (CB, RB, ST, ...) theo dõi vị trí tại mỗi trận
+- `YellowCards`, `RedCards`, `Fouls` tùy chọn; field thiếu được coi là 0
 
 ## Cấu Hình & Chạy
 
@@ -229,24 +283,33 @@ npm install
 
 ### 2. Cấu hình AWS Credentials
 
-Cập nhật `.env.local`:
+Cập nhật `.env.local` (local development):
 
 ```env
 AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
 AWS_REGION=ap-southeast-1
 DYNAMODB_TABLE_NAME=FCON_Table
-# Hoặc nếu Vercel đang dùng biến cũ:
-# DYNAMODB_TABLE=FCON_Table
-# Nếu dùng local DynamoDB:
+# Tùy chọn cho local DynamoDB:
 # DYNAMODB_ENDPOINT=http://localhost:8000
 ```
 
-### 2.1. Cấu hình trên Vercel
+### 2.1. Triển Khai Vercel
 
-- Thêm các biến `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `DYNAMODB_TABLE_NAME` hoặc `DYNAMODB_TABLE` trong **Environment Variables** của project.
-- Chọn đúng scope **Production** cho deployment thật. Nếu chỉ set ở Preview/Development thì production sẽ không đọc được.
-- Sau khi thêm hoặc sửa biến môi trường, cần **redeploy** lại production deployment để runtime nhận cấu hình mới.
+**Cấu Hình Environment Variables:**
+- Thêm vào **Settings > Environment Variables**:
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_SECRET_ACCESS_KEY`
+  - `AWS_REGION` (ví dụ: `ap-southeast-1`)
+  - `DYNAMODB_TABLE_NAME` (ví dụ: `FCON_Table`)
+
+**Scope Triển Khai:**
+- Đặt scope là **Production** cho môi trường live
+- Scope Preview/Development là riêng biệt; cấu hình nếu cần
+- Sau khi sửa biến, **redeploy** production deployment để runtime lấy cấu hình mới
+
+**Xác Minh:**
+- Dùng endpoint `/api/debug-env` để kiểm tra xem credentials có được load đúng không
 
 ### 3. Tạo bảng DynamoDB
 
@@ -275,7 +338,7 @@ npm run build
 npm start
 ```
 
-## Recommendation Logic (Phân Loại Phong Độ)
+## Logic Khuyến Nghị (Phân Loại Phong Độ)
 
 Dữ liệu đánh giá hiện không còn phụ thuộc vào average đơn giản. UI và API ưu tiên WMA, trend, variance, prediction, risk, discipline và fraud alert để quyết định hành động:
 
