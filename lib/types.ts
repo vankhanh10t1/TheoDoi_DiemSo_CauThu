@@ -165,3 +165,99 @@ export interface RatingPayload {
   isBigWin?: boolean;
   isBigLoss?: boolean;
 }
+
+/**
+ * Match model - represents a single match
+ * PK: MATCH#{matchId}
+ * SK: METADATA
+ */
+export interface Match {
+  id: string;
+  matchDate: string; // YYYY-MM-DD
+  opponentName?: string;
+  myScore: number;
+  opponentScore: number;
+  result: 'WIN' | 'DRAW' | 'LOSE';
+  isBigWin?: boolean;
+  isBigLoss?: boolean;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * StoredMatch - DynamoDB item for Match
+ */
+export interface StoredMatch {
+  PK: string; // MATCH#{matchId}
+  SK: 'METADATA';
+  MatchDate: string;
+  OpponentName?: string;
+  MyScore: number;
+  OpponentScore: number;
+  Result: 'WIN' | 'DRAW' | 'LOSE';
+  IsBigWin?: boolean;
+  IsBigLoss?: boolean;
+  Note?: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+/**
+ * PlayerMatchRating model - represents a player's rating for a single match
+ * PK: MATCH#{matchId}
+ * SK: RATING#{playerId}
+ */
+export interface PlayerMatchRating {
+  id: string;
+  matchId: string;
+  playerId: string;
+  rating: number; // 1-10
+  position?: DetailedPosition;
+  goals?: number;
+  assists?: number;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * StoredPlayerMatchRating - DynamoDB item for PlayerMatchRating
+ */
+export interface StoredPlayerMatchRating {
+  PK: string; // MATCH#{matchId}
+  SK: string; // RATING#{playerId}
+  PlayerId: string;
+  Rating: number;
+  Position?: DetailedPosition;
+  Goals?: number;
+  Assists?: number;
+  Note?: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+/**
+ * CreateMatchPayload - for POST /api/matches
+ */
+export interface CreateMatchPayload {
+  matchDate: string; // YYYY-MM-DD
+  opponentName?: string;
+  myScore: number;
+  opponentScore: number;
+  note?: string;
+}
+
+/**
+ * SaveMatchRatingsPayload - for POST /api/matches/:matchId/ratings
+ */
+export interface SaveMatchRatingsPayload {
+  ratings: Array<{
+    playerId: string;
+    rating: number;
+    position?: DetailedPosition;
+    goals?: number;
+    assists?: number;
+    note?: string;
+  }>;
+}

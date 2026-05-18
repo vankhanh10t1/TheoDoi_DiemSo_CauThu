@@ -70,70 +70,14 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
   };
 }
 
-export async function POST(request: NextRequest) {
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ message: 'Invalid JSON payload' }, { status: 400 });
-  }
-
-  const payload = parseRatingPayload(body);
-  if (!payload) {
-    return NextResponse.json(
-      {
-        message:
-          'Validation failed: playerId, score, isStarter, result, positionGroup, detailedPosition are required'
-      },
-      { status: 400 }
-    );
-  }
-
-  const player = await getPlayerMetadata(payload.playerId);
-  if (!player) {
-    return NextResponse.json({ message: 'Player not found' }, { status: 404 });
-  }
-
-  const matchSortKey = createMatchSortKey();
-
-  try {
-    await getDocumentClient().send(
-      new PutCommand({
-        TableName: getTableName(),
-        Item: {
-          PK: `PLAYER#${payload.playerId}`,
-          SK: matchSortKey,
-          Score: payload.score,
-          IsStarter: payload.isStarter,
-          Result: payload.result,
-          PositionGroup: payload.positionGroup,
-          DetailedPosition: payload.detailedPosition,
-          YellowCards: payload.yellowCards ?? 0,
-          RedCards: payload.redCards ?? 0,
-          Fouls: payload.fouls ?? 0,
-          IsBigWin: payload.isBigWin ?? false,
-          IsBigLoss: payload.isBigLoss ?? false
-        },
-        ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
-      })
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-
-    if (message.includes('ConditionalCheckFailedException')) {
-      return NextResponse.json({ message: 'Match already saved for this timestamp' }, { status: 409 });
-    }
-
-    console.error('Failed to save rating', error);
-    return NextResponse.json({ message: 'Failed to save rating' }, { status: 500 });
-  }
-
+export async function POST() {
+  // Deprecated legacy endpoint. Use the match-first flow instead:
+  // 1) POST /api/matches to create a Match
+  // 2) POST /api/matches/:matchId/ratings to save many PlayerMatchRating
   return NextResponse.json(
     {
-      message: 'Rating saved successfully',
-      sk: matchSortKey
+      message: 'This endpoint is deprecated. Use /api/matches and /api/matches/:matchId/ratings instead.'
     },
-    { status: 201 }
+    { status: 410 }
   );
 }

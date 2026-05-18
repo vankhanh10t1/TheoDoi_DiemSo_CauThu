@@ -228,19 +228,37 @@ h2 {
 }
 
 .inline-message {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 16px;
   line-height: 1.5;
+  margin: 8px 0;
+  border-left: 4px solid transparent;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .inline-message.success {
-  background: rgba(31, 122, 79, 0.1);
+  background: rgba(31, 122, 79, 0.12);
   color: var(--green);
+  border-left-color: var(--green);
+  font-weight: 500;
 }
 
 .inline-message.error {
-  background: rgba(181, 51, 51, 0.08);
+  background: rgba(199, 58, 57, 0.12);
   color: var(--red);
+  border-left-color: var(--red);
+  font-weight: 500;
 }
 
 .status-card {

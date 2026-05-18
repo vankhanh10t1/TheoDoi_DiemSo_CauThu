@@ -26,6 +26,7 @@ interface PlayerFormData {
 interface FormExtremesResponse {
   bestForm: PlayerFormData | null;
   worstForm: PlayerFormData | null;
+  allForms: PlayerFormData[];
   totalPlayers: number;
   evaluatedPlayers: number;
 }

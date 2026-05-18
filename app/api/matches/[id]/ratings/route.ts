@@ -1,0 +1,229 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRating } from '../../../../../lib/matchService';
+import { listPlayers } from '../../../../../lib/playerService';
+import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
+
+/**
+ * POST /api/matches/:id/ratings - Save multiple player ratings for a match
+ * Body: { ratings: [{ playerId, rating, position?, goals?, assists?, note? }, ...] }
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: matchId } = await params;
+    const body = await request.json();
+
+    // Check if match exists
+    const match = await getMatchById(matchId);
+    if (!match) {
+      return NextResponse.json(
+        {
+          error: `Không tìm thấy trận đấu ${matchId}`,
+          code: 'MATCH_NOT_FOUND'
+        },
+        { status: 404 }
+      );
+    }
+
+    // Validate payload structure
+    if (!Array.isArray(body.ratings) || body.ratings.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'ratings must be a non-empty array',
+          code: 'INVALID_REQUEST'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get list of valid players for validation
+    const validPlayers = await listPlayers();
+    const playerIds = new Set(validPlayers.map((p) => p.playerId.toLowerCase()));
+
+    // Validate each rating
+    for (const rating of body.ratings) {
+      if (!rating.playerId || rating.rating === undefined) {
+        return NextResponse.json(
+          {
+            error: 'Each rating must have playerId and rating',
+            code: 'INVALID_RATING'
+          },
+          { status: 400 }
+        );
+      }
+
+      if (typeof rating.rating !== 'number' || rating.rating < 1 || rating.rating > 10) {
+        return NextResponse.json(
+          {
+            error: `Rating must be between 1 and 10 (got ${rating.rating})`,
+            code: 'INVALID_RATING_SCORE'
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!playerIds.has(rating.playerId.toLowerCase())) {
+        return NextResponse.json(
+          {
+            error: `Cầu thủ ${rating.playerId} không tồn tại`,
+            code: 'PLAYER_NOT_FOUND'
+          },
+          { status: 404 }
+        );
+      }
+
+      if (rating.goals !== undefined && (!Number.isInteger(rating.goals) || rating.goals < 0)) {
+        return NextResponse.json(
+          {
+            error: 'Goals must be non-negative integers',
+            code: 'INVALID_GOALS'
+          },
+          { status: 400 }
+        );
+      }
+
+      if (rating.assists !== undefined && (!Number.isInteger(rating.assists) || rating.assists < 0)) {
+        return NextResponse.json(
+          {
+            error: 'Assists must be non-negative integers',
+            code: 'INVALID_ASSISTS'
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const payload: SaveMatchRatingsPayload = { ratings: body.ratings };
+    const result = await saveMatchRatings(matchId, payload);
+
+    return NextResponse.json(
+      {
+        success: true,
+        created: result.created,
+        updated: result.updated,
+        message: `✅ Lưu ${result.created + result.updated} đánh giá cho trận đấu (${result.created} mới, ${result.updated} cập nhật)`
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error('Error in POST /api/matches/:id/ratings:', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to save match ratings',
+        code: 'INTERNAL_ERROR'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/matches/:id/ratings - Get all ratings for a match
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: matchId } = await params;
+
+    // Check if match exists
+    const match = await getMatchById(matchId);
+    if (!match) {
+      return NextResponse.json(
+        {
+          error: `Không tìm thấy trận đấu ${matchId}`,
+          code: 'MATCH_NOT_FOUND'
+        },
+        { status: 404 }
+      );
+    }
+
+    const ratings = await getMatchRatings(matchId);
+
+    return NextResponse.json(
+      {
+        success: true,
+        match,
+        ratings,
+        count: ratings.length
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error in GET /api/matches/:id/ratings:', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to get match ratings',
+        code: 'INTERNAL_ERROR'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/matches/:id/ratings/:playerId - Delete a player rating from a match
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: matchId } = await params;
+    const url = new URL(request.url);
+    const playerId = url.searchParams.get('playerId');
+
+    if (!playerId) {
+      return NextResponse.json(
+        {
+          error: 'playerId query parameter is required',
+          code: 'MISSING_PLAYER_ID'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if match exists
+    const match = await getMatchById(matchId);
+    if (!match) {
+      return NextResponse.json(
+        {
+          error: `Không tìm thấy trận đấu ${matchId}`,
+          code: 'MATCH_NOT_FOUND'
+        },
+        { status: 404 }
+      );
+    }
+
+    const success = await deletePlayerMatchRating(matchId, playerId);
+    if (!success) {
+      return NextResponse.json(
+        {
+          error: `Failed to delete rating`,
+          code: 'DELETE_FAILED'
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: `Xóa đánh giá cầu thủ ${playerId} thành công`
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error in DELETE /api/matches/:id/ratings:', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to delete rating',
+        code: 'INTERNAL_ERROR'
+      },
+      { status: 500 }
+    );
+  }
+}

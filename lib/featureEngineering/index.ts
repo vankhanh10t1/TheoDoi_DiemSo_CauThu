@@ -1,4 +1,4 @@
-import { calculateWMA, calculateTrend, calculateVariance, calculateMomentum, calculateLossStreak } from '../analytics/calculations';
+import { calculateWMA, calculateTrend, calculateVariance, calculateMomentum, calculateLossStreak, calculateAdjustedScore, calculateMatchImpact } from '../analytics/calculations';
 import { calculateDisciplineScore, calculateAggressionIndex, calculateDisciplineTrend } from '../analytics/discipline';
 import type { RecentMatch } from '../types';
 
@@ -17,12 +17,14 @@ export type FeatureVector = {
 };
 
 export function buildFeatureVector(matches: RecentMatch[]): FeatureVector {
-  const scores = matches.slice(0, 5).map((m) => m.score);
+  const recent = matches.slice(0, 5);
+  const scores = recent.map((m) => m.score);
   const avg_score = scores.reduce((s, v) => s + v, 0) / Math.max(1, scores.length);
-  const weighted_average = calculateWMA(scores);
+  const adjustedScores = recent.map((m) => calculateAdjustedScore(m.score, calculateMatchImpact(m.result, m.isBigWin, m.isBigLoss)));
+  const weighted_average = calculateWMA(adjustedScores);
   const variance = calculateVariance(scores).variance;
-  const trend = calculateTrend(scores).trendStatus;
-  const momentum = calculateMomentum(scores).momentum;
+  const trend = calculateTrend(adjustedScores).trendStatus;
+  const momentum = calculateMomentum(adjustedScores).momentum;
   const loss_streak = calculateLossStreak(matches.slice(0, 3).map((m) => m.result));
 
   const discipline = calculateDisciplineScore(matches);

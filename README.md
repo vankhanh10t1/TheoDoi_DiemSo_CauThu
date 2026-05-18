@@ -44,12 +44,16 @@ Màn hình “Phong độ” hiện tại được nhóm theo `LOW RISK`, `MEDIU
 ### WMA
 Hệ thống dùng Weighted Moving Average làm current form score chính:
 
-```txt
-WMA = 0.5*x3 + 0.3*x2 + 0.2*x1
-```
+## Migration note — Match-first flow (IMPORTANT)
 
-Trong đó `x3` là trận gần nhất và `x1` là trận xa nhất trong 3 trận gần nhất. Nếu ít hơn 3 trận, weights được normalize tự động.
+- The app has migrated from a legacy per-player rating flow to a match-first flow.
+- New flow:
+  1. Create a Match using `POST /api/matches` (response includes the created `match` with `id`).
+  2. Submit multiple player ratings for that match using `POST /api/matches/:matchId/ratings` with payload `{ ratings: [...] }`.
+- The legacy `POST /api/rating` endpoint is deprecated and now returns `410 Gone` to encourage the new flow. The file implementing this route is kept for backward-compatibility and debugging.
+- Legacy per-player ratings stored under `PLAYER#...` keys will not automatically appear in match-first queries. To reuse legacy data, run a migration/backfill to convert `PLAYER#...` records into `MATCH#...` / `RATING#...` entries.
 
+If you want, I can add a small migration script to backfill legacy ratings into the match-first model.
 ### Trend Detection
 
 ```txt

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAppContext } from './app-context';
 import { FormExtremesCard } from './form-extremes';
+import { PerformanceTable } from './PerformanceTable';
 import {
   filterPlayersByPosition,
   getDetailedPositionsByGroup,
@@ -10,7 +11,8 @@ import {
   normalizeDetailedPosition,
   POSITION_GROUPS
 } from '../lib/positions';
-import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
+import type { PlayerStatusResponse, RatingPayload, RiskLevel, TrendStatus, Match } from '../lib/types';
+import BulkRatingInputForm from './bulk-rating-input-form';
 
 function getTrendLabel(status?: string): string {
   if (status === 'UP') return 'Tăng';
@@ -100,6 +102,8 @@ export function TrackerApp() {
     playerId: players[0]?.playerId ?? ''
   });
   const [saveState, setSaveState] = useState<SaveState>({ message: '', tone: 'idle' });
+  const [allPlayersFormData, setAllPlayersFormData] = useState<any[]>([]);
+  const [formDataLoading, setFormDataLoading] = useState(false);
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.playerId === selectedPlayerId) ?? null,
@@ -130,6 +134,25 @@ export function TrackerApp() {
   useEffect(() => {
     setFormState((currentState) => ({ ...currentState, playerId: selectedPlayerId }));
   }, [selectedPlayerId]);
+
+  useEffect(() => {
+    const loadAllPlayersForm = async () => {
+      setFormDataLoading(true);
+      try {
+        const res = await fetch('/api/form-extremes');
+        const data = (await res.json()) as any;
+        if (data.allForms && Array.isArray(data.allForms)) {
+          setAllPlayersFormData(data.allForms);
+        }
+      } catch (error) {
+        console.error('Failed to load all players form:', error);
+      } finally {
+        setFormDataLoading(false);
+      }
+    };
+
+    loadAllPlayersForm();
+  }, []);
 
   useEffect(() => {
     if (!filteredPlayers.some((player) => player.playerId === selectedPlayerId)) {
@@ -203,81 +226,45 @@ export function TrackerApp() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // Match-first flow state
+  const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
+  const [createForm, setCreateForm] = useState({ matchDate: '', opponentName: '', myScore: 0, opponentScore: 0, note: '' });
+  const [creatingMatch, setCreatingMatch] = useState(false);
+  const [createMessage, setCreateMessage] = useState<{ tone: 'idle' | 'success' | 'error'; text: string } | null>(null);
 
-    if (!formState.playerId) {
-      setSaveState({ message: 'Hãy chọn cầu thủ trước khi lưu', tone: 'error' });
+  async function handleCreateMatch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setCreateMessage(null);
+
+    // Basic validation
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(createForm.matchDate)) {
+      setCreateMessage({ tone: 'error', text: 'Ngày phải có định dạng YYYY-MM-DD' });
+      return;
+    }
+    if (!Number.isInteger(createForm.myScore) || !Number.isInteger(createForm.opponentScore) || createForm.myScore < 0 || createForm.opponentScore < 0) {
+      setCreateMessage({ tone: 'error', text: 'Tỉ số phải là số nguyên không âm' });
       return;
     }
 
-    const resolvedDetailedPosition = (() => {
-      if (formState.positionGroup === 'GK') {
-        return 'GK';
-      }
-
-      if (selectedDetailedPosition) {
-        return selectedDetailedPosition;
-      }
-
-      return normalizeDetailedPosition(selectedPlayer?.position);
-    })();
-
-    if (!resolvedDetailedPosition || !isDetailedPositionForGroup(formState.positionGroup, resolvedDetailedPosition)) {
-      setSaveState({
-        message: 'Cầu thủ không thuộc nhóm vị trí đã chọn',
-        tone: 'error'
-      });
-      return;
-    }
-
-    if (!filteredPlayers.some((player) => player.playerId === formState.playerId)) {
-      setSaveState({
-        message: 'Cầu thủ không thuộc vị trí đã chọn',
-        tone: 'error'
-      });
-      return;
-    }
-
-    setSaveState({ message: '', tone: 'idle' });
-
+    setCreatingMatch(true);
     try {
-      const response = await fetch('/api/rating', {
+      const res = await fetch('/api/matches', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          playerId: formState.playerId,
-          score: Number(formState.score),
-          isStarter: formState.isStarter,
-          result: formState.result,
-          positionGroup: formState.positionGroup,
-          detailedPosition: resolvedDetailedPosition,
-          yellowCards: Number(formState.yellowCards ?? 0),
-          redCards: Number(formState.redCards ?? 0),
-          fouls: Number(formState.fouls ?? 0),
-          isBigWin: formState.isBigWin,
-          isBigLoss: formState.isBigLoss
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm)
       });
 
-      const payload = (await response.json()) as { message?: string; sk?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.message ?? 'Không thể lưu điểm trận đấu');
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || payload.message || 'Không thể tạo trận');
       }
 
-      setSaveState({
-        message: `Đã lưu thành công ${payload.sk ?? ''}`.trim(),
-        tone: 'success'
-      });
-      await refreshPlayerStatus(formState.playerId);
-    } catch (error) {
-      setSaveState({
-        message: error instanceof Error ? error.message : 'Không thể lưu điểm trận đấu',
-        tone: 'error'
-      });
+      setCurrentMatch(payload.match as Match);
+      setCreateMessage({ tone: 'success', text: 'Tạo trận thành công — nhập điểm cho trận này.' });
+    } catch (err) {
+      setCreateMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Lỗi tạo trận' });
+    } finally {
+      setCreatingMatch(false);
     }
   }
 
@@ -405,131 +392,58 @@ export function TrackerApp() {
               ) : null}
             </div>
 
-          <form className="form-stack" onSubmit={handleSubmit}>
-            <label className="field">
-              <span>Cầu thủ</span>
-              <select
-                value={selectedPlayerId}
-                onChange={(event) => {
-                  setSelectedPlayerId(event.target.value);
-                  setFormState((currentState) => ({
-                    ...currentState,
-                    playerId: event.target.value
-                  }));
+          {/* Match-first flow: create match, then bulk rating */}
+          {currentMatch ? (
+            <div>
+              <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, marginBottom: 12 }}>
+                <div><strong>Trận:</strong> {currentMatch.opponentName || 'N/A'} — {currentMatch.myScore}-{currentMatch.opponentScore}</div>
+                <div><strong>Ngày:</strong> {new Date(currentMatch.matchDate).toLocaleDateString('vi-VN')}</div>
+                <div><strong>Kết quả:</strong> {currentMatch.result}</div>
+              </div>
+
+              <BulkRatingInputForm
+                match={currentMatch}
+                onRatingsSaved={({ created, updated }) => {
+                  setCreateMessage({ tone: 'success', text: `Lưu ${created + updated} đánh giá thành công` });
                 }}
-              >
-                {filteredPlayers.map((player) => (
-                  <option key={player.playerId} value={player.playerId}>
-                    {player.name} · {player.cardSeason} · {player.position}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="field-grid">
-              <label className="field">
-                <span>Điểm trận</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  step="0.1"
-                  value={formState.score}
-                  onChange={(event) => {
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      score: event.target.value === '' ? 0 : Number(event.target.value)
-                    }));
-                  }}
-                />
-              </label>
-
-              <label className="field">
-                <span>Kết quả</span>
-                <select
-                  value={formState.result}
-                  onChange={(event) => {
-                    const nextResult = event.target.value as RatingPayload['result'];
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      result: nextResult,
-                      ...normalizeMarginFlags(nextResult, Boolean(currentState.isBigWin), Boolean(currentState.isBigLoss))
-                    }));
-                  }}
-                >
-                  <option value="Win">Win</option>
-                  <option value="Draw">Draw</option>
-                  <option value="Loss">Loss</option>
-                </select>
-              </label>
-            </div>
-
-            {formState.result === 'Win' ? (
-              <label className="field">
-                <span>Big Win?</span>
-                <select
-                  value={formState.isBigWin ? 'yes' : 'no'}
-                  onChange={(event) => {
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      isBigWin: event.target.value === 'yes',
-                      isBigLoss: false
-                    }));
-                  }}
-                >
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </label>
-            ) : formState.result === 'Loss' ? (
-              <label className="field">
-                <span>Big Loss?</span>
-                <select
-                  value={formState.isBigLoss ? 'yes' : 'no'}
-                  onChange={(event) => {
-                    setFormState((currentState) => ({
-                      ...currentState,
-                      isBigLoss: event.target.value === 'yes',
-                      isBigWin: false
-                    }));
-                  }}
-                >
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </label>
-            ) : null}
-
-            {filteredPlayers.length === 0 ? (
-              <p className="inline-message error">Không có cầu thủ cho vị trí đã chọn</p>
-            ) : null}
-
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={formState.isStarter}
-                onChange={(event) => {
-                  setFormState((currentState) => ({
-                    ...currentState,
-                    isStarter: event.target.checked
-                  }));
-                }}
+                onCancel={() => setCurrentMatch(null)}
               />
-              <span>Đá chính</span>
-            </label>
+            </div>
+          ) : (
+            <form className="form-stack" onSubmit={handleCreateMatch}>
+              <label className="field">
+                <span>Ngày thi đấu (YYYY-MM-DD)</span>
+                <input type="text" value={createForm.matchDate} onChange={(e) => setCreateForm({ ...createForm, matchDate: e.target.value })} required />
+              </label>
 
-            <button
-              className="primary-button"
-              type="submit"
-              disabled={!selectedPlayerId}
-            >
-              Lưu điểm
-            </button>
+              <label className="field">
+                <span>Đối thủ</span>
+                <input type="text" value={createForm.opponentName} onChange={(e) => setCreateForm({ ...createForm, opponentName: e.target.value })} />
+              </label>
 
-            {saveState.message ? (
-              <p className={`inline-message ${saveState.tone}`}>{saveState.message}</p>
-            ) : null}
-          </form>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Tỉ số đội mình</span>
+                  <input type="number" min="0" value={createForm.myScore} onChange={(e) => setCreateForm({ ...createForm, myScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} required />
+                </label>
+                <label className="field">
+                  <span>Tỉ số đối thủ</span>
+                  <input type="number" min="0" value={createForm.opponentScore} onChange={(e) => setCreateForm({ ...createForm, opponentScore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} required />
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Ghi chú</span>
+                <input type="text" value={createForm.note} onChange={(e) => setCreateForm({ ...createForm, note: e.target.value })} />
+              </label>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button className="primary-button" type="submit" disabled={creatingMatch}>{creatingMatch ? 'Đang tạo...' : 'Tạo trận'} </button>
+              </div>
+
+              {createMessage ? <p className={`inline-message ${createMessage.tone === 'error' ? 'error' : 'success'}`}>{createMessage.text}</p> : null}
+            </form>
+          )}
 
           {playersError ? <p className="status-error" style={{ marginTop: '16px' }}>{playersError}</p> : null}
         </article>
@@ -657,6 +571,35 @@ export function TrackerApp() {
       </section>
 
       <FormExtremesCard />
+
+      <article className="panel" style={{ marginTop: '24px' }}>
+        <div className="panel-header">
+          <div>
+            <p className="panel-kicker">All Players</p>
+            <h2>Bảng phong độ toàn đội</h2>
+          </div>
+          <span className="player-pill">{allPlayersFormData.length} cầu thủ</span>
+        </div>
+
+        {formDataLoading ? (
+          <p style={{ textAlign: 'center', padding: '24px' }}>Đang tải dữ liệu...</p>
+        ) : allPlayersFormData.length === 0 ? (
+          <p style={{ textAlign: 'center', padding: '24px', color: '#999' }}>Chưa có dữ liệu cầu thủ</p>
+        ) : (
+          <PerformanceTable
+            players={allPlayersFormData.map((form) => ({
+              name: form.name,
+              cardSeason: form.position,
+              position: form.position,
+              matchCount: form.matchCount,
+              wmaScore: form.wmaScore,
+              trendStatus: form.trendStatus as TrendStatus,
+              riskLevel: form.riskLevel as RiskLevel
+            }))}
+            title="Phong độ toàn đội"
+          />
+        )}
+      </article>
     </div>
   );
 }

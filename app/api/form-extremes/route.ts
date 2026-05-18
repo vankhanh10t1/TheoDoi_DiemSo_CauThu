@@ -17,12 +17,14 @@ interface PlayerFormData {
   trendStatus: string;
   stabilityLevel: string;
   momentumStatus: string;
+  riskLevel: string;
   recentMatches: RecentMatch[];
 }
 
 interface FormExtremesResponse {
   bestForm: PlayerFormData | null;
   worstForm: PlayerFormData | null;
+  allForms: PlayerFormData[];
   totalPlayers: number;
   evaluatedPlayers: number;
 }
@@ -32,15 +34,16 @@ export async function GET() {
     const players = await listPlayers();
 
     if (players.length === 0) {
-      return NextResponse.json(
-        {
-          bestForm: null,
-          worstForm: null,
-          totalPlayers: 0,
-          evaluatedPlayers: 0
-        },
-        { status: 200 }
-      );
+    return NextResponse.json(
+      {
+        bestForm: null,
+        worstForm: null,
+        allForms: [],
+        totalPlayers: 0,
+        evaluatedPlayers: 0
+      },
+      { status: 200 }
+    );
     }
 
     const playerForms: PlayerFormData[] = [];
@@ -65,6 +68,7 @@ export async function GET() {
             trendStatus: analysis.trendStatus,
             stabilityLevel: analysis.stabilityLevel,
             momentumStatus: analysis.momentumStatus,
+            riskLevel: analysis.riskLevel,
             recentMatches
           });
         }
@@ -91,6 +95,7 @@ export async function GET() {
       {
         bestForm,
         worstForm,
+        allForms: playerForms,
         totalPlayers: players.length,
         evaluatedPlayers: playerForms.length
       },
