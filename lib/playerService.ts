@@ -97,11 +97,12 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       score: match.Score,
       result: match.Result,
       positionGroup,
-      detailedPosition
-      ,
+      detailedPosition,
       yellowCards: typeof match.YellowCards === 'number' ? match.YellowCards : 0,
       redCards: typeof match.RedCards === 'number' ? match.RedCards : 0,
-      fouls: typeof match.Fouls === 'number' ? match.Fouls : 0
+      fouls: typeof match.Fouls === 'number' ? match.Fouls : 0,
+      isBigWin: typeof match.IsBigWin === 'boolean' ? match.IsBigWin : false,
+      isBigLoss: typeof match.IsBigLoss === 'boolean' ? match.IsBigLoss : false
     };
   });
 }

@@ -27,6 +27,8 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
   const yellowCards = typeof candidate.yellowCards === 'number' ? candidate.yellowCards : 0;
   const redCards = typeof candidate.redCards === 'number' ? candidate.redCards : 0;
   const fouls = typeof candidate.fouls === 'number' ? candidate.fouls : 0;
+  const isBigWin = typeof candidate.isBigWin === 'boolean' ? candidate.isBigWin : false;
+  const isBigLoss = typeof candidate.isBigLoss === 'boolean' ? candidate.isBigLoss : false;
 
   if (
     !playerId ||
@@ -48,17 +50,23 @@ function parseRatingPayload(body: unknown): RatingPayload | null {
   if (!Number.isInteger(redCards) || redCards < 0) return null;
   if (!Number.isInteger(fouls) || fouls < 0) return null;
 
+  // validate big win/loss flags based on result
+  if (result === 'Win' && isBigLoss) return null;
+  if (result === 'Loss' && isBigWin) return null;
+  if (result === 'Draw' && (isBigWin || isBigLoss)) return null;
+
   return {
     playerId,
     score,
     isStarter,
     result,
     positionGroup,
-    detailedPosition
-    ,
+    detailedPosition,
     yellowCards,
     redCards,
-    fouls
+    fouls,
+    isBigWin,
+    isBigLoss
   };
 }
 
@@ -100,11 +108,12 @@ export async function POST(request: NextRequest) {
           IsStarter: payload.isStarter,
           Result: payload.result,
           PositionGroup: payload.positionGroup,
-          DetailedPosition: payload.detailedPosition
-          ,
+          DetailedPosition: payload.detailedPosition,
           YellowCards: payload.yellowCards ?? 0,
           RedCards: payload.redCards ?? 0,
-          Fouls: payload.fouls ?? 0
+          Fouls: payload.fouls ?? 0,
+          IsBigWin: payload.isBigWin ?? false,
+          IsBigLoss: payload.isBigLoss ?? false
         },
         ConditionExpression: 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
       })

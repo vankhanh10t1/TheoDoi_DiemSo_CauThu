@@ -55,7 +55,7 @@ describe('recommendationService', () => {
       recommendation: 'KEEP',
       status: 'Stable',
       trend: 'UP',
-      wmaScore: 8.3,
+      wmaScore: 8.46,
       fraudRisk: false
     });
   });

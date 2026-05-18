@@ -6,5 +6,8 @@ export {
   calculateVariance,
   calculateWMA,
   clampScore,
-  sanitizeScores
+  sanitizeScores,
+  calculateMatchImpact,
+  calculateAdjustedScore,
+  normalizeMarginFlags
 } from './calculations';

@@ -24,7 +24,11 @@ describe('prediction and risk engines', () => {
       trendStatus: 'DOWN',
       stabilityLevel: 'VOLATILE',
       lossStreak: 4,
-      predictedScore: 3.9
+      predictedScore: 3.9,
+      adjustedWma: 3.8,
+      bigWinCountLast5: 0,
+      bigLossCountLast5: 2,
+      hasBigLossUnderFive: true
     });
 
     const recommendation = generateRecommendation({

@@ -51,7 +51,7 @@ describe('evaluationEngine', () => {
     ]);
 
     expect(result).toEqual({
-      averageScore: 8.3,
+      averageScore: 8.5,
       status: 'Star Player',
       action: 'Giữ chặt đội hình chính',
       color: 'green'

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PlayerSummary } from '../lib/types';
 import { useAppContext } from './app-context';
+import { SquadPlayerCard } from './SquadPlayerCard';
+import { POSITION_GROUPS, groupPlayersByPosition } from '../lib/positions';
 
 type AddPlayerForm = {
   name: string;
@@ -256,95 +258,116 @@ export function SquadManagement() {
       )}
 
       {!loading && filteredPlayers.length > 0 && (
-        <div className="players-grid">
-          {filteredPlayers.map((player) => (
-            <div key={player.playerId} className="player-card">
-              <div className="player-card-header">
-                <h3>{player.name}</h3>
-                <span className="position-badge">{player.position}</span>
-              </div>
-              <p className="player-season">Mùa: {player.cardSeason}</p>
-              <div className="player-card-actions">
-                <button
-                  className="secondary-button"
-                  onClick={() => handleViewDetail(player.playerId)}
-                >
-                  Chi Tiết
-                </button>
-                <button
-                  className="secondary-button"
-                  onClick={() => handleStartEdit(player)}
-                >
-                  Cập Nhật
-                </button>
-                <button
-                  className="danger-button"
-                  onClick={() => handleDeletePlayer(player.playerId)}
-                >
-                  Xóa
-                </button>
-              </div>
+        <div className="players-groups">
+          {(() => {
+            const grouped = groupPlayersByPosition(filteredPlayers as PlayerSummary[]);
 
-              {editingPlayerId === player.playerId && (
-                <form
-                  className="form-stack"
-                  onSubmit={(event) => void handleUpdatePlayer(player.playerId, event)}
-                  style={{ marginTop: '16px' }}
-                >
-                  <label className="field">
-                    <span>Tên Cầu Thủ</span>
-                    <input
-                      type="text"
-                      value={editFormData.name}
-                      onChange={(event) =>
-                        setEditFormData({ ...editFormData, name: event.target.value })
-                      }
-                      required
-                    />
-                  </label>
+            return POSITION_GROUPS.map((grp) => {
+              const playersInGroup = grouped[grp] || [];
+              if (playersInGroup.length === 0) return null; // hide empty groups per spec option
 
-                  <label className="field">
-                    <span>Mùa Thẻ</span>
-                    <input
-                      type="text"
-                      value={editFormData.cardSeason}
-                      onChange={(event) =>
-                        setEditFormData({ ...editFormData, cardSeason: event.target.value })
-                      }
-                      required
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>Vị Trí</span>
-                    <select
-                      value={editFormData.position}
-                      onChange={(event) =>
-                        setEditFormData({ ...editFormData, position: event.target.value })
-                      }
-                      required
-                    >
-                      <option value="">-- Chọn vị trí --</option>
-                      {POSITION_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className="player-card-actions">
-                    <button className="primary-button" type="submit">
-                      Lưu Cập Nhật
-                    </button>
-                    <button className="secondary-button" type="button" onClick={handleCancelEdit}>
-                      Hủy
-                    </button>
+              return (
+                <section key={grp} className="player-group" style={{ marginBottom: 20 }}>
+                  <div className="group-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <h3 style={{ margin: 0 }}>{grp}</h3>
+                    <div style={{ fontSize: 12, color: '#666' }}>{playersInGroup.length} cầu thủ</div>
                   </div>
-                </form>
-              )}
-            </div>
-          ))}
+
+                  <div className="players-grid">
+                    {playersInGroup.map((player) => (
+                      <div key={player.playerId} className="flex flex-col gap-3 pb-4">
+                        <SquadPlayerCard
+                          name={player.name}
+                          cardSeason={player.cardSeason}
+                          position={player.position}
+                        />
+
+                        <div className="player-card-actions">
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleViewDetail(player.playerId)}
+                          >
+                            Chi Tiết
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleStartEdit(player)}
+                          >
+                            Cập Nhật
+                          </button>
+                          <button
+                            className="danger-button"
+                            onClick={() => handleDeletePlayer(player.playerId)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+
+                        {editingPlayerId === player.playerId && (
+                          <form
+                            className="form-stack"
+                            onSubmit={(event) => void handleUpdatePlayer(player.playerId, event)}
+                            style={{ marginTop: '16px' }}
+                          >
+                            <label className="field">
+                              <span>Tên Cầu Thủ</span>
+                              <input
+                                type="text"
+                                value={editFormData.name}
+                                onChange={(event) =>
+                                  setEditFormData({ ...editFormData, name: event.target.value })
+                                }
+                                required
+                              />
+                            </label>
+
+                            <label className="field">
+                              <span>Mùa Thẻ</span>
+                              <input
+                                type="text"
+                                value={editFormData.cardSeason}
+                                onChange={(event) =>
+                                  setEditFormData({ ...editFormData, cardSeason: event.target.value })
+                                }
+                                required
+                              />
+                            </label>
+
+                            <label className="field">
+                              <span>Vị Trí</span>
+                              <select
+                                value={editFormData.position}
+                                onChange={(event) =>
+                                  setEditFormData({ ...editFormData, position: event.target.value })
+                                }
+                                required
+                              >
+                                <option value="">-- Chọn vị trí --</option>
+                                {POSITION_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <div className="player-card-actions">
+                              <button className="primary-button" type="submit">
+                                Lưu Cập Nhật
+                              </button>
+                              <button className="secondary-button" type="button" onClick={handleCancelEdit}>
+                                Hủy
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

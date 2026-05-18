@@ -72,10 +72,69 @@ trend = x3 - x1
 momentum = (x3 - x2) + (x2 - x1)
 ```
 
-### Prediction / Risk / Fraud
-- Prediction engine dùng heuristic abstraction để sau này có thể thay bằng Bayesian Ridge Regression.
-- Risk score được tổng hợp từ trend, variance, loss streak và predicted score.
-- Fraud alert được bật khi đồng thời có predictedScore thấp, trend DOWN, variance VOLATILE và lossStreak >= 3.
+- `> 1` => `HOT`
+- `-1` đến `1` => `NORMAL`
+- `< -1` => `COLD`
+
+### Predicted Score
+
+Hệ thống sử dụng heuristic model để dự đoán phong độ tiếp theo:
+
+```txt
+predictedScore = 0.48×wmaScore + 0.22×averageScore + 0.12×trendValue 
+                 + 0.08×momentum - 0.14×variance - 0.25×lossStreak
+
+confidence = 0.48 + adjustments_theo(lossStreak, variance, trend, momentum, wma_vs_avg)
+```
+
+**Ngưỡng Confidence:**
+- `> 0.8` => `HIGH`
+- `0.5 - 0.8` => `MEDIUM`
+- `< 0.5` => `LOW`
+
+### Risk Score
+
+Risk được tính dựa trên 4 yếu tố với trọng số:
+
+```txt
+riskScore = trendRisk×0.3 + varianceRisk×0.25 + streakRisk×0.25 + predictionRisk×0.2
+```
+
+Trong đó:
+- `trendRisk` = 1 nếu DOWN, 0 nếu UP/STABLE
+- `varianceRisk` = 1 nếu VOLATILE, 0.6 nếu UNSTABLE, 0 nếu STABLE
+- `streakRisk` = min(1, max(0, lossStreak / 3))
+- `predictionRisk` = 1 nếu predicted < 4.5, 0.5 nếu 4.5-6, 0 nếu >= 6
+
+**Ngưỡng Risk Level:**
+- `>= 70` => `HIGH`
+- `35 - 70` => `MEDIUM`
+- `< 35` => `LOW`
+
+### Discipline & Aggression
+
+Hệ thống tính các chỉ số kỷ luật từ dữ liệu trận đấu:
+
+```txt
+disciplineScore = 100 - (redCards_rate + yellowCards_rate + fouls_rate)
+aggressionIndex = (fouls + yellowCards×0.5 + redCards×2) / totalMatches
+```
+
+**Ảnh hưởng đến Recommendation:**
+- Nếu `disciplineScore < 50 && aggressionIndex >= 8` => **REPLACE** (hành vi hung hãn)
+- Nếu `disciplineScore < 65 && aggressionIndex >= 5` => **BENCH** (theo dõi kỷ luật)
+
+### Fraud Alert
+
+Fraud risk được bật khi **đồng thời** có 5 điều kiện:
+
+1. `predictedScore < 4.5`
+2. `trendStatus = DOWN`
+3. `stabilityLevel = VOLATILE`
+4. `lossStreak >= 3`
+5. `redRate > 0` (ít nhất 1 thẻ đỏ trong lịch sử)
+
+Khi fraud alert bật => Recommendation = **REPLACE** (ưu tiên cao nhất)
 
 ## Kiến Trúc Hệ Thống
 
@@ -212,9 +271,21 @@ npm run build
 npm start
 ```
 
-## Phân Loại Phong Độ
+## Recommendation Logic (Phân Loại Phong Độ)
 
-Dữ liệu đánh giá hiện không còn phụ thuộc vào average đơn giản. UI và API ưu tiên WMA, trend, variance, prediction, risk và fraud alert để quyết định KEEP / MONITOR / BENCH / SELL / REPLACE.
+Dữ liệu đánh giá hiện không còn phụ thuộc vào average đơn giản. UI và API ưu tiên WMA, trend, variance, prediction, risk, discipline và fraud alert để quyết định hành động:
+
+| Điều kiện | Recommendation | Priority | Ý nghĩa |
+| :-- | :-- | :-- | :-- |
+| Fraud risk bật | **REPLACE** | 5 | Thay thế khẩn cấp, cảnh báo gian lận/rủi ro cao |
+| riskLevel = HIGH hoặc predictedScore < 4 | **SELL** | 4 | Thanh lý, rủi ro cao + phong độ thấp |
+| riskScore >= 55 hoặc VOLATILE hoặc DOWN hoặc COLD | **BENCH** | 3 | Đưa dự bị, phong độ không ổn định |
+| disciplineScore < 50 && aggressionIndex >= 8 | **REPLACE** | 5 | Vấn đề kỷ luật nghiêm trọng, thay thế |
+| disciplineScore < 65 && aggressionIndex >= 5 | **BENCH** | 3 | Kỷ luật kém, theo dõi dự bị |
+| riskScore >= 30 hoặc trendStatus != UP hoặc confidence < 0.6 | **MONITOR** | 2 | Theo dõi thêm, chưa ổn định hoàn toàn |
+| riskScore < 30 && trendStatus = UP && wmaScore >= 6 | **KEEP** | 1 | Giữ, phong độ ổn định |
+
+**Ưu tiên:** Khi có nhiều điều kiện khớp, hệ thống chọn recommendation với priority cao nhất.
 
 ## State Management
 

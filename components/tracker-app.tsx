@@ -46,6 +46,17 @@ function getRecommendationLabel(value?: string): string {
   return '—';
 }
 
+function normalizeMarginFlags(result: RatingPayload['result'], isBigWin: boolean, isBigLoss: boolean) {
+  if (result === 'Win') {
+    return { isBigWin, isBigLoss: false };
+  }
+
+  if (result === 'Loss') {
+    return { isBigWin: false, isBigLoss };
+  }
+
+  return { isBigWin: false, isBigLoss: false };
+}
 
 type SaveState = {
   message: string;
@@ -62,11 +73,12 @@ const INITIAL_FORM: EntryFormState = {
   isStarter: true,
   result: 'Win',
   positionGroup: 'GK',
-  detailedPosition: 'GK'
-  ,
+  detailedPosition: 'GK',
   yellowCards: 0,
   redCards: 0,
-  fouls: 0
+  fouls: 0,
+  isBigWin: false,
+  isBigLoss: false
 };
 
 function formatStatusTitle(status: PlayerStatusResponse['status'] | undefined): string {
@@ -244,7 +256,9 @@ export function TrackerApp() {
           detailedPosition: resolvedDetailedPosition,
           yellowCards: Number(formState.yellowCards ?? 0),
           redCards: Number(formState.redCards ?? 0),
-          fouls: Number(formState.fouls ?? 0)
+          fouls: Number(formState.fouls ?? 0),
+          isBigWin: formState.isBigWin,
+          isBigLoss: formState.isBigLoss
         })
       });
 
@@ -435,9 +449,11 @@ export function TrackerApp() {
                 <select
                   value={formState.result}
                   onChange={(event) => {
+                    const nextResult = event.target.value as RatingPayload['result'];
                     setFormState((currentState) => ({
                       ...currentState,
-                      result: event.target.value as RatingPayload['result']
+                      result: nextResult,
+                      ...normalizeMarginFlags(nextResult, Boolean(currentState.isBigWin), Boolean(currentState.isBigLoss))
                     }));
                   }}
                 >
@@ -448,7 +464,42 @@ export function TrackerApp() {
               </label>
             </div>
 
-            
+            {formState.result === 'Win' ? (
+              <label className="field">
+                <span>Big Win?</span>
+                <select
+                  value={formState.isBigWin ? 'yes' : 'no'}
+                  onChange={(event) => {
+                    setFormState((currentState) => ({
+                      ...currentState,
+                      isBigWin: event.target.value === 'yes',
+                      isBigLoss: false
+                    }));
+                  }}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </label>
+            ) : formState.result === 'Loss' ? (
+              <label className="field">
+                <span>Big Loss?</span>
+                <select
+                  value={formState.isBigLoss ? 'yes' : 'no'}
+                  onChange={(event) => {
+                    setFormState((currentState) => ({
+                      ...currentState,
+                      isBigLoss: event.target.value === 'yes',
+                      isBigWin: false
+                    }));
+                  }}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </label>
+            ) : null}
+
             {filteredPlayers.length === 0 ? (
               <p className="inline-message error">Không có cầu thủ cho vị trí đã chọn</p>
             ) : null}
@@ -502,7 +553,17 @@ export function TrackerApp() {
 
             {!statusError && statusData && 'averageScore' in statusData ? (
               <>
-                <div className="score-badge">WMA {statusData.wmaScore.toFixed(1)}</div>
+                {statusData.matchCount < 3 ? (
+                  <div className="score-badge" style={{ textAlign: 'center', color: '#999' }}>
+                    Not enough data ({statusData.matchCount} match{statusData.matchCount !== 1 ? 'es' : ''})
+                  </div>
+                ) : (
+                  <div className="score-badge">
+                    <div>Average: {statusData.averageScore.toFixed(1)}</div>
+                    <div style={{ marginTop: '4px' }}>WMA: {statusData.wmaScore.toFixed(1)}</div>
+                    <div style={{ marginTop: '4px' }}>Trend: {getTrendLabel(statusData.trendStatus)}</div>
+                  </div>
+                )}
                 <div className="status-grid">
                   <div>
                     <span className="metric-label">Số trận</span>

@@ -70,3 +70,45 @@ export function filterPlayersByPosition<T extends { position: string }>(
     matchesPositionFilter(player.position, group, detailedPosition)
   );
 }
+
+export function getPositionColor(group: PositionGroup): string {
+  switch (group) {
+    case 'GK':
+      return 'yellow';
+    case 'DF':
+      return 'blue';
+    case 'MF':
+      return 'green';
+    case 'FW':
+      return 'orange';
+    default:
+      return 'gray';
+  }
+}
+
+export function getPositionGroup(position: unknown): PositionGroup | undefined {
+  const normalized = normalizeDetailedPosition(position);
+  if (!normalized) return undefined;
+
+  for (const group of POSITION_GROUPS) {
+    if (DETAILED_POSITIONS_BY_GROUP[group].includes(normalized)) return group;
+  }
+
+  return undefined;
+}
+
+export function groupPlayersByPosition<T extends { position: string }>(players: T[]) {
+  const map: Record<PositionGroup, T[]> = {
+    GK: [],
+    DF: [],
+    MF: [],
+    FW: []
+  };
+
+  for (const p of players) {
+    const grp = getPositionGroup(p.position);
+    if (grp) map[grp].push(p);
+  }
+
+  return map;
+}

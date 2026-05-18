@@ -1,7 +1,11 @@
 import type { MatchResult, PerformanceAnalysis, PlayerAssessment, RecentMatch } from '../types';
 import {
+  calculateAdjustedScore,
   calculateAverageScore,
+  calculateBigLossRate,
+  calculateBigWinRate,
   calculateLossStreak,
+  calculateMatchImpact,
   calculateMomentum,
   calculateTrend,
   calculateVariance,
@@ -59,14 +63,24 @@ function getRecentResults(matches: RecentMatch[]): MatchResult[] {
 }
 
 export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysis {
-  const scores = matches.slice(0, 5).map((match) => match.score);
-  const recentResults = getRecentResults(matches);
+  const recentMatches = matches.slice(0, 5);
+  const scores = recentMatches.map((match) => match.score);
+  const adjustedScores = recentMatches.map((match) =>
+    calculateAdjustedScore(match.score, calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss))
+  );
+  const recentResults = getRecentResults(recentMatches);
   const averageScore = calculateAverageScore(scores);
-  const wmaScore = calculateWMA(scores);
-  const trend = calculateTrend(scores);
-  const variance = calculateVariance(scores);
-  const momentum = calculateMomentum(scores);
+  const adjustedAverageScore = calculateAverageScore(adjustedScores);
+  const wmaScore = calculateWMA(adjustedScores);
+  const trend = calculateTrend(adjustedScores);
+  const variance = calculateVariance(adjustedScores);
+  const momentum = calculateMomentum(adjustedScores);
   const lossStreak = calculateLossStreak(recentResults);
+  const bigWinCountLast5 = recentMatches.filter((match) => match.result === 'Win' && match.isBigWin).length;
+  const bigLossCountLast5 = recentMatches.filter((match) => match.result === 'Loss' && match.isBigLoss).length;
+  const hasBigLossUnderFive = recentMatches.some(
+    (match) => match.result === 'Loss' && match.isBigLoss && match.score < 5
+  );
   const prediction = predictPlayerScore({
     wmaScore,
     trendValue: trend.trendValue,
@@ -75,11 +89,15 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     lossStreak,
     averageScore
   });
-  const riskAnalysis = calculateRiskScore({
+  let riskAnalysis = calculateRiskScore({
     trendStatus: trend.trendStatus,
     stabilityLevel: variance.stabilityLevel,
     lossStreak,
-    predictedScore: prediction.predictedScore
+    predictedScore: prediction.predictedScore,
+    adjustedWma: wmaScore,
+    bigWinCountLast5,
+    bigLossCountLast5,
+    hasBigLossUnderFive
   });
   const fraudReasons: string[] = [];
   // discipline / aggression calculations (if match-level discipline data available)
@@ -120,6 +138,28 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     fraudReasons.push('redRate >= 0.2');
   }
 
+  const hybridFraudAlert =
+    wmaScore < 4.5 &&
+    trend.trendStatus === 'DOWN' &&
+    bigLossCountLast5 >= 2 &&
+    variance.stabilityLevel === 'VOLATILE';
+
+  if (hybridFraudAlert) {
+    hasFraudRisk = true;
+    fraudReasons.push('adjusted_wma < 4.5');
+    fraudReasons.push('trend = DOWN');
+    fraudReasons.push('big_loss_count_last_5 >= 2');
+    fraudReasons.push('variance = VOLATILE');
+
+    if (riskAnalysis.riskScore < 70) {
+      riskAnalysis = {
+        ...riskAnalysis,
+        riskScore: 70,
+        riskLevel: 'HIGH'
+      };
+    }
+  }
+
   const recommendation = generateRecommendation({
     wmaScore,
     trendStatus: trend.trendStatus,
@@ -130,6 +170,13 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     confidence: prediction.confidence,
     momentumStatus: momentum.momentumStatus
   });
+
+  const matchImpacts = recentMatches.map((match) =>
+    calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss)
+  );
+  const matchImpactAvg = matchImpacts.length > 0 ? calculateAverageScore(matchImpacts) : 0;
+  const bigWinRate = calculateBigWinRate(bigWinCountLast5, recentMatches.length);
+  const bigLossRate = calculateBigLossRate(bigLossCountLast5, recentMatches.length);
 
   return {
     averageScore,
@@ -149,11 +196,16 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     fraudRisk: hasFraudRisk,
     fraudReasons,
     recommendation: recommendation.recommendation,
-    recommendationReason: recommendation.reason
-    ,
+    recommendationReason: recommendation.reason,
     disciplineScore: discipline.disciplineScore,
     aggressionIndex: aggression.aggressionIndex,
-    disciplineTrend
+    disciplineTrend,
+    adjustedAverageScore,
+    bigWinCountLast5,
+    bigLossCountLast5,
+    bigWinRate,
+    bigLossRate,
+    matchImpactAvg
   };
 }
 

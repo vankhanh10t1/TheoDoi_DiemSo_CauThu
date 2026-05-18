@@ -128,19 +128,43 @@ export function PlayerDetail() {
               <div>
                 <strong>{statusData.name}</strong>
                 <div style={{ marginTop: 8 }}>
-                  <div className="score-badge">WMA {('wmaScore' in statusData ? statusData.wmaScore.toFixed(1) : 'N/A')}</div>
+                  {('matchCount' in statusData && statusData.matchCount < 3) ? (
+                    <div className="score-badge" style={{ textAlign: 'center', color: '#999' }}>
+                      Not enough data ({statusData.matchCount} match{statusData.matchCount !== 1 ? 'es' : ''})
+                    </div>
+                  ) : ('wmaScore' in statusData) ? (
+                    <div className="score-badge">
+                      <div>Average: {statusData.averageScore.toFixed(1)}</div>
+                      <div style={{ marginTop: '4px' }}>WMA: {statusData.wmaScore.toFixed(1)}</div>
+                      <div style={{ marginTop: '4px' }}>Trend: {getTrendLabel(statusData.trendStatus)}</div>
+                    </div>
+                  ) : (
+                    <div className="score-badge">WMA N/A</div>
+                  )}
                 </div>
                 {'wmaScore' in statusData ? (
-                  <div className="status-grid" style={{ marginTop: 12 }}>
-                    <div><span className="metric-label">Trend</span><strong>{getTrendLabel(statusData.trendStatus)}</strong></div>
-                    <div><span className="metric-label">Variance</span><strong>{statusData.variance.toFixed(2)}</strong></div>
-                    <div><span className="metric-label">Stability</span><strong>{getStabilityLabel(statusData.stabilityLevel)}</strong></div>
-                    <div><span className="metric-label">Momentum</span><strong>{getMomentumLabel(statusData.momentumStatus)}</strong></div>
-                    <div><span className="metric-label">Predicted</span><strong>{statusData.predictedScore.toFixed(1)}</strong></div>
-                    <div><span className="metric-label">Risk</span><strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong></div>
-                    <div><span className="metric-label">Confidence</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div>
-                    <div><span className="metric-label">Recommend</span><strong>{getRecommendationLabel(statusData.recommendation)}</strong></div>
-                  </div>
+                  <>
+                    <div className="status-grid" style={{ marginTop: 12 }}>
+                      <div><span className="metric-label">Trend</span><strong>{getTrendLabel(statusData.trendStatus)}</strong></div>
+                      <div><span className="metric-label">Variance</span><strong>{statusData.variance.toFixed(2)}</strong></div>
+                      <div><span className="metric-label">Stability</span><strong>{getStabilityLabel(statusData.stabilityLevel)}</strong></div>
+                      <div><span className="metric-label">Momentum</span><strong>{getMomentumLabel(statusData.momentumStatus)}</strong></div>
+                      <div><span className="metric-label">Predicted</span><strong>{statusData.predictedScore.toFixed(1)}</strong></div>
+                      <div><span className="metric-label">Risk</span><strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong></div>
+                      <div><span className="metric-label">Confidence</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div>
+                      <div><span className="metric-label">Recommend</span><strong>{getRecommendationLabel(statusData.recommendation)}</strong></div>
+                    </div>
+
+                    {'adjustedAverageScore' in statusData ? (
+                      <div className="status-grid" style={{ marginTop: 12 }}>
+                        <div><span className="metric-label">Average</span><strong>{statusData.averageScore.toFixed(1)}</strong></div>
+                        <div><span className="metric-label">Adjusted Avg</span><strong>{statusData.adjustedAverageScore.toFixed(1)}</strong></div>
+                        <div><span className="metric-label">Match Impact</span><strong>{statusData.matchImpactAvg.toFixed(2)}</strong></div>
+                        <div><span className="metric-label">Big Wins</span><strong>{statusData.bigWinCountLast5} ({(statusData.bigWinRate * 100).toFixed(0)}%)</strong></div>
+                        <div><span className="metric-label">Big Losses</span><strong>{statusData.bigLossCountLast5} ({(statusData.bigLossRate * 100).toFixed(0)}%)</strong></div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             ) : loadingStatus ? (

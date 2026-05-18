@@ -125,3 +125,53 @@ export function calculateLossStreak(results: MatchResult[]): number {
 export function clampScore(value: number): number {
   return roundToTwoDecimals(clamp(value, 0, 10));
 }
+
+export function normalizeMarginFlags(result: MatchResult, isBigWin?: boolean, isBigLoss?: boolean) {
+  if (result === 'Win') {
+    return {
+      isBigWin: Boolean(isBigWin),
+      isBigLoss: false
+    };
+  }
+
+  if (result === 'Loss') {
+    return {
+      isBigWin: false,
+      isBigLoss: Boolean(isBigLoss)
+    };
+  }
+
+  return {
+    isBigWin: false,
+    isBigLoss: false
+  };
+}
+
+export function calculateMatchImpact(result: MatchResult, isBigWin?: boolean, isBigLoss?: boolean): number {
+  if (result === 'Win') {
+    return isBigWin ? 0.4 : 0.2;
+  }
+  if (result === 'Loss') {
+    return isBigLoss ? -0.5 : -0.2;
+  }
+  return 0; // Draw
+}
+
+export function calculateAdjustedScore(rawScore: number, matchImpact: number): number {
+  const adjusted = rawScore + matchImpact;
+  return roundToTwoDecimals(clamp(adjusted, 1, 10));
+}
+
+export function calculateBigWinRate(bigWinCount: number, matchCount: number): number {
+  if (matchCount === 0) {
+    return 0;
+  }
+  return roundToTwoDecimals(bigWinCount / matchCount);
+}
+
+export function calculateBigLossRate(bigLossCount: number, matchCount: number): number {
+  if (matchCount === 0) {
+    return 0;
+  }
+  return roundToTwoDecimals(bigLossCount / matchCount);
+}

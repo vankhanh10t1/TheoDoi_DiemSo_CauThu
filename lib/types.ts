@@ -51,6 +51,8 @@ export interface StoredMatchItem {
   YellowCards?: number;
   RedCards?: number;
   Fouls?: number;
+  IsBigWin?: boolean;
+  IsBigLoss?: boolean;
 }
 
 export interface RecentMatch {
@@ -63,6 +65,8 @@ export interface RecentMatch {
   redCards?: number;
   fouls?: number;
   repeatedOffenses?: number;
+  isBigWin?: boolean;
+  isBigLoss?: boolean;
 }
 
 export interface PlayerStatusTrackingResponse {
@@ -98,6 +102,12 @@ export interface PlayerStatusEvaluatedResponse {
   fraudReasons: string[];
   recommendation: RecommendationAction;
   recommendationReason: string;
+  adjustedAverageScore: number;
+  bigWinCountLast5: number;
+  bigLossCountLast5: number;
+  bigWinRate: number;
+  bigLossRate: number;
+  matchImpactAvg: number;
   recentMatches: RecentMatch[];
 }
 
@@ -134,6 +144,12 @@ export interface PerformanceAnalysis {
   disciplineScore?: number;
   aggressionIndex?: number;
   disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
+  adjustedAverageScore: number;
+  bigWinCountLast5: number;
+  bigLossCountLast5: number;
+  bigWinRate: number;
+  bigLossRate: number;
+  matchImpactAvg: number;
 }
 
 export interface RatingPayload {
@@ -146,4 +162,6 @@ export interface RatingPayload {
   yellowCards?: number;
   redCards?: number;
   fouls?: number;
+  isBigWin?: boolean;
+  isBigLoss?: boolean;
 }
