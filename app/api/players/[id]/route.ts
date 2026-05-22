@@ -1,6 +1,7 @@
 import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../../lib/dynamodb';
+import { retryWithBackoff } from '../../../../lib/dynamodb-helpers';
 import { findDuplicatePlayerByName } from '../../../../lib/playerService';
 
 export const runtime = 'nodejs';
@@ -18,14 +19,18 @@ export async function GET(
   }
 
   try {
-    const response = await getDocumentClient().send(
-      new GetCommand({
-        TableName: getTableName(),
-        Key: {
-          PK: `PLAYER#${playerId}`,
-          SK: 'METADATA'
-        }
-      })
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new GetCommand({
+            TableName: getTableName(),
+            Key: {
+              PK: `PLAYER#${playerId}`,
+              SK: 'METADATA'
+            }
+          })
+        ),
+      { label: 'player.getMetadata' }
     );
 
     if (!response.Item) {
@@ -80,14 +85,18 @@ export async function PATCH(
   }
 
   try {
-    const existingResponse = await getDocumentClient().send(
-      new GetCommand({
-        TableName: getTableName(),
-        Key: {
-          PK: `PLAYER#${playerId}`,
-          SK: 'METADATA'
-        }
-      })
+    const existingResponse = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new GetCommand({
+            TableName: getTableName(),
+            Key: {
+              PK: `PLAYER#${playerId}`,
+              SK: 'METADATA'
+            }
+          })
+        ),
+      { label: 'player.getExistingMetadata' }
     );
 
     if (!existingResponse.Item) {
@@ -112,18 +121,22 @@ export async function PATCH(
       }
     }
 
-    await getDocumentClient().send(
-      new PutCommand({
-        TableName: getTableName(),
-        Item: {
-          PK: `PLAYER#${playerId}`,
-          SK: 'METADATA',
-          Name: name,
-          CardSeason: cardSeason,
-          Position: position,
-          CreatedAt: existingItem.CreatedAt ?? new Date().toISOString()
-        }
-      })
+    await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new PutCommand({
+            TableName: getTableName(),
+            Item: {
+              PK: `PLAYER#${playerId}`,
+              SK: 'METADATA',
+              Name: name,
+              CardSeason: cardSeason,
+              Position: position,
+              CreatedAt: existingItem.CreatedAt ?? new Date().toISOString()
+            }
+          })
+        ),
+      { label: 'player.updateMetadata' }
     );
 
     return NextResponse.json(
@@ -156,28 +169,36 @@ export async function DELETE(
 
   try {
     // Find and delete all match records for this player
-    const matchResponse = await getDocumentClient().send(
-      new QueryCommand({
-        TableName: getTableName(),
-        KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: {
-          ':pk': `PLAYER#${playerId}`
-        }
-      })
+    const matchResponse = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new QueryCommand({
+            TableName: getTableName(),
+            KeyConditionExpression: 'PK = :pk',
+            ExpressionAttributeValues: {
+              ':pk': `PLAYER#${playerId}`
+            }
+          })
+        ),
+      { label: 'player.deleteQuery' }
     );
 
     const items = matchResponse.Items ?? [];
 
     // Delete METADATA and all MATCH items
     for (const item of items) {
-      await getDocumentClient().send(
-        new DeleteCommand({
-          TableName: getTableName(),
-          Key: {
-            PK: item.PK,
-            SK: item.SK
-          }
-        })
+      await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new DeleteCommand({
+              TableName: getTableName(),
+              Key: {
+                PK: item.PK,
+                SK: item.SK
+              }
+            })
+          ),
+        { label: 'player.deleteItem' }
       );
     }
 

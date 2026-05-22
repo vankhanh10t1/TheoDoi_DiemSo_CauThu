@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRating } from '../../../../../lib/matchService';
 import { listPlayers } from '../../../../../lib/playerService';
+import { isDynamoThrottleError } from '../../../../../lib/dynamodb-helpers';
 import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
 
 function hasAtMostOneDecimalPlace(value: number): boolean {
@@ -173,6 +174,15 @@ export async function POST(
     );
   } catch (error) {
     console.error('Error in POST /api/matches/:id/ratings:', error);
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          error: 'DynamoDB đang bị giới hạn ghi khi lưu rating. Vui lòng thử lại sau vài giây.',
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to save match ratings',
@@ -218,6 +228,15 @@ export async function GET(
     );
   } catch (error) {
     console.error('Error in GET /api/matches/:id/ratings:', error);
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          error: 'DynamoDB đang bị giới hạn đọc. Vui lòng thử lại sau vài giây.',
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to get match ratings',
@@ -282,6 +301,15 @@ export async function DELETE(
     );
   } catch (error) {
     console.error('Error in DELETE /api/matches/:id/ratings:', error);
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          error: 'DynamoDB đang bị giới hạn ghi khi xóa rating. Vui lòng thử lại sau vài giây.',
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to delete rating',

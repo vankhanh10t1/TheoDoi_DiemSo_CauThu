@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMatch, listMatches } from '../../../lib/matchService';
+import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
 import type { CreateMatchPayload } from '../../../lib/types';
 
 /**
@@ -63,6 +64,15 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error in POST /api/matches:', error);
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          error: 'DynamoDB đang bị giới hạn ghi. Vui lòng thử lại sau vài giây.',
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to create match',
@@ -90,6 +100,15 @@ export async function GET() {
     );
   } catch (error) {
     console.error('Error in GET /api/matches:', error);
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          error: 'DynamoDB đang bị giới hạn đọc. Vui lòng thử lại sau vài giây.',
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to list matches',

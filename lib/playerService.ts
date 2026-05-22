@@ -1,5 +1,6 @@
-import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient, getTableName } from './dynamodb';
+import { retryWithBackoff } from './dynamodb-helpers';
 import { isDetailedPositionForGroup, isPositionGroup } from './positions';
 import type { PlayerMetadataItem, PlayerSummary, RecentMatch, StoredMatchItem } from './types';
 
@@ -18,28 +19,50 @@ function mapMetadataItem(item: PlayerMetadataItem): PlayerSummary {
 
 export async function listPlayers(): Promise<PlayerSummary[]> {
   try {
-    const response = await getDocumentClient().send(
-      new QueryCommand({
-        TableName: getTableName(),
-        KeyConditionExpression: 'PK = PK',
-        // DynamoDB doesn't allow querying without a proper key; fall back to Scan
-      })
-    );
+    const listIndexName = process.env.DYNAMODB_LIST_INDEX_NAME?.trim();
 
-    // If Query above isn't applicable, fall back to Scan for METADATA
-  } catch {
-    // ignore and continue to Scan below
-  }
+    if (listIndexName) {
+      try {
+        const indexed = await retryWithBackoff(
+          () =>
+            getDocumentClient().send(
+              new QueryCommand({
+                TableName: getTableName(),
+                IndexName: listIndexName,
+                KeyConditionExpression: 'SK = :metadata',
+                ExpressionAttributeValues: {
+                  ':metadata': 'METADATA'
+                }
+              })
+            ),
+          { label: 'listPlayers.queryIndex' }
+        );
 
-  try {
-    const resp = await getDocumentClient().send(
-      new (await import('@aws-sdk/lib-dynamodb')).ScanCommand({
-        TableName: getTableName(),
-        FilterExpression: 'SK = :metadata',
-        ExpressionAttributeValues: {
-          ':metadata': 'METADATA'
-        }
-      })
+        const indexedItems = (indexed.Items ?? []) as PlayerMetadataItem[];
+        return indexedItems
+          .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
+          .map(mapMetadataItem)
+          .filter((player) => player.playerId.trim().length > 0 && player.name.trim().length > 0);
+      } catch (error) {
+        console.warn('[playerService] listPlayers index query failed, falling back to scan', {
+          error: error instanceof Error ? error.message : String(error),
+          indexName: listIndexName
+        });
+      }
+    }
+
+    const resp = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new ScanCommand({
+            TableName: getTableName(),
+            FilterExpression: 'SK = :metadata',
+            ExpressionAttributeValues: {
+              ':metadata': 'METADATA'
+            }
+          })
+        ),
+      { label: 'listPlayers.scan' }
     );
 
     const items = (resp.Items ?? []) as PlayerMetadataItem[];
@@ -85,7 +108,9 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
     ...(typeof limit === 'number' ? { Limit: limit } : {})
   };
 
-  const response = await getDocumentClient().send(new QueryCommand(queryInput));
+  const response = await retryWithBackoff(() => getDocumentClient().send(new QueryCommand(queryInput)), {
+    label: 'getRecentMatches'
+  });
 
   return (response.Items ?? []).map((item): RecentMatch => {
     const match = item as StoredMatchItem;

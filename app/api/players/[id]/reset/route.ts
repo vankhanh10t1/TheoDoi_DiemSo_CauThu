@@ -1,6 +1,7 @@
 import { QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../../../lib/dynamodb';
+import { retryWithBackoff } from '../../../../../lib/dynamodb-helpers';
 
 export const runtime = 'nodejs';
 
@@ -18,15 +19,19 @@ export async function PATCH(
 
   try {
     // Find all MATCH records for this player (don't delete METADATA)
-    const matchResponse = await getDocumentClient().send(
-      new QueryCommand({
-        TableName: getTableName(),
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': `PLAYER#${playerId}`,
-          ':matchPrefix': 'MATCH#'
-        }
-      })
+    const matchResponse = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new QueryCommand({
+            TableName: getTableName(),
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
+            ExpressionAttributeValues: {
+              ':pk': `PLAYER#${playerId}`,
+              ':matchPrefix': 'MATCH#'
+            }
+          })
+        ),
+      { label: 'playerReset.queryMatches' }
     );
 
     const matches = matchResponse.Items ?? [];
@@ -34,14 +39,18 @@ export async function PATCH(
 
     // Delete only MATCH items, not METADATA
     for (const match of matches) {
-      await getDocumentClient().send(
-        new DeleteCommand({
-          TableName: getTableName(),
-          Key: {
-            PK: match.PK,
-            SK: match.SK
-          }
-        })
+      await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new DeleteCommand({
+              TableName: getTableName(),
+              Key: {
+                PK: match.PK,
+                SK: match.SK
+              }
+            })
+          ),
+        { label: 'playerReset.deleteMatchItem' }
       );
       deletedCount++;
     }

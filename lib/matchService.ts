@@ -1,5 +1,6 @@
-import { GetCommand, PutCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DeleteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient, getTableName, formatMatchTimestamp, createMatchSortKey } from './dynamodb';
+import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
 import { getPositionGroup } from './positions';
 import type {
   Match,
@@ -19,6 +20,41 @@ function generateMatchId(): string {
 
 function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+async function writeBatchedItems(tableName: string, items: unknown[]): Promise<void> {
+  for (const chunk of chunkArray(items, 25)) {
+    let pending = chunk;
+    let attempts = 0;
+
+    while (pending.length > 0) {
+      const response = await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new BatchWriteCommand({
+              RequestItems: {
+                [tableName]: pending.map((item) => ({ PutRequest: { Item: item as Record<string, unknown> } }))
+              }
+            })
+          ),
+        { label: 'saveMatchRatings.batchWrite' }
+      );
+
+      const unprocessed = response.UnprocessedItems?.[tableName] ?? [];
+      if (unprocessed.length === 0) {
+        break;
+      }
+
+      attempts++;
+      if (attempts > 4) {
+        throw new Error('BatchWrite returned unprocessed items after retries');
+      }
+
+      pending = unprocessed
+        .map((entry) => entry.PutRequest?.Item)
+        .filter((item): item is Record<string, unknown> => Boolean(item));
+    }
+  }
 }
 
 /**
@@ -57,11 +93,15 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
       UpdatedAt: now
     };
 
-    await getDocumentClient().send(
-      new PutCommand({
-        TableName: getTableName(),
-        Item: storedMatch
-      })
+    await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new PutCommand({
+            TableName: getTableName(),
+            Item: storedMatch
+          })
+        ),
+      { label: 'createMatch' }
     );
 
     return {
@@ -88,14 +128,18 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
  */
 export async function getMatchById(matchId: string): Promise<Match | null> {
   try {
-    const response = await getDocumentClient().send(
-      new GetCommand({
-        TableName: getTableName(),
-        Key: {
-          PK: `MATCH#${matchId}`,
-          SK: 'METADATA'
-        }
-      })
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new GetCommand({
+            TableName: getTableName(),
+            Key: {
+              PK: `MATCH#${matchId}`,
+              SK: 'METADATA'
+            }
+          })
+        ),
+      { label: 'getMatchById' }
     );
 
     if (!response.Item) return null;
@@ -287,13 +331,18 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       throw new Error('Duplicate playerId found in ratings payload');
     }
 
+    const existingRatings = await getMatchRatings(matchId);
+    const existingCreatedAtByPlayer = new Map(
+      existingRatings.map((rating) => [rating.playerId.toLowerCase(), rating.createdAt] as const)
+    );
+
     let created = 0;
     let updated = 0;
     const now = formatMatchTimestamp();
+    const tableName = getTableName();
+    const writeItems: unknown[] = [];
 
     for (const ratingData of payload.ratings) {
-      const existingRating = await getPlayerMatchRating(matchId, ratingData.playerId);
-      
       const storedRating: StoredPlayerMatchRating = {
         PK: `MATCH#${matchId}`,
         SK: `RATING#${ratingData.playerId}`,
@@ -306,18 +355,10 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         Goals: ratingData.goals,
         Assists: ratingData.assists,
         Note: ratingData.note,
-        CreatedAt: existingRating?.createdAt ?? now,
+        CreatedAt: existingCreatedAtByPlayer.get(ratingData.playerId.toLowerCase()) ?? now,
         UpdatedAt: now
       };
-
-      await getDocumentClient().send(
-        new PutCommand({
-          TableName: getTableName(),
-          Item: storedRating
-        })
-      );
-
-      console.debug('[matchService] wrote storedRating', { PK: storedRating.PK, SK: storedRating.SK, PlayerId: storedRating.PlayerId });
+      writeItems.push(storedRating);
 
       // Also write per-player match entry for quick player-centric queries
       try {
@@ -329,7 +370,7 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
           LOSE: 'Loss'
         };
 
-        const playerMatchItem: any = {
+        const playerMatchItem: Record<string, unknown> = {
           PK: `PLAYER#${ratingData.playerId}`,
           SK: playerSk,
           Score: roundToOneDecimal(ratingData.rating),
@@ -344,12 +385,7 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
           IsBigLoss: !!match.isBigLoss
         };
 
-        await getDocumentClient().send(
-          new PutCommand({
-            TableName: getTableName(),
-            Item: playerMatchItem
-          })
-        );
+        writeItems.push(playerMatchItem);
 
         console.debug('[matchService] wrote player-centric match item', { 
           PK: playerMatchItem.PK, 
@@ -363,12 +399,14 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         console.error('Failed to write player-centric match item:', err);
       }
 
-      if (existingRating) {
+      if (existingCreatedAtByPlayer.has(ratingData.playerId.toLowerCase())) {
         updated++;
       } else {
         created++;
       }
     }
+
+    await writeBatchedItems(tableName, writeItems);
 
     console.info('[matchService] saveMatchRatings COMPLETE', { 
       matchId, 
@@ -389,15 +427,19 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
  */
 export async function getMatchRatings(matchId: string): Promise<PlayerMatchRating[]> {
   try {
-    const response = await getDocumentClient().send(
-      new QueryCommand({
-        TableName: getTableName(),
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :ratingPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': `MATCH#${matchId}`,
-          ':ratingPrefix': 'RATING#'
-        }
-      })
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new QueryCommand({
+            TableName: getTableName(),
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :ratingPrefix)',
+            ExpressionAttributeValues: {
+              ':pk': `MATCH#${matchId}`,
+              ':ratingPrefix': 'RATING#'
+            }
+          })
+        ),
+      { label: 'getMatchRatings' }
     );
 
     const items = (response.Items ?? []) as StoredPlayerMatchRating[];

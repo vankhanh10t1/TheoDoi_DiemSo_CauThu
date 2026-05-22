@@ -1,6 +1,7 @@
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
+import { isDynamoThrottleError, retryWithBackoff } from '../../../lib/dynamodb-helpers';
 import { buildRecommendationsFromTableItems } from '../../../lib/recommendationService';
 
 export const runtime = 'nodejs';
@@ -12,11 +13,15 @@ async function scanAllTableItems(): Promise<RecommendationTableItem[]> {
   let exclusiveStartKey: Record<string, unknown> | undefined;
 
   do {
-    const response = await getDocumentClient().send(
-      new ScanCommand({
-        TableName: getTableName(),
-        ExclusiveStartKey: exclusiveStartKey
-      })
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new ScanCommand({
+            TableName: getTableName(),
+            ExclusiveStartKey: exclusiveStartKey
+          })
+        ),
+      { label: 'recommendations.scanAllTableItems' }
     );
 
     items.push(...((response.Items ?? []) as RecommendationTableItem[]));
@@ -36,9 +41,6 @@ export async function GET() {
       { status: 200 }
     );
   } catch {
-    return NextResponse.json(
-      { recommendations: [], totalCount: 0 },
-      { status: 200 }
-    );
+    return NextResponse.json({ recommendations: [], totalCount: 0 }, { status: 200 });
   }
 }

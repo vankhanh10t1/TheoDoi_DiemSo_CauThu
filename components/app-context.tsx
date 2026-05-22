@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import type { PlayerSummary } from '../lib/types';
 
 export type AppTab = 'tracker' | 'squad' | 'recommendations' | 'player-detail';
@@ -36,71 +36,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [players, setPlayers] = useState<Array<{ playerId: string; name: string; cardSeason: string; position: string }>>([]);
   const [playersError, setPlayersError] = useState<string | null>(null);
+  const loadPlayersPromiseRef = useRef<Promise<void> | null>(null);
 
   async function loadPlayers() {
+    if (loadPlayersPromiseRef.current) {
+      return loadPlayersPromiseRef.current;
+    }
+
     const requestStartedAt = Date.now();
 
-    try {
-      console.info('[players] loading from /api/players');
-      const res = await fetch('/api/players');
-      const payload = (await res.json()) as
-        | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
-        | {
-            items?: Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>;
-            message?: string;
-            error?: string;
-            requestId?: string;
-            durationMs?: number;
-          };
+    loadPlayersPromiseRef.current = (async () => {
+      try {
+        console.info('[players] loading from /api/players');
+        const res = await fetch('/api/players');
+        const payload = (await res.json()) as
+          | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
+          | {
+              items?: Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>;
+              message?: string;
+              error?: string;
+              requestId?: string;
+              durationMs?: number;
+            };
 
-      console.info('[players] /api/players response', {
-        ok: res.ok,
-        status: res.status,
-        elapsedMs: Date.now() - requestStartedAt,
-        payloadKind: Array.isArray(payload) ? 'array' : 'object'
-      });
-
-      if (!res.ok) {
-        const message = !Array.isArray(payload)
-          ? payload.error ?? payload.message ?? 'Failed to load players'
-          : 'Failed to load players';
-        setPlayers([]);
-        setPlayersError(message);
-        console.error('[players] load failed', {
+        console.info('[players] /api/players response', {
+          ok: res.ok,
           status: res.status,
-          message,
-          requestId: !Array.isArray(payload) ? payload.requestId : undefined,
-          durationMs: !Array.isArray(payload) ? payload.durationMs : undefined
+          elapsedMs: Date.now() - requestStartedAt,
+          payloadKind: Array.isArray(payload) ? 'array' : 'object'
         });
-        return;
-      }
 
-      const items = Array.isArray(payload) ? payload : payload.items ?? [];
-      // Ensure all items have the correct field names (cardSeason, not season)
-      const normalizedItems = items
-        .filter((item) => {
-          const playerId = typeof item.playerId === 'string' ? item.playerId.trim() : '';
-          const name = typeof item.name === 'string' ? item.name.trim() : '';
-          return playerId.length > 0 && name.length > 0;
-        })
-        .map(item => ({
-          playerId: item.playerId,
-          name: item.name,
-          cardSeason: item.cardSeason ?? item.season ?? '',
-          position: item.position ?? ''
-        }));
-      setPlayers(normalizedItems);
-      setPlayersError(null);
-      console.info('[players] load success', {
-        count: items.length,
-        elapsedMs: Date.now() - requestStartedAt,
-        requestId: Array.isArray(payload) ? undefined : payload.requestId
-      });
-    } catch (error) {
-      setPlayers([]);
-      setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
-      console.error('[players] load exception', error);
-    }
+        if (!res.ok) {
+          const message = !Array.isArray(payload)
+            ? payload.error ?? payload.message ?? 'Failed to load players'
+            : 'Failed to load players';
+          setPlayers([]);
+          setPlayersError(message);
+          console.error('[players] load failed', {
+            status: res.status,
+            message,
+            requestId: !Array.isArray(payload) ? payload.requestId : undefined,
+            durationMs: !Array.isArray(payload) ? payload.durationMs : undefined
+          });
+          return;
+        }
+
+        const items = Array.isArray(payload) ? payload : payload.items ?? [];
+        const normalizedItems = items
+          .filter((item) => {
+            const playerId = typeof item.playerId === 'string' ? item.playerId.trim() : '';
+            const name = typeof item.name === 'string' ? item.name.trim() : '';
+            return playerId.length > 0 && name.length > 0;
+          })
+          .map((item) => ({
+            playerId: item.playerId,
+            name: item.name,
+            cardSeason: item.cardSeason ?? item.season ?? '',
+            position: item.position ?? ''
+          }));
+        setPlayers(normalizedItems);
+        setPlayersError(null);
+        console.info('[players] load success', {
+          count: items.length,
+          elapsedMs: Date.now() - requestStartedAt,
+          requestId: Array.isArray(payload) ? undefined : payload.requestId
+        });
+      } catch (error) {
+        setPlayers([]);
+        setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
+        console.error('[players] load exception', error);
+      } finally {
+        loadPlayersPromiseRef.current = null;
+      }
+    })();
+
+    return loadPlayersPromiseRef.current;
   }
 
   async function addPlayer(data: { name: string; cardSeason: string; position: string }) {

@@ -1,7 +1,8 @@
-import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
-import { findDuplicatePlayerByName } from '../../../lib/playerService';
+import { findDuplicatePlayerByName, listPlayers } from '../../../lib/playerService';
+import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
 
 export const runtime = 'nodejs';
 
@@ -43,39 +44,7 @@ export async function GET() {
       );
     }
 
-    const tableName = getTableName();
-    console.info(`[${requestId}] Using DynamoDB table`, { tableName });
-
-    const response = await getDocumentClient().send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'SK = :metadata',
-        ExpressionAttributeValues: {
-          ':metadata': 'METADATA'
-        }
-      })
-    );
-
-    console.info(`[${requestId}] Scan completed`, {
-      itemCount: response.Items?.length ?? 0,
-      scannedCount: response.ScannedCount,
-      count: response.Count,
-      consumedCapacity: response.ConsumedCapacity
-    });
-
-    const items = (response.Items ?? [])
-      .filter((item: any) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
-      .map((item: any) => ({
-        playerId: item.PK.replace(/^PLAYER#/, ''),
-        name: item.Name,
-        cardSeason: item.CardSeason ?? item.Season ?? '', // Support both new and legacy field names
-        position: item.Position
-      }))
-      .filter(
-        (item) =>
-          typeof item.playerId === 'string' && item.playerId.length > 0 &&
-          typeof item.name === 'string' && item.name.trim().length > 0
-      );
+    const items = await listPlayers();
 
     console.info(`[${requestId}] /api/players GET success`, {
       durationMs: Date.now() - startedAt,
@@ -88,7 +57,6 @@ export async function GET() {
         meta: {
           requestId,
           returnedCount: items.length,
-          tableName,
           durationMs: Date.now() - startedAt
         }
       },
@@ -97,6 +65,18 @@ export async function GET() {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const durationMs = Date.now() - startedAt;
+    if (isDynamoThrottleError(error)) {
+      return NextResponse.json(
+        {
+          message: 'DynamoDB đang bị giới hạn đọc danh sách cầu thủ. Vui lòng thử lại sau vài giây.',
+          error: errorMessage,
+          durationMs,
+          requestId,
+          code: 'DYNAMODB_THROTTLED'
+        },
+        { status: 429 }
+      );
+    }
     console.error(`[${requestId}] Failed to load players`, {
       errorMessage,
       durationMs,

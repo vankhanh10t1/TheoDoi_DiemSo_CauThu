@@ -94,6 +94,7 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
   const [ratings, setRatings] = useState<PlayerRating[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const submittingRef = React.useRef(false);
 
   useEffect(() => {
     const safePlayers = Array.isArray(players) ? players : [];
@@ -154,6 +155,11 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+
+    submittingRef.current = true;
     setMessage(null);
     setLoading(true);
 
@@ -238,6 +244,7 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
       });
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 

@@ -21,6 +21,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
   const [result, setResult] = useState<'WIN' | 'DRAW' | 'LOSE' | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const submittingRef = useRef(false);
 
   // Auto-calculate result when scores change
   React.useEffect(() => {
@@ -44,6 +45,11 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+
+    submittingRef.current = true;
     setMessage(null);
     setLoading(true);
 
@@ -101,6 +107,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
       });
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 

@@ -78,10 +78,6 @@ Hệ thống dùng Weighted Moving Average làm current form score chính:
    }
    ```
 
-**Endpoint Cũ:**
-- `POST /api/rating` **không còn dùng** và trả về `410 Gone`
-- Điểm cầu thủ cũ lưu dưới `PLAYER#...` sẽ không tự động xuất hiện trong truy vấn match-first
-- Để di chuyển dữ liệu cũ, chạy script migration để chuyển `PLAYER#...` thành `MATCH#...` / `RATING#...`
 ### Trend Detection
 
 ```txt
