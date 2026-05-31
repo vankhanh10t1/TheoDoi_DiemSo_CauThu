@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Match, PlayerSummary, DetailedPosition, PositionGroup } from '../lib/types';
 import { useAppContext } from './app-context';
+import { fetchWithDebug } from '../lib/client-api';
 
 interface BulkRatingInputFormProps {
   match: Match;
@@ -212,11 +213,11 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
 
       console.info('[client] POST /api/matches/%s/ratings payload', match.id, payload);
 
-      const response = await fetch(`/api/matches/${match.id}/ratings`, {
+      const response = await fetchWithDebug(`/api/matches/${match.id}/ratings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }, { caller: 'BulkRatingInputForm.handleSubmit' });
 
       const data = await response.json();
       console.info('[client] /api/matches/%s/ratings response', match.id, { ok: response.ok, status: response.status, body: data });

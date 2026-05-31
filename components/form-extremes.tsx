@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { fetchWithDebug } from '../lib/client-api';
 
 interface RecentMatch {
   sk: string;
@@ -44,7 +45,7 @@ export function FormExtremesCard() {
       setError(null);
 
       try {
-        const response = await fetch('/api/form-extremes');
+        const response = await fetchWithDebug('/api/form-extremes', undefined, { caller: 'FormExtremesCard.loadFormExtremes' });
         const payload = (await response.json()) as FormExtremesResponse & { message?: string };
 
         if (!response.ok) {

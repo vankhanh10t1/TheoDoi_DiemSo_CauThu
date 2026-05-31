@@ -5,6 +5,7 @@ import type { PlayerSummary } from '../lib/types';
 import { useAppContext } from './app-context';
 import { SquadPlayerCard } from './SquadPlayerCard';
 import { POSITION_GROUPS, groupPlayersByPosition } from '../lib/positions';
+import { fetchWithDebug } from '../lib/client-api';
 
 type SearchField = 'name' | 'cardSeason' | 'position';
 
@@ -186,7 +187,7 @@ export function SquadManagement() {
     setSaveMessage(null);
 
     try {
-      const response = await fetch(`/api/players/${playerId}`, {
+      const response = await fetchWithDebug(`/api/players/${playerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -194,7 +195,7 @@ export function SquadManagement() {
           cardSeason: editFormData.cardSeason,
           position: editFormData.position
         })
-      });
+      }, { caller: 'SquadManagement.handleUpdatePlayer' });
 
       const payload = (await response.json()) as { message?: string };
 
@@ -217,7 +218,7 @@ export function SquadManagement() {
   function handleViewDetail(playerId: string) {
     (async () => {
       try {
-        const res = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        const res = await fetchWithDebug(`/api/players/${encodeURIComponent(playerId)}`, undefined, { caller: 'SquadManagement.handleViewDetail' });
         if (!res.ok) {
           alert('Cầu thủ không tồn tại trong hệ thống');
           return;

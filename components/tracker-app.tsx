@@ -6,6 +6,7 @@ import { FormExtremesCard } from './form-extremes';
 import { PerformanceTable } from './PerformanceTable';
 import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
+import { fetchWithDebug } from '../lib/client-api';
 
 type AllPlayersFormRow = {
   name?: string;
@@ -89,6 +90,18 @@ export function TrackerApp() {
   const selectedPlayer = players.find((player) => player.playerId === selectedPlayerId) ?? null;
 
   useEffect(() => {
+    if (selectedPlayerId && !players.some((player) => player.playerId === selectedPlayerId)) {
+      if (players[0]?.playerId) {
+        setSelectedPlayerId(players[0].playerId);
+      } else {
+        setSelectedPlayerId('');
+        setStatusData(null);
+        setStatusError(null);
+      }
+
+      return;
+    }
+
     if (!selectedPlayerId && players[0]?.playerId) {
       setSelectedPlayerId(players[0].playerId);
     }
@@ -98,7 +111,7 @@ export function TrackerApp() {
     const loadAllPlayersForm = async () => {
       setFormDataLoading(true);
       try {
-        const res = await fetch('/api/form-extremes');
+        const res = await fetchWithDebug('/api/form-extremes', undefined, { caller: 'TrackerApp.loadFormExtremes' });
         const data = (await res.json()) as { allForms?: AllPlayersFormRow[] };
         if (Array.isArray(data.allForms)) {
           setAllPlayersFormData(data.allForms);
@@ -127,9 +140,9 @@ export function TrackerApp() {
       setStatusError(null);
 
       try {
-        const response = await fetch(`/api/player-status?id=${encodeURIComponent(selectedPlayerId)}`, {
+        const response = await fetchWithDebug(`/api/player-status?id=${encodeURIComponent(selectedPlayerId)}`, {
           signal: controller.signal
-        });
+        }, { caller: 'TrackerApp.loadStatus' });
 
         const errorPayload = (await response.json()) as { message?: string };
 
@@ -161,7 +174,7 @@ export function TrackerApp() {
 
   async function refreshPlayerStatus(playerId: string) {
     try {
-      const response = await fetch(`/api/player-status?id=${encodeURIComponent(playerId)}`);
+      const response = await fetchWithDebug(`/api/player-status?id=${encodeURIComponent(playerId)}`, undefined, { caller: 'TrackerApp.refreshPlayerStatus' });
       const errorPayload = (await response.json()) as { message?: string };
 
       if (!response.ok) {
@@ -190,11 +203,11 @@ export function TrackerApp() {
 
     setCreatingMatch(true);
     try {
-      const res = await fetch('/api/matches', {
+      const res = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createForm)
-      });
+      }, { caller: 'TrackerApp.handleCreateMatch' });
 
       const payload = await res.json();
       if (!res.ok) {
@@ -359,7 +372,7 @@ export function TrackerApp() {
                   // reload form-extremes (all players form data)
                   setFormDataLoading(true);
                   try {
-                    const res = await fetch('/api/form-extremes');
+                    const res = await fetchWithDebug('/api/form-extremes', undefined, { caller: 'TrackerApp.reloadFormExtremesAfterSave' });
                     const data = (await res.json()) as { allForms?: AllPlayersFormRow[] };
                     if (Array.isArray(data.allForms)) {
                       setAllPlayersFormData(data.allForms);

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import type { Match } from '../lib/types';
+import { fetchWithDebug } from '../lib/client-api';
 
 interface CreateMatchFormProps {
   onMatchCreated?: (match: Match) => void;
@@ -67,11 +68,11 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         return;
       }
 
-      const response = await fetch('/api/matches', {
+      const response = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
-      });
+      }, { caller: 'CreateMatchForm.handleSubmit' });
 
       const data = await response.json();
 

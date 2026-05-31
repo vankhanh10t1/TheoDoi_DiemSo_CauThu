@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
+import { fetchWithDebug } from '../lib/client-api';
 
 function getTrendLabel(status?: string): string {
   if (status === 'UP') return 'Tăng';
@@ -56,9 +57,9 @@ export function PlayerDetail() {
       setStatusError(null);
 
       try {
-        const res = await fetch(
+        const res = await fetchWithDebug(
           `/api/player-status?id=${encodeURIComponent(selectedPlayerId || '')}`
-        );
+        , undefined, { caller: 'PlayerDetail.loadStatus' });
         const errorPayload = (await res.json()) as { message?: string };
 
         if (!res.ok) {

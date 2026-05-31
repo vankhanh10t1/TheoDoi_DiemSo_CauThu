@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TransferRecommendation } from '../lib/recommendationService';
 import { useAppContext } from './app-context';
+import { fetchWithDebug } from '../lib/client-api';
 
 function getTrendEmoji(trend: string): string {
   switch (trend) {
@@ -93,7 +94,7 @@ export function TransferRecommendation() {
       setError(null);
 
       try {
-        const res = await fetch('/api/recommendations');
+        const res = await fetchWithDebug('/api/recommendations', undefined, { caller: 'TransferRecommendation.loadRecommendations' });
         const data = (await res.json()) as { recommendations: TransferRecommendation[] };
         setRecommendations(data.recommendations || []);
       } catch (err) {
@@ -135,7 +136,7 @@ export function TransferRecommendation() {
   function handleViewDetail(playerId: string) {
     (async () => {
       try {
-        const res = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+        const res = await fetchWithDebug(`/api/players/${encodeURIComponent(playerId)}`, undefined, { caller: 'TransferRecommendation.handleViewDetail' });
         if (!res.ok) {
           setError('Cầu thủ không tồn tại trong hệ thống');
           return;

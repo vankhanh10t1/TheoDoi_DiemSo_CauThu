@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import type { PlayerSummary } from '../lib/types';
+import { fetchWithDebug } from '../lib/client-api';
 
 export type AppTab = 'tracker' | 'squad' | 'recommendations' | 'player-detail';
 
@@ -48,7 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadPlayersPromiseRef.current = (async () => {
       try {
         console.info('[players] loading from /api/players');
-        const res = await fetch('/api/players');
+        const res = await fetchWithDebug('/api/players', undefined, { caller: 'AppContext.loadPlayers' });
         const payload = (await res.json()) as
           | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
           | {
@@ -115,11 +116,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function addPlayer(data: { name: string; cardSeason: string; position: string }) {
     try {
-      const res = await fetch('/api/players', {
+      const res = await fetchWithDebug('/api/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: data.name, season: data.cardSeason, position: data.position })
-      });
+      }, { caller: 'AppContext.addPlayer' });
 
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
@@ -132,7 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function deletePlayer(playerId: string) {
     try {
-      const res = await fetch(`/api/players/${playerId}`, { method: 'DELETE' });
+      const res = await fetchWithDebug(`/api/players/${playerId}`, { method: 'DELETE' }, { caller: 'AppContext.deletePlayer' });
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
       await loadPlayers();
@@ -144,7 +145,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function resetPlayerData(playerId: string) {
     try {
-      const res = await fetch(`/api/players/${playerId}/reset`, { method: 'PATCH' });
+      const res = await fetchWithDebug(`/api/players/${playerId}/reset`, { method: 'PATCH' }, { caller: 'AppContext.resetPlayerData' });
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
       return { ok: true };
