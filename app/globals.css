@@ -444,9 +444,13 @@ h2 {
 }
 
 .squad-search-field {
-  min-width: 260px;
+  min-width: 320px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
 }
 
+.squad-search-field select,
 .squad-search-field input {
   width: 100%;
   border-radius: 999px;
@@ -458,6 +462,17 @@ h2 {
 }
 
 .squad-search-field input:focus {
+  border-color: rgba(15, 125, 82, 0.35);
+  box-shadow: 0 0 0 4px rgba(15, 125, 82, 0.08);
+}
+
+.squad-search-field select {
+  width: auto;
+  min-width: 112px;
+  padding-right: 12px;
+}
+
+.squad-search-field select:focus {
   border-color: rgba(15, 125, 82, 0.35);
   box-shadow: 0 0 0 4px rgba(15, 125, 82, 0.08);
 }
@@ -582,6 +597,92 @@ h2 {
 
 .player-card-actions button {
   flex: 1;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(9, 17, 13, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.confirmation-modal {
+  width: min(100%, 520px);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.confirmation-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.confirmation-modal-eyebrow {
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.confirmation-modal h3 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.confirmation-modal-copy {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.confirmation-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(15, 125, 82, 0.06);
+  border: 1px solid rgba(15, 125, 82, 0.1);
+}
+
+.confirmation-modal-summary span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.confirmation-modal-summary strong {
+  display: block;
+  word-break: break-word;
+}
+
+.confirmation-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.confirmation-modal-actions .danger-button:disabled,
+.confirmation-modal-actions .secondary-button:disabled,
+.confirmation-modal-header .tertiary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .detail-grid {
@@ -926,5 +1027,24 @@ h2 {
   .squad-search-field {
     min-width: 0;
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .squad-search-field select,
+  .squad-search-field input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .confirmation-modal-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmation-modal-actions {
+    justify-content: stretch;
+  }
+
+  .confirmation-modal-actions button {
+    flex: 1;
   }
 }

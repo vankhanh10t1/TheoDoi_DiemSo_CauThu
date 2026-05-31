@@ -6,6 +6,8 @@ import { useAppContext } from './app-context';
 import { SquadPlayerCard } from './SquadPlayerCard';
 import { POSITION_GROUPS, groupPlayersByPosition } from '../lib/positions';
 
+type SearchField = 'name' | 'cardSeason' | 'position';
+
 type AddPlayerForm = {
   name: string;
   cardSeason: string;
@@ -62,6 +64,34 @@ export function SquadManagement() {
     position: ''
   });
   const [searchText, setSearchText] = useState('');
+  const [searchField, setSearchField] = useState<SearchField>('name');
+  const [pendingDeletePlayer, setPendingDeletePlayer] = useState<PlayerSummary | null>(null);
+  const [isDeletingPlayer, setIsDeletingPlayer] = useState(false);
+
+  function normalizeSearchValue(value?: string) {
+    return (value ?? 'N/A').trim().toLowerCase();
+  }
+
+  function getPlayerSearchValue(player: PlayerSummary, field: SearchField) {
+    if (field === 'name') return player.name;
+    if (field === 'cardSeason') return player.cardSeason ?? 'N/A';
+    return player.position ?? 'N/A';
+  }
+
+  function getPlayerDisplayValue(value?: string) {
+    const normalized = value?.trim();
+    return normalized ? normalized : 'N/A';
+  }
+
+  function getPositionLabel(position?: string) {
+    const normalizedPosition = position?.trim().toUpperCase();
+    if (!normalizedPosition) {
+      return 'N/A';
+    }
+
+    const match = POSITION_OPTIONS.find((option) => option.value === normalizedPosition);
+    return match ? match.label : normalizedPosition;
+  }
 
   const filteredPlayers = useMemo(() => {
     const normalizedQuery = searchText.trim().toLowerCase();
@@ -69,8 +99,10 @@ export function SquadManagement() {
       return players;
     }
 
-    return players.filter((player) => player.name.trim().toLowerCase().includes(normalizedQuery));
-  }, [players, searchText]);
+    return players.filter((player) =>
+      normalizeSearchValue(getPlayerSearchValue(player, searchField)).includes(normalizedQuery)
+    );
+  }, [players, searchField, searchText]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,21 +130,40 @@ export function SquadManagement() {
   }
 
   async function handleDeletePlayer(playerId: string) {
-    if (!confirm(`Xóa cầu thủ ${playerId}? Tất cả dữ liệu trận đấu sẽ bị xóa.`)) {
+    const playerToDelete = pendingDeletePlayer;
+    if (!playerToDelete || isDeletingPlayer || playerToDelete.playerId !== playerId) {
       return;
     }
+
+    setIsDeletingPlayer(true);
 
     try {
       const result = await deletePlayer(playerId);
       if (!result.ok) throw new Error(result.message ?? 'Failed');
 
       setSaveMessage({ text: 'Cầu thủ đã xóa thành công', type: 'success' });
+      setPendingDeletePlayer(null);
     } catch (err) {
       setSaveMessage({
         text: err instanceof Error ? err.message : 'Không thể xóa cầu thủ',
         type: 'error'
       });
+    } finally {
+      setIsDeletingPlayer(false);
     }
+  }
+
+  function openDeleteConfirm(player: PlayerSummary) {
+    setPendingDeletePlayer(player);
+    setSaveMessage(null);
+  }
+
+  function closeDeleteConfirm() {
+    if (isDeletingPlayer) {
+      return;
+    }
+
+    setPendingDeletePlayer(null);
   }
 
   function handleStartEdit(player: PlayerSummary) {
@@ -184,12 +235,28 @@ export function SquadManagement() {
       <div className="screen-header">
         <h2>Quản Lý Đội Hình</h2>
         <div className="squad-header-controls">
-          <label className="squad-search-field" aria-label="Tìm kiếm cầu thủ theo tên">
+          <label className="squad-search-field" aria-label="Tìm kiếm cầu thủ theo tiêu chí">
+            <select
+              value={searchField}
+              onChange={(event) => setSearchField(event.target.value as SearchField)}
+              aria-label="Chọn tiêu chí tìm kiếm"
+            >
+              <option value="name">Tên</option>
+              <option value="cardSeason">Mùa thẻ</option>
+              <option value="position">Vị trí</option>
+            </select>
             <input
               type="text"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Tìm cầu thủ theo tên..."
+              placeholder={
+                searchField === 'name'
+                  ? 'Tìm theo tên cầu thủ...'
+                  : searchField === 'cardSeason'
+                    ? 'Tìm theo mùa thẻ...'
+                    : 'Tìm theo vị trí...'
+              }
+              aria-label="Nhập từ khóa tìm kiếm"
             />
           </label>
           <button className="primary-button" onClick={() => setShowForm(!showForm)}>
@@ -297,7 +364,7 @@ export function SquadManagement() {
                           </button>
                           <button
                             className="danger-button"
-                            onClick={() => handleDeletePlayer(player.playerId)}
+                            onClick={() => openDeleteConfirm(player)}
                           >
                             Xóa
                           </button>
@@ -368,6 +435,79 @@ export function SquadManagement() {
               );
             });
           })()}
+        </div>
+      )}
+
+      {pendingDeletePlayer && (
+        <div className="modal-backdrop" role="presentation" onClick={closeDeleteConfirm}>
+          <div
+            className="confirmation-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-player-title"
+            aria-describedby="delete-player-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="confirmation-modal-header">
+              <div>
+                <p className="confirmation-modal-eyebrow">Xác nhận xóa</p>
+                <h3 id="delete-player-title">Xóa cầu thủ này?</h3>
+              </div>
+              <button
+                type="button"
+                className="tertiary-button"
+                onClick={closeDeleteConfirm}
+                disabled={isDeletingPlayer}
+                aria-label="Đóng hộp xác nhận xóa"
+              >
+                ×
+              </button>
+            </div>
+
+            <p id="delete-player-description" className="confirmation-modal-copy">
+              Tất cả dữ liệu trận đấu liên quan sẽ bị xóa.
+            </p>
+
+            <div className="confirmation-modal-summary">
+              <div>
+                <span>Tên</span>
+                <strong>{getPlayerDisplayValue(pendingDeletePlayer.name)}</strong>
+              </div>
+              <div>
+                <span>Mùa thẻ</span>
+                <strong>{getPlayerDisplayValue(pendingDeletePlayer.cardSeason)}</strong>
+              </div>
+              <div>
+                <span>Vị trí</span>
+                <strong>{getPositionLabel(pendingDeletePlayer.position)}</strong>
+              </div>
+            </div>
+
+            {saveMessage?.type === 'error' ? (
+              <div className="inline-message error" style={{ marginTop: 0 }}>
+                {saveMessage.text}
+              </div>
+            ) : null}
+
+            <div className="confirmation-modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeDeleteConfirm}
+                disabled={isDeletingPlayer}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => void handleDeletePlayer(pendingDeletePlayer.playerId)}
+                disabled={isDeletingPlayer}
+              >
+                {isDeletingPlayer ? 'Đang xóa...' : 'Xóa'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
