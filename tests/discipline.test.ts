@@ -9,8 +9,8 @@ const sampleMatches = [
 
 describe('Discipline module', () => {
   it('calculates aggression index correctly', () => {
-    const r = calculateAggressionIndex({ fouls: 6, yellowCards: 3, redCards: 1 });
-    expect(r.aggressionIndex).toBeGreaterThan(0);
+    const r = calculateAggressionIndex({ fouls: 6, yellowCards: 3, redCards: 1, matchCount: 3 });
+    expect(r.aggressionIndex).toBe(4.67);
     expect(['LOW', 'MEDIUM', 'HIGH']).toContain(r.aggressionLevel);
   });
 
@@ -22,6 +22,6 @@ describe('Discipline module', () => {
 
   it('detects discipline trend', () => {
     const t = calculateDisciplineTrend(sampleMatches);
-    expect(['IMPROVING', 'STABLE', 'DETERIORATING']).toContain(t);
+    expect(t).toBe('IMPROVING');
   });
 });

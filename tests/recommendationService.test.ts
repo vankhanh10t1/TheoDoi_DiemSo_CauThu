@@ -14,18 +14,21 @@ describe('recommendationService', () => {
       {
         PK: 'PLAYER#P001',
         SK: 'MATCH#20260503T120000Z',
+        MatchDate: '2026-05-03',
         Score: 9,
         Result: 'Win'
       },
       {
         PK: 'PLAYER#P001',
         SK: 'MATCH#20260502T120000Z',
+        MatchDate: '2026-05-02',
         Score: 8,
         Result: 'Win'
       },
       {
         PK: 'PLAYER#P001',
         SK: 'MATCH#20260501T120000Z',
+        MatchDate: '2026-05-01',
         Score: 7,
         Result: 'Draw'
       },
@@ -53,7 +56,7 @@ describe('recommendationService', () => {
       position: 'ST',
       matchCount: 3,
       recommendation: 'KEEP',
-      status: 'Stable',
+      status: 'Star Player',
       trend: 'UP',
       wmaScore: 8.46,
       fraudRisk: false

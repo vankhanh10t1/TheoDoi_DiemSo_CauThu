@@ -266,7 +266,23 @@ h2 {
   border-radius: 22px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
-  min-height: 100%;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.evaluation-flow-card {
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.evaluation-flow-card .status-card {
+  margin: 0;
+  max-width: 100%;
 }
 
 .status-card.green {
@@ -310,6 +326,123 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.status-grid > div {
+  min-width: 0;
+}
+
+.status-grid strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.status-action-grid {
+  align-items: stretch;
+}
+
+.status-action-grid > div {
+  display: grid;
+  align-content: start;
+  min-height: 74px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.status-fraud-cell.alert strong {
+  color: var(--red);
+}
+
+.status-fraud-alert {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.performance-table {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.performance-col-name {
+  width: auto;
+}
+
+.performance-col-season {
+  width: 86px;
+}
+
+.performance-col-position {
+  width: 110px;
+}
+
+.performance-col-number {
+  width: 92px;
+}
+
+.performance-col-status {
+  width: 126px;
+}
+
+.performance-sort-header {
+  position: relative;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.performance-sort-indicator {
+  display: inline-block;
+  margin-left: 6px;
+  opacity: 0;
+  font-weight: 900;
+  transform: translateY(-1px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.performance-sort-header:hover .performance-sort-indicator {
+  opacity: 0.34;
+}
+
+.performance-sort-indicator.active,
+.performance-sort-header:hover .performance-sort-indicator.active {
+  opacity: 1;
+  transform: translateY(-1px) scale(1.08);
+}
+
+.performance-table-row {
+  cursor: default;
+  transition: background-color 0.18s ease;
+}
+
+.performance-table-row > td {
+  background: transparent;
+}
+
+.performance-table-row:hover {
+  background-color: rgba(15, 125, 82, 0.1);
+}
+
+.performance-table-row[data-risk='low']:hover {
+  background-color: rgba(31, 122, 79, 0.16);
+}
+
+.performance-table-row[data-risk='medium']:hover {
+  background-color: rgba(200, 170, 0, 0.17);
+}
+
+.performance-table-row[data-risk='high']:hover {
+  background-color: rgba(199, 58, 57, 0.15);
+}
+
+@media (hover: none) {
+  .performance-table-row:hover {
+    background-color: inherit;
+  }
 }
 
 .recent-list {
@@ -524,6 +657,19 @@ h2 {
   color: white;
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled,
+.tertiary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.danger-button:disabled:hover {
+  background: rgba(199, 58, 57, 0.2);
+  color: var(--red);
+}
+
 .tertiary-button {
   padding: 8px 12px;
   border: 1px solid var(--border);
@@ -621,6 +767,11 @@ h2 {
   gap: 16px;
 }
 
+.bulk-delete-modal {
+  width: min(100%, 760px);
+  max-height: min(86vh, 760px);
+}
+
 .confirmation-modal-header {
   display: flex;
   justify-content: space-between;
@@ -676,6 +827,72 @@ h2 {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.bulk-delete-selected-count {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.bulk-delete-list {
+  display: grid;
+  gap: 14px;
+  max-height: 44vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.bulk-delete-group {
+  display: grid;
+  gap: 8px;
+}
+
+.bulk-delete-group h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.bulk-delete-players {
+  display: grid;
+  gap: 8px;
+}
+
+.bulk-delete-player-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.bulk-delete-player-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.bulk-delete-player-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bulk-delete-player-main strong,
+.bulk-delete-player-main span {
+  overflow-wrap: anywhere;
+}
+
+.bulk-delete-player-main span {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .confirmation-modal-actions .danger-button:disabled,

@@ -7,6 +7,7 @@ describe('prediction and risk engines', () => {
   it('produces a bounded prediction and confidence', () => {
     const prediction = createHeuristicPredictionModel().predict({
       wmaScore: 7.8,
+      recentScore: 8,
       trendValue: 1.2,
       variance: 0.8,
       momentum: 1.1,
@@ -17,6 +18,34 @@ describe('prediction and risk engines', () => {
     expect(prediction.predictedScore).toBeGreaterThanOrEqual(0);
     expect(prediction.predictedScore).toBeLessThanOrEqual(10);
     expect(prediction.confidence).toBeGreaterThan(0.5);
+  });
+
+  it('uses normalized base weights and applies variance mainly to confidence', () => {
+    const model = createHeuristicPredictionModel();
+    const stable = model.predict({
+      wmaScore: 8,
+      averageScore: 7,
+      recentScore: 9,
+      trendValue: 0,
+      momentum: 0,
+      variance: 0.2,
+      lossStreak: 0,
+      matchCount: 5
+    });
+    const volatile = model.predict({
+      wmaScore: 8,
+      averageScore: 7,
+      recentScore: 9,
+      trendValue: 0,
+      momentum: 0,
+      variance: 8,
+      lossStreak: 0,
+      matchCount: 5
+    });
+
+    expect(stable.predictedScore).toBe(7.85);
+    expect(volatile.predictedScore).toBe(stable.predictedScore);
+    expect(volatile.confidence).toBeLessThan(stable.confidence);
   });
 
   it('derives risk and recommendation from the hybrid signals', () => {

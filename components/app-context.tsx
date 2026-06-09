@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
-import type { PlayerSummary } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
 
 export type AppTab = 'tracker' | 'squad' | 'recommendations' | 'player-detail';
@@ -22,10 +21,32 @@ interface AppContextType {
     position: string;
   }>;
   playersError: string | null;
-  loadPlayers: () => Promise<void>;
+  loadPlayers: (options?: { force?: boolean }) => Promise<void>;
   addPlayer: (data: { name: string; cardSeason: string; position: string }) => Promise<{ ok: boolean; message?: string }>; 
   deletePlayer: (playerId: string) => Promise<{ ok: boolean; message?: string }>;
+  bulkDeletePlayers: (playerIds: string[]) => Promise<{ ok: boolean; message?: string; deletedCount?: number }>;
   resetPlayerData: (playerId: string) => Promise<{ ok: boolean; message?: string }>;
+}
+
+type ApiMessagePayload = {
+  message?: string;
+  error?: string;
+  deletedCount?: number;
+};
+
+async function readApiMessagePayload(response: Response): Promise<ApiMessagePayload> {
+  const responseText = await response.text().catch(() => '');
+  if (!responseText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(responseText) as ApiMessagePayload;
+  } catch {
+    return {
+      message: responseText.slice(0, 500)
+    };
+  }
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -38,13 +59,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [players, setPlayers] = useState<Array<{ playerId: string; name: string; cardSeason: string; position: string }>>([]);
   const [playersError, setPlayersError] = useState<string | null>(null);
   const loadPlayersPromiseRef = useRef<Promise<void> | null>(null);
+  const loadPlayersRequestSeqRef = useRef(0);
 
-  async function loadPlayers() {
-    if (loadPlayersPromiseRef.current) {
+  async function loadPlayers(options?: { force?: boolean }) {
+    if (loadPlayersPromiseRef.current && !options?.force) {
       return loadPlayersPromiseRef.current;
     }
 
     const requestStartedAt = Date.now();
+    const requestSeq = loadPlayersRequestSeqRef.current + 1;
+    loadPlayersRequestSeqRef.current = requestSeq;
+
+    function isLatestRequest() {
+      return loadPlayersRequestSeqRef.current === requestSeq;
+    }
 
     loadPlayersPromiseRef.current = (async () => {
       try {
@@ -71,8 +99,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const message = !Array.isArray(payload)
             ? payload.error ?? payload.message ?? 'Failed to load players'
             : 'Failed to load players';
-          setPlayers([]);
-          setPlayersError(message);
+          if (isLatestRequest()) {
+            setPlayers([]);
+            setPlayersError(message);
+          }
           console.error('[players] load failed', {
             status: res.status,
             message,
@@ -95,19 +125,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
             cardSeason: item.cardSeason ?? item.season ?? '',
             position: item.position ?? ''
           }));
-        setPlayers(normalizedItems);
-        setPlayersError(null);
+        if (isLatestRequest()) {
+          setPlayers(normalizedItems);
+          setPlayersError(null);
+        }
         console.info('[players] load success', {
           count: items.length,
           elapsedMs: Date.now() - requestStartedAt,
           requestId: Array.isArray(payload) ? undefined : payload.requestId
         });
       } catch (error) {
-        setPlayers([]);
-        setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
+        if (isLatestRequest()) {
+          setPlayers([]);
+          setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
+        }
         console.error('[players] load exception', error);
       } finally {
-        loadPlayersPromiseRef.current = null;
+        if (isLatestRequest()) {
+          loadPlayersPromiseRef.current = null;
+        }
       }
     })();
 
@@ -124,7 +160,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
-      await loadPlayers();
+      await loadPlayers({ force: true });
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : 'Failed' };
@@ -133,14 +169,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function deletePlayer(playerId: string) {
     try {
-      const res = await fetchWithDebug(`/api/players/${playerId}`, { method: 'DELETE' }, { caller: 'AppContext.deletePlayer' });
+      const res = await fetchWithDebug(`/api/players/${encodeURIComponent(playerId)}`, { method: 'DELETE' }, { caller: 'AppContext.deletePlayer' });
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
-      await loadPlayers();
+      await loadPlayers({ force: true });
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : 'Failed' };
     }
+  }
+
+  async function bulkDeletePlayers(playerIds: string[]) {
+    const uniquePlayerIds = Array.from(
+      new Set(playerIds.map((playerId) => playerId.trim()).filter(Boolean))
+    );
+
+    if (uniquePlayerIds.length === 0) {
+      return { ok: false, message: 'Vui lòng chọn ít nhất 1 cầu thủ để xóa.' };
+    }
+
+    try {
+      const res = await fetchWithDebug('/api/players/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerIds: uniquePlayerIds })
+      }, { caller: 'AppContext.bulkDeletePlayers', includeRequestBody: true });
+      const payload = await readApiMessagePayload(res);
+
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 405) {
+          return deletePlayersSequentially(uniquePlayerIds);
+        }
+
+        return {
+          ok: false,
+          message:
+            payload.message ??
+            payload.error ??
+            `Không thể xóa cầu thủ đã chọn. API trả về ${res.status} ${res.statusText}.`
+        };
+      }
+
+      await loadPlayers({ force: true });
+      return { ok: true, deletedCount: payload.deletedCount };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : 'Failed' };
+    }
+  }
+
+  async function deletePlayersSequentially(playerIds: string[]) {
+    for (const playerId of playerIds) {
+      const result = await deletePlayer(playerId);
+      if (!result.ok) {
+        return {
+          ok: false,
+          message: result.message ?? `Không thể xóa cầu thủ ${playerId}.`
+        };
+      }
+    }
+
+    await loadPlayers({ force: true });
+    return { ok: true, deletedCount: playerIds.length };
   }
 
   async function resetPlayerData(playerId: string) {
@@ -190,6 +279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadPlayers,
         addPlayer,
         deletePlayer,
+        bulkDeletePlayers,
         resetPlayerData
       }}
     >

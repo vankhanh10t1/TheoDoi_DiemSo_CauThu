@@ -33,11 +33,11 @@ export async function GET(request: NextRequest) {
   }
 
   const analysis = analyzeRecentMatches(recentMatches);
-  const assessment = analysis.averageScore > 8
+  const assessment = analysis.currentFormScore > 8
     ? { status: 'Star Player', action: 'Giữ chặt đội hình chính', color: 'green' as const }
-    : analysis.averageScore >= 6
+    : analysis.currentFormScore >= 6
       ? { status: 'Stable', action: 'Tiếp tục tin dùng', color: 'white' as const }
-      : analysis.averageScore >= 4.5
+      : analysis.currentFormScore >= 4.5
         ? { status: 'Under Review', action: 'Đẩy lên ghế dự bị', color: 'orange' as const }
         : { status: 'Fraud', action: 'Thanh lý ngay lập tức', color: 'red' as const };
 
@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       playerId,
       name: player.name,
       averageScore: analysis.averageScore,
+      currentFormScore: analysis.currentFormScore,
       adjustedAverageScore: analysis.adjustedAverageScore,
       wmaScore: analysis.wmaScore,
       bigWinCountLast5: analysis.bigWinCountLast5,
@@ -73,6 +74,9 @@ export async function GET(request: NextRequest) {
       fraudReasons: analysis.fraudReasons,
       recommendation: analysis.recommendation,
       recommendationReason: analysis.recommendationReason,
+      disciplineScore: analysis.disciplineScore,
+      aggressionIndex: analysis.aggressionIndex,
+      disciplineTrend: analysis.disciplineTrend,
       recentMatches
     },
     { status: 200 }

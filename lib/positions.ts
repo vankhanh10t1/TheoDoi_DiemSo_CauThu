@@ -112,3 +112,23 @@ export function groupPlayersByPosition<T extends { position: string }>(players: 
 
   return map;
 }
+
+function getPositionGroupSortIndex(position: unknown): number {
+  const group = getPositionGroup(position);
+  return group ? POSITION_GROUPS.indexOf(group) : POSITION_GROUPS.length;
+}
+
+export function sortPlayersByPositionGroupAndName<T extends { name: string; position: string }>(
+  players: T[]
+): T[] {
+  return [...players].sort((left, right) => {
+    const groupCompare =
+      getPositionGroupSortIndex(left.position) - getPositionGroupSortIndex(right.position);
+
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+
+    return left.name.localeCompare(right.name, 'vi', { sensitivity: 'base' });
+  });
+}

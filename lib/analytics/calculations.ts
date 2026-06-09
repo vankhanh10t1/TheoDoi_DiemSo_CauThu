@@ -87,21 +87,31 @@ export function calculateVariance(scores: number[]): { variance: number; stabili
 }
 
 export function calculateMomentum(scores: number[]): { momentum: number; momentumStatus: MomentumStatus } {
-  const cleanedScores = sanitizeScores(scores).slice(0, 3);
+  const cleanedScores = sanitizeScores(scores).slice(0, 5);
 
-  if (cleanedScores.length < 3) {
+  if (cleanedScores.length < 2) {
     return { momentum: 0, momentumStatus: 'NORMAL' };
   }
 
-  const momentum = roundToTwoDecimals(
-    (cleanedScores[0] - cleanedScores[1]) + (cleanedScores[1] - cleanedScores[2])
+  const chronologicalScores = [...cleanedScores].reverse();
+  const count = chronologicalScores.length;
+  const xAverage = (count - 1) / 2;
+  const yAverage = chronologicalScores.reduce((sum, score) => sum + score, 0) / count;
+  const numerator = chronologicalScores.reduce(
+    (sum, score, index) => sum + (index - xAverage) * (score - yAverage),
+    0
   );
+  const denominator = chronologicalScores.reduce(
+    (sum, _score, index) => sum + (index - xAverage) ** 2,
+    0
+  );
+  const momentum = roundToTwoDecimals(denominator === 0 ? 0 : numerator / denominator);
 
-  if (momentum > 1) {
+  if (momentum > 0.35) {
     return { momentum, momentumStatus: 'HOT' };
   }
 
-  if (momentum < -1) {
+  if (momentum < -0.35) {
     return { momentum, momentumStatus: 'COLD' };
   }
 
@@ -123,7 +133,7 @@ export function calculateLossStreak(results: MatchResult[]): number {
 }
 
 export function clampScore(value: number): number {
-  return roundToTwoDecimals(clamp(value, 0, 10));
+  return roundToTwoDecimals(clamp(value, 1, 10));
 }
 
 export function normalizeMarginFlags(result: MatchResult, isBigWin?: boolean, isBigLoss?: boolean) {

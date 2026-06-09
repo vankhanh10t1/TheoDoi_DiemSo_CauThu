@@ -231,7 +231,7 @@ export function TrackerApp() {
       <section className="hero-card">
         <div>
           <p className="eyebrow">FCON Performance Tracker</p>
-          <h2>Theo dõi phong độ của các cầu thủ thuộc đội bóng VanKhasnh14 trong 5 trận gần nhất</h2>
+          <h2>Theo dõi phong độ của các cầu thủ thuộc đội bóng trong 5 trận gần nhất</h2>
           <p className="hero-copy">
             Bán độ không bao giờ có chỗ đứng trong môn thể thao vua.
           </p>
@@ -243,7 +243,7 @@ export function TrackerApp() {
           </div>
           <div>
             <span className="metric-label">Team Color</span>
-            <strong>Bayern Munich</strong>
+            <strong>Real Madrid</strong>
           </div>
         </div>
       </section>
@@ -395,7 +395,7 @@ export function TrackerApp() {
           )}
         </article>
 
-        <article className="panel status-panel">
+        <article className="panel status-panel evaluation-flow-card">
           <div className="panel-header">
             <div>
               <p className="panel-kicker">Evaluation Flow</p>
@@ -473,7 +473,7 @@ export function TrackerApp() {
                   </div>
                 </div>
 
-                <div className="status-grid" style={{ marginTop: '12px' }}>
+                <div className="status-grid status-action-grid" style={{ marginTop: '12px' }}>
                   <div>
                     <span className="metric-label">Hành động</span>
                     <strong>{statusData.action}</strong>
@@ -482,7 +482,7 @@ export function TrackerApp() {
                     <span className="metric-label">Khuyến nghị</span>
                     <strong>{getRecommendationLabel(statusData.recommendation)}</strong>
                   </div>
-                  <div>
+                  <div className={statusData.fraudRisk ? 'status-fraud-cell alert' : 'status-fraud-cell'}>
                     <span className="metric-label">Fraud</span>
                     <strong>{statusData.fraudRisk ? 'ALERT' : 'CLEAR'}</strong>
                   </div>
@@ -493,7 +493,7 @@ export function TrackerApp() {
                 </div>
 
                 {statusData.fraudRisk ? (
-                  <p className="inline-message error" style={{ marginTop: '12px' }}>
+                  <p className="inline-message error status-fraud-alert" style={{ marginTop: '12px' }}>
                     Fraud alert: {statusData.fraudReasons.join(', ')}
                   </p>
                 ) : null}

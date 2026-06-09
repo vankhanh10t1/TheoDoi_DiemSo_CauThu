@@ -19,7 +19,7 @@ describe('analytics', () => {
   it('detects trend, variance, and momentum', () => {
     expect(calculateTrend([9, 8, 7])).toEqual({ trendValue: 2, trendStatus: 'UP' });
     expect(calculateVariance([8, 8.2, 7.9])).toEqual({ variance: 0.02, stabilityLevel: 'STABLE' });
-    expect(calculateMomentum([9, 8, 7])).toEqual({ momentum: 2, momentumStatus: 'HOT' });
+    expect(calculateMomentum([9, 8, 7])).toEqual({ momentum: 1, momentumStatus: 'HOT' });
   });
 
   it('supports match impact and adjusted score calculations', () => {
@@ -44,5 +44,16 @@ describe('analytics', () => {
     expect(analysis.recommendation).toBe('REPLACE');
     expect(analysis.riskLevel).toBe('HIGH');
     expect(analysis.wmaScore).toBeLessThan(4.5);
+  });
+
+  it('uses MatchDate ordering before calculating current form', () => {
+    const analysis = analyzeRecentMatches([
+      { sk: 'MATCH#999', matchDate: '2026-01-01', score: 2, result: 'Loss' },
+      { sk: 'MATCH#001', matchDate: '2026-01-03', score: 9, result: 'Win' },
+      { sk: 'MATCH#500', matchDate: '2026-01-02', score: 6, result: 'Draw' }
+    ]);
+
+    expect(analysis.currentFormScore).toBe(6.76);
+    expect(analysis.trendStatus).toBe('UP');
   });
 });

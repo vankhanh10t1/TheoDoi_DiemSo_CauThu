@@ -3,11 +3,13 @@ import { clampScore } from '../analytics';
 
 export interface PredictionInput {
   wmaScore: number;
+  recentScore: number;
   trendValue: number;
   variance: number;
   momentum: number;
   lossStreak: number;
   averageScore: number;
+  matchCount?: number;
 }
 
 export interface PredictionResult {
@@ -21,6 +23,10 @@ export interface PredictionModel {
 
 function clampConfidence(value: number): number {
   return Number(Math.min(1, Math.max(0, value)).toFixed(2));
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 export function getConfidenceLevel(confidence: number): PerformanceAnalysis['confidenceLevel'] {
@@ -38,22 +44,29 @@ export function getConfidenceLevel(confidence: number): PerformanceAnalysis['con
 export function createHeuristicPredictionModel(): PredictionModel {
   return {
     predict(input: PredictionInput): PredictionResult {
+      const boundedTrendAdjustment = clamp(
+        input.trendValue * 0.08 + input.momentum * 0.04,
+        -0.35,
+        0.35
+      );
       const predictedScore = clampScore(
-        input.wmaScore * 0.48 +
-          input.averageScore * 0.22 +
-          input.trendValue * 0.12 +
-          input.momentum * 0.08 -
-          input.variance * 0.14 -
-          input.lossStreak * 0.25
+        input.wmaScore * 0.65 +
+          input.averageScore * 0.25 +
+          input.recentScore * 0.1 +
+          boundedTrendAdjustment
       );
 
+      const sampleConfidence =
+        typeof input.matchCount === 'number' ? Math.min(0.12, input.matchCount * 0.025) : 0.08;
+      const variancePenalty =
+        input.variance < 1 ? 0.12 : input.variance <= 4 ? -0.08 : -0.25;
       const confidence = clampConfidence(
-        0.48 +
-          (input.lossStreak === 0 ? 0.18 : input.lossStreak === 1 ? 0.06 : -0.08) +
-          (input.variance < 1 ? 0.12 : input.variance <= 4 ? -0.02 : -0.12) +
-          (Math.abs(input.trendValue) <= 1 ? 0.08 : 0) +
-          (Math.abs(input.momentum) <= 1 ? 0.06 : 0) +
-          (Math.abs(input.wmaScore - input.averageScore) <= 0.7 ? 0.08 : -0.04)
+        0.5 +
+          sampleConfidence +
+          variancePenalty +
+          (input.lossStreak === 0 ? 0.08 : input.lossStreak === 1 ? 0.02 : -0.08) +
+          (Math.abs(input.trendValue) <= 1 ? 0.06 : 0) +
+          (Math.abs(input.wmaScore - input.averageScore) <= 0.7 ? 0.06 : -0.04)
       );
 
       return { predictedScore, confidence };

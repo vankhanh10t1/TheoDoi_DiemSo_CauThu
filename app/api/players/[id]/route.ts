@@ -1,8 +1,8 @@
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../../lib/dynamodb';
 import { retryWithBackoff } from '../../../../lib/dynamodb-helpers';
-import { findDuplicatePlayerByName } from '../../../../lib/playerService';
+import { deletePlayersAndRelatedData, findDuplicatePlayerByName } from '../../../../lib/playerService';
 
 export const runtime = 'nodejs';
 
@@ -168,42 +168,10 @@ export async function DELETE(
   }
 
   try {
-    // Find and delete all match records for this player
-    const matchResponse = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk',
-            ExpressionAttributeValues: {
-              ':pk': `PLAYER#${playerId}`
-            }
-          })
-        ),
-      { label: 'player.deleteQuery' }
-    );
-
-    const items = matchResponse.Items ?? [];
-
-    // Delete METADATA and all MATCH items
-    for (const item of items) {
-      await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new DeleteCommand({
-              TableName: getTableName(),
-              Key: {
-                PK: item.PK,
-                SK: item.SK
-              }
-            })
-          ),
-        { label: 'player.deleteItem' }
-      );
-    }
+    const result = await deletePlayersAndRelatedData([playerId]);
 
     return NextResponse.json(
-      { message: 'Player deleted successfully', deletedCount: items.length },
+      { message: 'Player deleted successfully', deletedCount: result.deletedItemCount },
       { status: 200 }
     );
   } catch (error) {

@@ -1,6 +1,7 @@
-import { GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient, getTableName } from './dynamodb';
-import { retryWithBackoff } from './dynamodb-helpers';
+import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
+import { sortRecentMatchesNewestFirst } from './match-history';
 import { isDetailedPositionForGroup, isPositionGroup } from './positions';
 import type { PlayerMetadataItem, PlayerSummary, RecentMatch, StoredMatchItem } from './types';
 
@@ -97,23 +98,33 @@ export async function getPlayerMetadata(playerId: string): Promise<PlayerSummary
 }
 
 export async function getRecentMatches(playerId: string, limit?: number): Promise<RecentMatch[]> {
-  const queryInput = {
-    TableName: getTableName(),
-    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-    ExpressionAttributeValues: {
-      ':pk': `PLAYER#${playerId}`,
-      ':matchPrefix': 'MATCH#'
-    },
-    ScanIndexForward: false,
-    ...(typeof limit === 'number' ? { Limit: limit } : {})
-  };
+  const items: Record<string, unknown>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
 
-  const response = await retryWithBackoff(() => getDocumentClient().send(new QueryCommand(queryInput)), {
-    label: 'getRecentMatches'
-  });
+  do {
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new QueryCommand({
+            TableName: getTableName(),
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
+            ExpressionAttributeValues: {
+              ':pk': `PLAYER#${playerId}`,
+              ':matchPrefix': 'MATCH#'
+            },
+            ScanIndexForward: false,
+            ExclusiveStartKey: exclusiveStartKey
+          })
+        ),
+      { label: 'getRecentMatches' }
+    );
 
-  return (response.Items ?? []).map((item): RecentMatch => {
-    const match = item as StoredMatchItem;
+    items.push(...((response.Items ?? []) as Record<string, unknown>[]));
+    exclusiveStartKey = response.LastEvaluatedKey;
+  } while (exclusiveStartKey);
+
+  const matches = items.map((item): RecentMatch => {
+    const match = item as unknown as StoredMatchItem;
     const positionGroup = isPositionGroup(match.PositionGroup) ? match.PositionGroup : undefined;
     const detailedPosition =
       positionGroup && isDetailedPositionForGroup(positionGroup, match.DetailedPosition)
@@ -122,6 +133,8 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
 
     return {
       sk: match.SK,
+      matchDate: match.MatchDate,
+      createdAt: match.CreatedAt,
       score: match.Score,
       result: match.Result,
       positionGroup,
@@ -133,6 +146,40 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       isBigLoss: typeof match.IsBigLoss === 'boolean' ? match.IsBigLoss : false
     };
   });
+
+  const sortedMatches = sortRecentMatchesNewestFirst(matches);
+  return typeof limit === 'number' ? sortedMatches.slice(0, limit) : sortedMatches;
+}
+
+export async function deletePlayersAndRelatedData(playerIds: string[]): Promise<DeletePlayersResult> {
+  const uniquePlayerIds = uniqueTrimmedPlayerIds(playerIds);
+
+  if (uniquePlayerIds.length === 0) {
+    return {
+      requestedCount: 0,
+      deletedPlayerIds: [],
+      deletedItemCount: 0
+    };
+  }
+
+  const allKeys: DynamoKey[] = [];
+
+  for (const playerId of uniquePlayerIds) {
+    const [playerItemKeys, matchRatingKeys] = await Promise.all([
+      queryAllPlayerKeys(playerId),
+      scanAllMatchRatingKeys(playerId)
+    ]);
+
+    allKeys.push(...playerItemKeys, ...matchRatingKeys);
+  }
+
+  const deletedItemCount = await deleteKeysInBatches(allKeys);
+
+  return {
+    requestedCount: uniquePlayerIds.length,
+    deletedPlayerIds: uniquePlayerIds,
+    deletedItemCount
+  };
 }
 
 /**
@@ -171,4 +218,147 @@ export async function findDuplicatePlayerByName(
     console.error('Error checking for duplicate player names:', error);
     throw error;
   }
+}
+
+type DynamoKey = {
+  PK: string;
+  SK: string;
+};
+
+export type DeletePlayersResult = {
+  requestedCount: number;
+  deletedPlayerIds: string[];
+  deletedItemCount: number;
+};
+
+function uniqueTrimmedPlayerIds(playerIds: string[]): string[] {
+  const seen = new Set<string>();
+  const uniqueIds: string[] = [];
+
+  for (const rawId of playerIds) {
+    const playerId = rawId.trim();
+    if (!playerId || seen.has(playerId)) {
+      continue;
+    }
+
+    seen.add(playerId);
+    uniqueIds.push(playerId);
+  }
+
+  return uniqueIds;
+}
+
+async function queryAllPlayerKeys(playerId: string): Promise<DynamoKey[]> {
+  const keys: DynamoKey[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new QueryCommand({
+            TableName: getTableName(),
+            KeyConditionExpression: 'PK = :pk',
+            ExpressionAttributeValues: {
+              ':pk': `PLAYER#${playerId}`
+            },
+            ExclusiveStartKey: exclusiveStartKey
+          })
+        ),
+      { label: 'player.deleteQueryPlayerItems' }
+    );
+
+    for (const item of response.Items ?? []) {
+      if (typeof item.PK === 'string' && typeof item.SK === 'string') {
+        keys.push({ PK: item.PK, SK: item.SK });
+      }
+    }
+
+    exclusiveStartKey = response.LastEvaluatedKey;
+  } while (exclusiveStartKey);
+
+  return keys;
+}
+
+async function scanAllMatchRatingKeys(playerId: string): Promise<DynamoKey[]> {
+  const keys: DynamoKey[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const response = await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new ScanCommand({
+            TableName: getTableName(),
+            FilterExpression: 'begins_with(PK, :matchPrefix) AND SK = :ratingKey',
+            ExpressionAttributeValues: {
+              ':matchPrefix': 'MATCH#',
+              ':ratingKey': `RATING#${playerId}`
+            },
+            ExclusiveStartKey: exclusiveStartKey
+          })
+        ),
+      { label: 'player.deleteScanMatchRatings' }
+    );
+
+    for (const item of response.Items ?? []) {
+      if (typeof item.PK === 'string' && typeof item.SK === 'string') {
+        keys.push({ PK: item.PK, SK: item.SK });
+      }
+    }
+
+    exclusiveStartKey = response.LastEvaluatedKey;
+  } while (exclusiveStartKey);
+
+  return keys;
+}
+
+async function deleteKeysInBatches(keys: DynamoKey[]): Promise<number> {
+  const uniqueKeys = Array.from(
+    new Map(keys.map((key) => [`${key.PK}\u0000${key.SK}`, key])).values()
+  );
+  const tableName = getTableName();
+  let deletedCount = 0;
+
+  for (const chunk of chunkArray(uniqueKeys, 25)) {
+    let pending = chunk.map((key) => ({
+      DeleteRequest: {
+        Key: key
+      }
+    }));
+    let attempts = 0;
+
+    while (pending.length > 0) {
+      const response = await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new BatchWriteCommand({
+              RequestItems: {
+                [tableName]: pending
+              }
+            })
+          ),
+        { label: 'player.deleteBatchWrite' }
+      );
+
+      const unprocessed = response.UnprocessedItems?.[tableName] ?? [];
+      deletedCount += pending.length - unprocessed.length;
+
+      if (unprocessed.length === 0) {
+        break;
+      }
+
+      attempts++;
+      if (attempts > 4) {
+        throw new Error('DynamoDB is still busy. Some delete requests were not processed.');
+      }
+
+      pending = unprocessed
+        .map((entry) => entry.DeleteRequest)
+        .filter((entry): entry is { Key: DynamoKey } => Boolean(entry?.Key))
+        .map((entry) => ({ DeleteRequest: entry }));
+    }
+  }
+
+  return deletedCount;
 }

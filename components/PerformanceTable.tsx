@@ -24,6 +24,23 @@ interface PerformanceTableProps {
 type SortKey = 'position' | 'matches' | 'wma' | 'trend' | 'risk' | 'name';
 type SortDir = 'asc' | 'desc';
 
+function SortIndicator({
+  active,
+  direction
+}: {
+  active: boolean;
+  direction: SortDir;
+}) {
+  return (
+    <span
+      className={`performance-sort-indicator${active ? ' active' : ''}`}
+      aria-hidden="true"
+    >
+      {direction === 'desc' ? '↓' : '↑'}
+    </span>
+  );
+}
+
 function getPositionGroup(position: string): string {
   if (!position) return 'gray';
   const normalized = position.trim().toUpperCase();
@@ -271,45 +288,59 @@ export function PerformanceTable({ players, title, loading = false, error = null
       </div>
 
       <div className="overflow-x-auto" style={{ marginLeft: '-22px', marginRight: '-22px', paddingLeft: 0, paddingRight: 0 }}>
-        <table className="w-full border-collapse" style={{ width: '100%', minWidth: 720, tableLayout: 'auto' }}>
+        <table className="performance-table w-full border-collapse">
+          <colgroup>
+            <col className="performance-col-name" />
+            <col className="performance-col-season" />
+            <col className="performance-col-position" />
+            <col className="performance-col-number" />
+            <col className="performance-col-number" />
+            <col className="performance-col-status" />
+            <col className="performance-col-status" />
+          </colgroup>
           <thead>
             <tr className="border-b-2 border-gray-300" style={{ background: 'linear-gradient(135deg, rgba(15,125,82,0.72) 0%, rgba(10,90,61,0.54) 100%)' }}>
               <th className="px-4 py-3 text-left text-sm font-bold text-white">Tên cầu thủ</th>
-              <th className="px-4 py-3 text-left text-sm font-bold text-white" style={{ minWidth: 96 }}>Mùa thẻ</th>
+              <th className="px-3 py-3 text-center text-sm font-bold text-white">Mùa thẻ</th>
               <th
-                className="px-4 py-3 text-left text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
+                className="performance-sort-header px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
                 onClick={() => handleSort('position')}
                 aria-sort={sortKey === 'position' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               >
-                Vị trí <span style={{ opacity: sortKey === 'position' ? 1 : 0.36, marginLeft: '6px' }}>{sortKey === 'position' ? (sortDir === 'desc' ? '↓' : '↑') : '↓'}</span>
+                Vị trí
+                <SortIndicator active={sortKey === 'position'} direction={sortKey === 'position' ? sortDir : 'desc'} />
               </th>
               <th
-                className="px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
+                className="performance-sort-header px-4 py-3 text-right text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
                 onClick={() => handleSort('matches')}
                 aria-sort={sortKey === 'matches' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               >
-                Số trận <span style={{ opacity: sortKey === 'matches' ? 1 : 0.36, marginLeft: '6px' }}>{sortKey === 'matches' ? (sortDir === 'desc' ? '↓' : '↑') : '↓'}</span>
+                Số trận
+                <SortIndicator active={sortKey === 'matches'} direction={sortKey === 'matches' ? sortDir : 'desc'} />
               </th>
               <th
-                className="px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
+                className="performance-sort-header px-4 py-3 text-right text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
                 onClick={() => handleSort('wma')}
                 aria-sort={sortKey === 'wma' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               >
-                WMA <span style={{ opacity: sortKey === 'wma' ? 1 : 0.36, marginLeft: '6px' }}>{sortKey === 'wma' ? (sortDir === 'desc' ? '↓' : '↑') : '↓'}</span>
+                WMA
+                <SortIndicator active={sortKey === 'wma'} direction={sortKey === 'wma' ? sortDir : 'desc'} />
               </th>
               <th
-                className="px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
+                className="performance-sort-header px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
                 onClick={() => handleSort('trend')}
                 aria-sort={sortKey === 'trend' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               >
-                Xu hướng <span style={{ opacity: sortKey === 'trend' ? 1 : 0.36, marginLeft: '6px' }}>{sortKey === 'trend' ? (sortDir === 'desc' ? '↓' : '↑') : '↓'}</span>
+                Xu hướng
+                <SortIndicator active={sortKey === 'trend'} direction={sortKey === 'trend' ? sortDir : 'desc'} />
               </th>
               <th
-                className="px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
+                className="performance-sort-header px-4 py-3 text-center text-sm font-bold text-white cursor-pointer hover:bg-white/10 transition-colors"
                 onClick={() => handleSort('risk')}
                 aria-sort={sortKey === 'risk' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               >
-                Risk <span style={{ opacity: sortKey === 'risk' ? 1 : 0.36, marginLeft: '6px' }}>{sortKey === 'risk' ? (sortDir === 'desc' ? '↓' : '↑') : '↓'}</span>
+                Risk
+                <SortIndicator active={sortKey === 'risk'} direction={sortKey === 'risk' ? sortDir : 'desc'} />
               </th>
             </tr>
           </thead>
@@ -323,18 +354,19 @@ export function PerformanceTable({ players, title, loading = false, error = null
               return (
                 <tr
                   key={player.name + '|' + index}
-                  className={`border-b border-gray-200 transition-colors ${rowBg} ${riskRowHover}`}
+                  className={`performance-table-row border-b border-gray-200 transition-colors ${rowBg} ${riskRowHover}`}
+                  data-risk={player.riskLevel?.toLowerCase() ?? 'default'}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{player.name || 'N/A'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{player.cardSeason || 'N/A'}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <td className="px-3 py-3 text-sm text-center text-gray-700">{player.cardSeason || 'N/A'}</td>
+                  <td className="px-4 py-3 text-sm text-center font-medium text-gray-800">
+                    <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ width: 10, height: 10, borderRadius: 4, display: 'inline-block', background: getPositionGroupColor(player.position) }} />
                       <span>{player.position || 'N/A'}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{player.matchCount != null ? player.matchCount : 'N/A'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700 font-medium">{player.wmaScore != null ? player.wmaScore.toFixed(1) : 'N/A'}</td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-700 tabular-nums">{player.matchCount != null ? player.matchCount : 'N/A'}</td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-700 font-medium tabular-nums">{player.wmaScore != null ? player.wmaScore.toFixed(1) : 'N/A'}</td>
                   <td className="px-4 py-3 text-sm text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getTrendColor(player.trendStatus ?? undefined)}`}>
                       {getTrendLabel(player.trendStatus ?? undefined)}

@@ -43,6 +43,8 @@ export interface PlayerMetadataItem {
 export interface StoredMatchItem {
   PK: string;
   SK: string;
+  MatchDate?: string;
+  CreatedAt?: string;
   Score: number;
   IsStarter: boolean;
   Result: MatchResult;
@@ -57,6 +59,8 @@ export interface StoredMatchItem {
 
 export interface RecentMatch {
   sk: string;
+  matchDate?: string;
+  createdAt?: string;
   score: number;
   result: MatchResult;
   positionGroup?: PositionGroup;
@@ -81,6 +85,7 @@ export interface PlayerStatusEvaluatedResponse {
   playerId: string;
   name: string;
   averageScore: number;
+  currentFormScore: number;
   wmaScore: number;
   matchCount: number;
   status: 'Star Player' | 'Stable' | 'Under Review' | 'Fraud';
@@ -124,6 +129,7 @@ export interface PlayerAssessment {
 
 export interface PerformanceAnalysis {
   averageScore: number;
+  currentFormScore: number;
   wmaScore: number;
   trendValue: number;
   trendStatus: TrendStatus;

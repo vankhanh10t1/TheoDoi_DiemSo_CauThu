@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { PlayerSummary } from '../lib/types';
 import { useAppContext } from './app-context';
 import { SquadPlayerCard } from './SquadPlayerCard';
-import { POSITION_GROUPS, groupPlayersByPosition } from '../lib/positions';
+import {
+  POSITION_GROUPS,
+  getPositionGroup,
+  groupPlayersByPosition,
+  sortPlayersByPositionGroupAndName
+} from '../lib/positions';
 import { fetchWithDebug } from '../lib/client-api';
 
 type SearchField = 'name' | 'cardSeason' | 'position';
@@ -19,6 +24,10 @@ type EditPlayerForm = {
   name: string;
   cardSeason: string;
   position: string;
+};
+
+type PlayerWithOptionalStats = PlayerSummary & {
+  matchCount?: number;
 };
 
 const POSITION_OPTIONS = [
@@ -46,6 +55,7 @@ export function SquadManagement() {
     loadPlayers,
     addPlayer,
     deletePlayer,
+    bulkDeletePlayers,
     openPlayerDetail
   } = useAppContext();
   const [loading, setLoading] = useState(true);
@@ -68,6 +78,11 @@ export function SquadManagement() {
   const [searchField, setSearchField] = useState<SearchField>('name');
   const [pendingDeletePlayer, setPendingDeletePlayer] = useState<PlayerSummary | null>(null);
   const [isDeletingPlayer, setIsDeletingPlayer] = useState(false);
+  const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<string>>(() => new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [selectedBulkDeleteIds, setSelectedBulkDeleteIds] = useState<Set<string>>(() => new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   function normalizeSearchValue(value?: string) {
     return (value ?? 'N/A').trim().toLowerCase();
@@ -105,6 +120,11 @@ export function SquadManagement() {
     );
   }, [players, searchField, searchText]);
 
+  const sortedBulkDeletePlayers = useMemo(
+    () => sortPlayersByPositionGroupAndName(players as PlayerWithOptionalStats[]),
+    [players]
+  );
+
   useEffect(() => {
     setLoading(true);
     loadPlayers()
@@ -132,11 +152,17 @@ export function SquadManagement() {
 
   async function handleDeletePlayer(playerId: string) {
     const playerToDelete = pendingDeletePlayer;
-    if (!playerToDelete || isDeletingPlayer || playerToDelete.playerId !== playerId) {
+    if (
+      !playerToDelete ||
+      isDeletingPlayer ||
+      deletingPlayerIds.has(playerId) ||
+      playerToDelete.playerId !== playerId
+    ) {
       return;
     }
 
     setIsDeletingPlayer(true);
+    setDeletingPlayerIds((current) => new Set(current).add(playerId));
 
     try {
       const result = await deletePlayer(playerId);
@@ -151,6 +177,11 @@ export function SquadManagement() {
       });
     } finally {
       setIsDeletingPlayer(false);
+      setDeletingPlayerIds((current) => {
+        const next = new Set(current);
+        next.delete(playerId);
+        return next;
+      });
     }
   }
 
@@ -165,6 +196,86 @@ export function SquadManagement() {
     }
 
     setPendingDeletePlayer(null);
+  }
+
+  function openBulkDeleteModal() {
+    setShowBulkDelete(true);
+    setSelectedBulkDeleteIds(new Set());
+    setBulkDeleteError(null);
+    setSaveMessage(null);
+  }
+
+  function closeBulkDeleteModal() {
+    if (isBulkDeleting) {
+      return;
+    }
+
+    setShowBulkDelete(false);
+    setSelectedBulkDeleteIds(new Set());
+    setBulkDeleteError(null);
+  }
+
+  function toggleBulkDeleteSelection(playerId: string) {
+    if (isBulkDeleting) {
+      return;
+    }
+
+    setSelectedBulkDeleteIds((current) => {
+      const next = new Set(current);
+      if (next.has(playerId)) {
+        next.delete(playerId);
+      } else {
+        next.add(playerId);
+      }
+      return next;
+    });
+    setBulkDeleteError(null);
+  }
+
+  async function handleBulkDeletePlayers() {
+    const playerIds = Array.from(selectedBulkDeleteIds);
+
+    if (playerIds.length === 0 || isBulkDeleting) {
+      setBulkDeleteError('Vui lòng chọn ít nhất 1 cầu thủ để xóa.');
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+    setDeletingPlayerIds((current) => {
+      const next = new Set(current);
+      for (const playerId of playerIds) {
+        next.add(playerId);
+      }
+      return next;
+    });
+
+    try {
+      const result = await bulkDeletePlayers(playerIds);
+      if (!result.ok) throw new Error(result.message ?? 'Failed');
+
+      setSaveMessage({
+        text: `Đã xóa ${playerIds.length} cầu thủ thành công`,
+        type: 'success'
+      });
+      setShowBulkDelete(false);
+      setSelectedBulkDeleteIds(new Set());
+    } catch (err) {
+      setBulkDeleteError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể xóa các cầu thủ đã chọn. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsBulkDeleting(false);
+      setDeletingPlayerIds((current) => {
+        const next = new Set(current);
+        for (const playerId of playerIds) {
+          next.delete(playerId);
+        }
+        return next;
+      });
+    }
   }
 
   function handleStartEdit(player: PlayerSummary) {
@@ -206,7 +317,7 @@ export function SquadManagement() {
       setSaveMessage({ text: 'Cầu thủ đã được cập nhật thành công', type: 'success' });
       setEditingPlayerId(null);
       setEditFormData({ name: '', cardSeason: '', position: '' });
-      await loadPlayers();
+      await loadPlayers({ force: true });
     } catch (err) {
       setSaveMessage({
         text: err instanceof Error ? err.message : 'Không thể cập nhật cầu thủ',
@@ -262,6 +373,14 @@ export function SquadManagement() {
           </label>
           <button className="primary-button" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Hủy' : '+ Thêm Cầu Thủ'}
+          </button>
+          <button
+            className="danger-button"
+            type="button"
+            onClick={openBulkDeleteModal}
+            disabled={players.length === 0 || isBulkDeleting}
+          >
+            Xóa nhanh nhiều cầu thủ
           </button>
         </div>
       </div>
@@ -366,8 +485,9 @@ export function SquadManagement() {
                           <button
                             className="danger-button"
                             onClick={() => openDeleteConfirm(player)}
+                            disabled={deletingPlayerIds.has(player.playerId) || isBulkDeleting}
                           >
-                            Xóa
+                            {deletingPlayerIds.has(player.playerId) ? 'Đang xóa...' : 'Xóa'}
                           </button>
                         </div>
 
@@ -436,6 +556,112 @@ export function SquadManagement() {
               );
             });
           })()}
+        </div>
+      )}
+
+      {showBulkDelete && (
+        <div className="modal-backdrop" role="presentation" onClick={closeBulkDeleteModal}>
+          <div
+            className="confirmation-modal bulk-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-delete-title"
+            aria-describedby="bulk-delete-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="confirmation-modal-header">
+              <div>
+                <p className="confirmation-modal-eyebrow">Xóa nhiều cầu thủ</p>
+                <h3 id="bulk-delete-title">Chọn cầu thủ cần xóa</h3>
+              </div>
+              <button
+                type="button"
+                className="tertiary-button"
+                onClick={closeBulkDeleteModal}
+                disabled={isBulkDeleting}
+                aria-label="Đóng hộp xóa nhanh nhiều cầu thủ"
+              >
+                ×
+              </button>
+            </div>
+
+            <p id="bulk-delete-description" className="confirmation-modal-copy">
+              Dữ liệu trận đấu và rating liên quan của các cầu thủ đã chọn sẽ được xóa cùng lúc.
+            </p>
+
+            <div className="bulk-delete-selected-count">
+              Đã chọn {selectedBulkDeleteIds.size}/{players.length} cầu thủ
+            </div>
+
+            <div className="bulk-delete-list">
+              {POSITION_GROUPS.map((group) => {
+                const playersInGroup = sortedBulkDeletePlayers.filter(
+                  (player) => getPositionGroup(player.position) === group
+                );
+
+                if (playersInGroup.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <section key={group} className="bulk-delete-group">
+                    <h4>{group}</h4>
+                    <div className="bulk-delete-players">
+                      {playersInGroup.map((player) => {
+                        const isSelected = selectedBulkDeleteIds.has(player.playerId);
+
+                        return (
+                          <label key={player.playerId} className="bulk-delete-player-row">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleBulkDeleteSelection(player.playerId)}
+                              disabled={isBulkDeleting}
+                            />
+                            <span className="bulk-delete-player-main">
+                              <strong>{getPlayerDisplayValue(player.name)}</strong>
+                              <span>
+                                {getPlayerDisplayValue(player.cardSeason)} ·{' '}
+                                {getPlayerDisplayValue(player.position)}
+                                {typeof player.matchCount === 'number'
+                                  ? ` · ${player.matchCount} trận`
+                                  : ''}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+
+            {bulkDeleteError ? (
+              <div className="inline-message error" style={{ marginTop: 0 }}>
+                {bulkDeleteError}
+              </div>
+            ) : null}
+
+            <div className="confirmation-modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeBulkDeleteModal}
+                disabled={isBulkDeleting}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => void handleBulkDeletePlayers()}
+                disabled={isBulkDeleting || selectedBulkDeleteIds.size === 0}
+              >
+                {isBulkDeleting ? 'Đang xóa...' : 'Xóa'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -15,6 +15,7 @@ import { calculateDisciplineScore, calculateAggressionIndex, calculateDiscipline
 import { getConfidenceLevel, predictPlayerScore } from '../prediction';
 import { calculateRiskScore } from '../risk';
 import { generateRecommendation } from '../recommendation';
+import { sortRecentMatchesNewestFirst } from '../match-history';
 
 function roundToOneDecimal(value: number): number {
   return Number(value.toFixed(1));
@@ -63,7 +64,8 @@ function getRecentResults(matches: RecentMatch[]): MatchResult[] {
 }
 
 export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysis {
-  const recentMatches = matches.slice(0, 5);
+  const orderedMatches = sortRecentMatchesNewestFirst(matches);
+  const recentMatches = orderedMatches.slice(0, 5);
   const scores = recentMatches.map((match) => match.score);
   const adjustedScores = recentMatches.map((match) =>
     calculateAdjustedScore(match.score, calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss))
@@ -83,11 +85,13 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
   );
   const prediction = predictPlayerScore({
     wmaScore,
+    recentScore: scores[0] ?? averageScore,
     trendValue: trend.trendValue,
     variance: variance.variance,
     momentum: momentum.momentum,
     lossStreak,
-    averageScore
+    averageScore,
+    matchCount: recentMatches.length
   });
   let riskAnalysis = calculateRiskScore({
     trendStatus: trend.trendStatus,
@@ -101,15 +105,18 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
   });
   const fraudReasons: string[] = [];
   // discipline / aggression calculations (if match-level discipline data available)
-  const discipline = calculateDisciplineScore(matches);
+  const discipline = calculateDisciplineScore(recentMatches);
   const aggression = calculateAggressionIndex({
-    fouls: matches.reduce((s, m) => s + (m.fouls ?? 0), 0),
-    yellowCards: matches.reduce((s, m) => s + (m.yellowCards ?? 0), 0),
-    redCards: matches.reduce((s, m) => s + (m.redCards ?? 0), 0)
+    fouls: recentMatches.reduce((s, m) => s + (m.fouls ?? 0), 0),
+    yellowCards: recentMatches.reduce((s, m) => s + (m.yellowCards ?? 0), 0),
+    redCards: recentMatches.reduce((s, m) => s + (m.redCards ?? 0), 0),
+    matchCount: recentMatches.length
   });
-  const disciplineTrend = calculateDisciplineTrend(matches);
+  const disciplineTrend = calculateDisciplineTrend(recentMatches);
 
-  const redRate = matches.length ? matches.reduce((s, m) => s + (m.redCards ?? 0), 0) / matches.length : 0;
+  const redRate = recentMatches.length
+    ? recentMatches.reduce((s, m) => s + (m.redCards ?? 0), 0) / recentMatches.length
+    : 0;
 
   let hasFraudRisk =
     prediction.predictedScore < 4.5 &&
@@ -168,7 +175,10 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     riskAnalysis,
     fraudRisk: hasFraudRisk,
     confidence: prediction.confidence,
-    momentumStatus: momentum.momentumStatus
+    momentumStatus: momentum.momentumStatus,
+    disciplineScore: discipline.disciplineScore,
+    aggressionIndex: aggression.aggressionIndex,
+    disciplineTrend
   });
 
   const matchImpacts = recentMatches.map((match) =>
@@ -180,6 +190,7 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
 
   return {
     averageScore,
+    currentFormScore: wmaScore,
     wmaScore,
     trendValue: trend.trendValue,
     trendStatus: trend.trendStatus,

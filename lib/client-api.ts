@@ -1,6 +1,23 @@
 type FetchDebugMeta = {
   caller: string;
+  includeRequestBody?: boolean;
 };
+
+type FetchDebugDetails = {
+  env: string | null;
+  url: string | null;
+  pathname: string | null;
+  caller: string;
+  requestUrl: string;
+  method: string;
+  status?: number;
+  statusText?: string;
+  responseText?: string;
+  requestBody?: unknown;
+  error?: string;
+};
+
+const REDACTED_BODY_KEYS = /password|token|secret|authorization|cookie|credential|key/i;
 
 function getClientDebugContext() {
   if (typeof window === 'undefined') {
@@ -20,6 +37,32 @@ function getClientDebugContext() {
 
 export async function fetchWithDebug(input: RequestInfo | URL, init: RequestInit | undefined, meta: FetchDebugMeta) {
   const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const method = init?.method ?? 'GET';
+
+  function getRequestBodyForDebug(): unknown {
+    if (!meta.includeRequestBody || typeof init?.body !== 'string') {
+      return undefined;
+    }
+
+    try {
+      const parsedBody = JSON.parse(init.body) as unknown;
+      return redactRequestBody(parsedBody);
+    } catch {
+      return init.body.length > 2000 ? `${init.body.slice(0, 2000)}...` : init.body;
+    }
+  }
+
+  function logFetchFailure(label: string, details: FetchDebugDetails) {
+    const normalizedDetails = {
+      ...details,
+      responseText: details.responseText
+        ? details.responseText.slice(0, 4000)
+        : details.responseText
+    };
+
+    console.error(label, normalizedDetails);
+    console.error(`${label} details`, JSON.stringify(normalizedDetails, null, 2));
+  }
 
   try {
     const response = await fetch(input, init);
@@ -28,26 +71,45 @@ export async function fetchWithDebug(input: RequestInfo | URL, init: RequestInit
       const clonedResponse = response.clone();
       const responseText = await clonedResponse.text().catch(() => '');
 
-      console.error('[api-fetch] request failed', {
+      logFetchFailure('[api-fetch] request failed', {
         ...getClientDebugContext(),
         caller: meta.caller,
         requestUrl,
-        method: init?.method ?? 'GET',
+        method,
         status: response.status,
         statusText: response.statusText,
-        responseText
+        responseText,
+        requestBody: getRequestBodyForDebug()
       });
     }
 
     return response;
   } catch (error) {
-    console.error('[api-fetch] network error', {
+    logFetchFailure('[api-fetch] network error', {
       ...getClientDebugContext(),
       caller: meta.caller,
       requestUrl,
-      method: init?.method ?? 'GET',
+      method,
+      requestBody: getRequestBodyForDebug(),
       error: error instanceof Error ? error.message : String(error)
     });
     throw error;
   }
+}
+
+function redactRequestBody(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactRequestBody);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
+      key,
+      REDACTED_BODY_KEYS.test(key) ? '[redacted]' : redactRequestBody(entryValue)
+    ])
+  );
 }

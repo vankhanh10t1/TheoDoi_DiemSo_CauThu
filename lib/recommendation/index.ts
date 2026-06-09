@@ -31,12 +31,37 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
     };
   }
 
-  if (input.riskAnalysis.riskLevel === 'HIGH' || input.predictedScore < 4) {
+  if (input.riskAnalysis.riskLevel === 'HIGH' || input.wmaScore < 4.5) {
     return {
       recommendation: 'SELL',
-      reason: 'Điểm dự đoán thấp và rủi ro cao, nên thanh lý',
+      reason: 'Phong độ hiện tại thấp hoặc rủi ro cao, nên thanh lý',
       priority: 4
     };
+  }
+
+  if (typeof input.disciplineScore === 'number' && typeof input.aggressionIndex === 'number') {
+    if (
+      input.disciplineScore < 50 &&
+      input.aggressionIndex >= 3 &&
+      input.disciplineTrend === 'DETERIORATING'
+    ) {
+      return {
+        recommendation: 'REPLACE',
+        reason: 'Kỷ luật đang xấu đi và mức độ phạm lỗi cao, cần thay thế',
+        priority: 5
+      };
+    }
+
+    if (
+      input.disciplineScore < 65 &&
+      input.aggressionIndex >= 1.75
+    ) {
+      return {
+        recommendation: 'BENCH',
+        reason: 'Kỷ luật kém và mức độ phạm lỗi cao mỗi trận, đưa dự bị để theo dõi',
+        priority: 3
+      };
+    }
   }
 
   if (
@@ -50,25 +75,6 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
       reason: 'Phong độ thiếu ổn định, nên cho dự bị để theo dõi',
       priority: 3
     };
-  }
-
-  // Use discipline/aggression signals: aggressive + poor discipline => higher priority bench or replace
-  if (typeof input.disciplineScore === 'number' && typeof input.aggressionIndex === 'number') {
-    if (input.disciplineScore < 50 && input.aggressionIndex >= 8) {
-      return {
-        recommendation: 'REPLACE',
-        reason: 'Vấn đề kỷ luật nghiêm trọng và hành vi hung hãn, cần thay thế',
-        priority: 5
-      };
-    }
-
-    if (input.disciplineScore < 65 && input.aggressionIndex >= 5) {
-      return {
-        recommendation: 'BENCH',
-        reason: 'Kỷ luật kém và mức độ hung hãn trung bình, đưa dự bị để theo dõi',
-        priority: 3
-      };
-    }
   }
 
   if (

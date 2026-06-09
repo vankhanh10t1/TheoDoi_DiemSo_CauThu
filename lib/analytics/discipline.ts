@@ -17,16 +17,19 @@ function normalizeScore(value: number, min = 0, max = 10) {
   return (clamped - min) / (max - min) * 100;
 }
 
-export function calculateAggressionIndex(stats: { fouls?: number; yellowCards?: number; redCards?: number }): { aggressionIndex: number; aggressionLevel: 'LOW' | 'MEDIUM' | 'HIGH' } {
+export function calculateAggressionIndex(stats: { fouls?: number; yellowCards?: number; redCards?: number; matchCount?: number }): { aggressionIndex: number; aggressionLevel: 'LOW' | 'MEDIUM' | 'HIGH' } {
   const fouls = stats.fouls ?? 0;
   const yellow = stats.yellowCards ?? 0;
   const red = stats.redCards ?? 0;
+  const matchCount = Math.max(1, stats.matchCount ?? 1);
 
-  const aggressionIndex = Number(((fouls * 0.5) + (yellow * 2) + (red * 5)).toFixed(2));
+  const aggressionIndex = Number(
+    (((fouls * 0.5) + (yellow * 2) + (red * 5)) / matchCount).toFixed(2)
+  );
 
   let level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
-  if (aggressionIndex >= 10) level = 'HIGH';
-  else if (aggressionIndex >= 4) level = 'MEDIUM';
+  if (aggressionIndex >= 3) level = 'HIGH';
+  else if (aggressionIndex >= 1.25) level = 'MEDIUM';
 
   return { aggressionIndex, aggressionLevel: level };
 }
@@ -69,13 +72,13 @@ export function calculateDisciplineTrend(history: RecentMatch[]): 'IMPROVING' | 
   if (!history || history.length < 2) return 'STABLE';
 
   const scores = history.map((m) => ((m.yellowCards ?? 0) * 2) + ((m.redCards ?? 0) * 5) + (m.fouls ?? 0) * 0.2);
-  // compare average of first half vs second half
+  // History is newest-first: compare recent discipline penalty with older penalty.
   const mid = Math.floor(scores.length / 2);
-  const firstAvg = scores.slice(0, mid).reduce((s, v) => s + v, 0) / Math.max(1, mid);
-  const lastAvg = scores.slice(mid).reduce((s, v) => s + v, 0) / Math.max(1, scores.length - mid);
+  const recentAvg = scores.slice(0, mid).reduce((s, v) => s + v, 0) / Math.max(1, mid);
+  const olderAvg = scores.slice(mid).reduce((s, v) => s + v, 0) / Math.max(1, scores.length - mid);
 
-  if (lastAvg < firstAvg - 0.5) return 'IMPROVING';
-  if (lastAvg > firstAvg + 0.5) return 'DETERIORATING';
+  if (recentAvg < olderAvg - 0.5) return 'IMPROVING';
+  if (recentAvg > olderAvg + 0.5) return 'DETERIORATING';
   return 'STABLE';
 }
 

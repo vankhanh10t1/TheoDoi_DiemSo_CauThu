@@ -1,6 +1,7 @@
 import { calculateWMA, calculateTrend, calculateVariance, calculateMomentum, calculateLossStreak, calculateAdjustedScore, calculateMatchImpact } from '../analytics/calculations';
 import { calculateDisciplineScore, calculateAggressionIndex, calculateDisciplineTrend } from '../analytics/discipline';
 import type { RecentMatch } from '../types';
+import { sortRecentMatchesNewestFirst } from '../match-history';
 
 export type FeatureVector = {
   avg_score: number;
@@ -17,7 +18,7 @@ export type FeatureVector = {
 };
 
 export function buildFeatureVector(matches: RecentMatch[]): FeatureVector {
-  const recent = matches.slice(0, 5);
+  const recent = sortRecentMatchesNewestFirst(matches).slice(0, 5);
   const scores = recent.map((m) => m.score);
   const avg_score = scores.reduce((s, v) => s + v, 0) / Math.max(1, scores.length);
   const adjustedScores = recent.map((m) => calculateAdjustedScore(m.score, calculateMatchImpact(m.result, m.isBigWin, m.isBigLoss)));
@@ -25,18 +26,19 @@ export function buildFeatureVector(matches: RecentMatch[]): FeatureVector {
   const variance = calculateVariance(scores).variance;
   const trend = calculateTrend(adjustedScores).trendStatus;
   const momentum = calculateMomentum(adjustedScores).momentum;
-  const loss_streak = calculateLossStreak(matches.slice(0, 3).map((m) => m.result));
+  const loss_streak = calculateLossStreak(recent.slice(0, 3).map((m) => m.result));
 
-  const discipline = calculateDisciplineScore(matches);
+  const discipline = calculateDisciplineScore(recent);
   const aggression = calculateAggressionIndex({
-    fouls: matches.reduce((s, m) => s + (m.fouls ?? 0), 0),
-    yellowCards: matches.reduce((s, m) => s + (m.yellowCards ?? 0), 0),
-    redCards: matches.reduce((s, m) => s + (m.redCards ?? 0), 0)
+    fouls: recent.reduce((s, m) => s + (m.fouls ?? 0), 0),
+    yellowCards: recent.reduce((s, m) => s + (m.yellowCards ?? 0), 0),
+    redCards: recent.reduce((s, m) => s + (m.redCards ?? 0), 0),
+    matchCount: recent.length
   });
 
-  const totalMatches = Math.max(1, matches.length);
-  const yellow_rate = matches.reduce((s, m) => s + (m.yellowCards ?? 0), 0) / totalMatches;
-  const red_rate = matches.reduce((s, m) => s + (m.redCards ?? 0), 0) / totalMatches;
+  const totalMatches = Math.max(1, recent.length);
+  const yellow_rate = recent.reduce((s, m) => s + (m.yellowCards ?? 0), 0) / totalMatches;
+  const red_rate = recent.reduce((s, m) => s + (m.redCards ?? 0), 0) / totalMatches;
 
   return {
     avg_score,
@@ -44,7 +46,7 @@ export function buildFeatureVector(matches: RecentMatch[]): FeatureVector {
     variance,
     trend,
     discipline_score: discipline.disciplineScore,
-    discipline_trend: calculateDisciplineTrend(matches),
+    discipline_trend: calculateDisciplineTrend(recent),
     yellow_rate,
     red_rate,
     aggression_index: aggression.aggressionIndex,

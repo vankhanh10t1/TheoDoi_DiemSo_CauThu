@@ -1,5 +1,6 @@
 import { analyzeRecentMatches } from './analytics/performance';
 import { recommendationRank } from './recommendation';
+import { sortRecentMatchesNewestFirst } from './match-history';
 import type { MatchResult, RecentMatch, RecommendationAction } from './types';
 
 type RecommendationTableItem = {
@@ -11,6 +12,11 @@ type RecommendationTableItem = {
   Position?: unknown;
   Score?: unknown;
   Result?: unknown;
+  MatchDate?: unknown;
+  CreatedAt?: unknown;
+  YellowCards?: unknown;
+  RedCards?: unknown;
+  Fouls?: unknown;
 };
 
 interface RecommendationSourceRecord {
@@ -105,8 +111,13 @@ export function buildRecommendationsFromTableItems(
 
     existingRecord.recentMatches.push({
       sk,
+      matchDate: toStringValue(item.MatchDate) || undefined,
+      createdAt: toStringValue(item.CreatedAt) || undefined,
       score: item.Score,
-      result: item.Result
+      result: item.Result,
+      yellowCards: isValidScore(item.YellowCards) ? item.YellowCards : 0,
+      redCards: isValidScore(item.RedCards) ? item.RedCards : 0,
+      fouls: isValidScore(item.Fouls) ? item.Fouls : 0
     });
     records.set(playerId, existingRecord);
   }
@@ -120,9 +131,7 @@ export function buildRecommendationsFromTableItems(
         return null;
       }
 
-      const recentMatches = [...record.recentMatches]
-        .sort((a, b) => b.sk.localeCompare(a.sk))
-        .slice(0, 5);
+      const recentMatches = sortRecentMatchesNewestFirst(record.recentMatches).slice(0, 5);
 
       if (recentMatches.length === 0) {
         return null;
@@ -136,11 +145,13 @@ export function buildRecommendationsFromTableItems(
         cardSeason: record.cardSeason,
         position: record.position,
         status:
-          analysis.recommendation === 'REPLACE'
-            ? 'Fraud'
-            : analysis.recommendation === 'SELL'
-              ? 'Under Review'
-              : 'Stable',
+          analysis.currentFormScore > 8
+            ? 'Star Player'
+            : analysis.currentFormScore >= 6
+              ? 'Stable'
+              : analysis.currentFormScore >= 4.5
+                ? 'Under Review'
+                : 'Fraud',
         averageScore: analysis.averageScore,
         wmaScore: analysis.wmaScore,
         matchCount: recentMatches.length,

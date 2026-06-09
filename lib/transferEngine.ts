@@ -1,5 +1,6 @@
 import type { PlayerAssessment, RecentMatch } from './types';
 import { evaluateRecentMatches } from './evaluationEngine';
+import { sortRecentMatchesNewestFirst } from './match-history';
 
 export type PerformanceTrend = 'UP' | 'DOWN' | 'STABLE';
 
@@ -31,8 +32,8 @@ export function calculatePerformanceTrend(recentMatches: RecentMatch[]): {
     return { trend: 'STABLE', value: 0 };
   }
 
-  // Use up to 3 recent matches, reversed so oldest is first
-  const matchesToAnalyze = recentMatches.slice(0, 3).reverse();
+  // Use up to 3 matches ordered by MatchDate, reversed so oldest is first.
+  const matchesToAnalyze = sortRecentMatchesNewestFirst(recentMatches).slice(0, 3).reverse();
 
   if (matchesToAnalyze.length === 1) {
     // Only one match, no trend
@@ -71,8 +72,9 @@ export function generateTransferRecommendation(
     return null;
   }
 
-  const assessment = evaluateRecentMatches(recentMatches);
-  const { trend, value: trendValue } = calculatePerformanceTrend(recentMatches);
+  const orderedMatches = sortRecentMatchesNewestFirst(recentMatches);
+  const assessment = evaluateRecentMatches(orderedMatches);
+  const { trend, value: trendValue } = calculatePerformanceTrend(orderedMatches);
 
   let recommendation: 'HOLD' | 'SELL' | 'MONITOR';
   let reason: string;

@@ -373,6 +373,8 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         const playerMatchItem: Record<string, unknown> = {
           PK: `PLAYER#${ratingData.playerId}`,
           SK: playerSk,
+          MatchDate: match.matchDate,
+          CreatedAt: now,
           Score: roundToOneDecimal(ratingData.rating),
           IsStarter: true,
           Result: playerResultMap[(match.result as string) ?? 'LOSE'],
