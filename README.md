@@ -1,409 +1,184 @@
-# FCON Performance Tracker — Football Performance Intelligence System
+# FCON Performance Tracker
 
-Ứng dụng web Next.js để quản lý đội hình, nhập điểm trận, phân tích phong độ bằng WMA, phát hiện xu hướng, ước lượng rủi ro và đưa ra khuyến nghị chuyển nhượng dựa trên dữ liệu thực tế từ DynamoDB.
+Ứng dụng web theo dõi phong độ cầu thủ bóng đá, quản lý đội hình, nhập điểm theo trận và đưa ra phân tích/rủi ro/khuyến nghị dựa trên dữ liệu lưu trong AWS DynamoDB.
 
-## Tính Năng
+## Công nghệ sử dụng
 
-### 1. Rating / Nhập Điểm Trận (`📊 Rating`)
-- **Match-First Flow:** Tạo trận mới trước, sau đó nhập điểm từng cầu thủ
-- Chọn cầu thủ từ danh sách cầu thủ thực tế đang có trong app
-- Nhập điểm trận từ 1.0 đến 10.0
-- Chọn kết quả: Win / Draw / Loss
-- Chọn vị trí đá (Position Group + Detailed Position)
-- Chọn đá chính hoặc dự bị
-- Tuỳ chọn: Nhập thẻ vàng, thẻ đỏ, phạm lỗi
-- Tự động tính phong độ WMA, xu hướng, dự đoán, rủi ro dựa trên toàn bộ số trận
+- Next.js 15 (App Router, Route Handlers)
+- React 19 và React Context
+- TypeScript strict mode
+- AWS SDK for JavaScript v3
+- AWS DynamoDB theo mô hình single-table
+- Vitest
+- CSS thuần trong `app/globals.css`
 
-### 2. Squad Management (`👥 Đội Hình`)
-- Xem danh sách cầu thủ lấy từ DynamoDB
-- Thêm cầu thủ mới với tên, vị trí và cardSeason; `playerId` được tạo tự động
-- **Duplicate Check:** Tên cầu thủ được kiểm tra trùng lặp (case-insensitive, trimmed)
-- Cập nhật cầu thủ: sửa tên + vị trí + cardSeason
-- Xóa cầu thủ và toàn bộ lịch sử trận đấu của cầu thủ đó
-- Reset lịch sử điểm số của một cầu thủ mà không xóa cầu thủ
-- Xem chi tiết cầu thủ (link tới Player Detail)
+## Tính năng chính
 
-### 3. Transfer Recommendation (`🎯 Đề Xuất`)
-Dựa trên WMA, trend, variance, prediction, risk score và fraud alert, hệ thống phân loại cầu thủ thành các hành động:
+- Quản lý cầu thủ: xem, tìm kiếm, thêm, sửa, xóa đơn lẻ và xóa nhiều cầu thủ.
+- Kiểm tra trùng tên cầu thủ khi thêm hoặc cập nhật.
+- Tạo trận đấu và nhập rating hàng loạt cho các cầu thủ tham gia.
+- Lưu rating theo cả hướng trận đấu và hướng cầu thủ.
+- Xem chi tiết, trạng thái và lịch sử phong độ của cầu thủ.
+- Bảng phong độ toàn đội có tìm kiếm và sắp xếp dữ liệu.
+- Phân tích WMA/current form, average, trend, variance, momentum, prediction và confidence.
+- Phân tích discipline, aggression, risk và fraud alert.
+- Sinh khuyến nghị `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
+- Sắp xếp lịch sử phong độ theo `MatchDate`, fallback sang `CreatedAt` hoặc sort key.
+- Reset lịch sử phong độ theo cầu thủ mà vẫn giữ metadata cầu thủ.
 
-| Mã Đề Xuất | Ưu Tiên | Ý nghĩa |
-| :-- | :-- | :-- |
-| 🚨 **REPLACE** | 5 (Cao nhất) | Thay thế khẩn cấp do fraud alert hoặc kỷ luật/rủi ro cực cao |
-| 🔴 **SELL** | 4 | Thanh lý: rủi ro cao + phong độ thấp |
-| ⚠️ **BENCH** | 3 | Đưa dự bị: phong độ không ổn định (VOLATILE/DOWN/COLD) |
-| 🟡 **MONITOR** | 2 | Theo dõi thêm: rủi ro trung bình, chưa ổn định hoàn toàn |
-| ✅ **KEEP** | 1 (Thấp nhất) | Giữ trong đội hình: phong độ ổn định, xu hướng tốt |
+## Cấu trúc thư mục
 
-**Ranking:** Khi có nhiều điều kiện khớp, hệ thống chọn recommendation với priority cao nhất
-
-Màn hình “Phong độ” hiện tại được nhóm theo `LOW RISK`, `MEDIUM RISK`, `HIGH RISK`, mỗi group có số lượng riêng và card chỉ hiển thị mùa thẻ, vị trí, số trận và badge Risk để tập trung vào risk monitoring trên mobile.
-
-### 4. Player Detail (`🔍 Chi Tiết Cầu Thủ`)
-- Xem thông tin cầu thủ
-- Nhập điểm trận mới
-- Xem WMA, trend, variance, momentum, prediction, confidence và risk
-- Xem trạng thái phong độ hiện tại
-- Reset lịch sử điểm số của cầu thủ
-
-## Analytics Engine
-
-### WMA
-Hệ thống dùng Weighted Moving Average làm current form score chính:
-
-## Match-First Flow (Hiện Tại - May 18, 2026)
-
-**Ứng dụng sử dụng kiến trúc match-first để đảm bảo tính nhất quán dữ liệu và tránh ghi đè:**
-
-1. **Tạo Trận:** `POST /api/matches` với payload `{ matchDate: "YYYY-MM-DD" }`
-   - Response chứa `match` object có `id` duy nhất (ISO8601 timestamp)
-   - Match ID đảm bảo không có 2 trận cùng ngày ghi đè nhau
-
-2. **Lưu Điểm Cho Trận:** `POST /api/matches/:matchId/ratings` với payload:
-   ```json
-   {
-     "ratings": [
-       {
-         "playerId": "...",
-         "score": 7.5,
-         "isStarter": true,
-         "result": "Win",
-         "positionGroup": "DEF",
-         "detailedPosition": "CB",
-         "yellowCards": 0,
-         "redCards": 0,
-         "fouls": 2
-       },
-       ...
-     ]
-   }
-   ```
-
-### Trend Detection
-
-```txt
-trend = x3 - x1
+```text
+app/
+  api/                  Route Handlers cho players, matches, ratings và analytics
+  globals.css           Style toàn ứng dụng
+  layout.tsx
+  page.tsx
+components/             UI quản lý đội hình, nhập điểm, phong độ và chi tiết cầu thủ
+lib/
+  analytics/            WMA, trend, variance, momentum và discipline
+  prediction/           Dự đoán điểm và confidence
+  recommendation/       Logic khuyến nghị
+  risk/                 Tính risk score
+  dynamodb.ts           Khởi tạo DynamoDB client
+  matchService.ts       Đọc/ghi dữ liệu trận và rating
+  playerService.ts      Đọc/xóa dữ liệu cầu thủ
+  match-history.ts      Sắp xếp lịch sử trận
+tests/                  Unit tests Vitest
+scripts/seed.ts         Script no-op, hiện không tạo dữ liệu mẫu
 ```
 
-- `> 1` => `UP`
-- `-1` đến `1` => `STABLE`
-- `< -1` => `DOWN`
+## API chính
 
-### Variance / Stability
+### Cầu thủ
 
-- `< 1` => `STABLE`
-- `1 - 4` => `UNSTABLE`
-- `> 4` => `VOLATILE`
+- `GET /api/players`
+- `POST /api/players`
+- `GET /api/players/{id}`
+- `PATCH /api/players/{id}`
+- `DELETE /api/players/{id}`
+- `POST /api/players/bulk-delete`
+- `PATCH /api/players/{id}/reset`
 
-### Momentum
+### Trận đấu và rating
 
-```txt
-momentum = (x3 - x2) + (x2 - x1)
-```
+- `GET /api/matches`
+- `POST /api/matches`
+- `GET /api/matches/{id}`
+- `PATCH /api/matches/{id}`
+- `DELETE /api/matches/{id}`
+- `GET /api/matches/{id}/ratings`
+- `POST /api/matches/{id}/ratings`
+- `DELETE /api/matches/{id}/ratings?playerId={playerId}`
 
-- `> 1` => `HOT`
-- `-1` đến `1` => `NORMAL`
-- `< -1` => `COLD`
+### Phân tích
 
-### Predicted Score
+- `GET /api/player-status?id={playerId}`
+- `GET /api/form-extremes`
+- `GET /api/recommendations`
 
-Hệ thống sử dụng heuristic model để dự đoán phong độ tiếp theo:
+`POST /api/rating` là endpoint cũ và hiện trả về `410 Gone`.
 
-```txt
-predictedScore = 0.48×wmaScore + 0.22×averageScore + 0.12×trendValue 
-                 + 0.08×momentum - 0.14×variance - 0.25×lossStreak
+## Yêu cầu môi trường
 
-confidence = 0.48 + adjustments_theo(lossStreak, variance, trend, momentum, wma_vs_avg)
-```
+- Node.js tương thích Next.js 15; khuyến nghị Node.js 20 LTS.
+- npm.
+- Một bảng AWS DynamoDB có:
+  - Partition key: `PK` kiểu String.
+  - Sort key: `SK` kiểu String.
+- AWS credentials có quyền đọc/ghi cần thiết trên bảng DynamoDB.
 
-**Ngưỡng Confidence:**
-- `> 0.8` => `HIGH`
-- `0.5 - 0.8` => `MEDIUM`
-- `< 0.5` => `LOW`
-
-### Risk Score
-
-Risk được tính dựa trên 4 yếu tố với trọng số:
-
-```txt
-riskScore = trendRisk×0.3 + varianceRisk×0.25 + streakRisk×0.25 + predictionRisk×0.2
-```
-
-Trong đó:
-- `trendRisk` = 1 nếu DOWN, 0 nếu UP/STABLE
-- `varianceRisk` = 1 nếu VOLATILE, 0.6 nếu UNSTABLE, 0 nếu STABLE
-- `streakRisk` = min(1, max(0, lossStreak / 3))
-- `predictionRisk` = 1 nếu predicted < 4.5, 0.5 nếu 4.5-6, 0 nếu >= 6
-
-**Ngưỡng Risk Level:**
-- `>= 70` => `HIGH`
-- `35 - 70` => `MEDIUM`
-- `< 35` => `LOW`
-
-### Discipline & Aggression
-
-Hệ thống tính các chỉ số kỷ luật từ dữ liệu trận đấu:
-
-```txt
-disciplineScore = 100 - (redCards_rate + yellowCards_rate + fouls_rate)
-aggressionIndex = (fouls + yellowCards×0.5 + redCards×2) / totalMatches
-```
-
-**Ảnh hưởng đến Recommendation:**
-- Nếu `disciplineScore < 50 && aggressionIndex >= 8` => **REPLACE** (hành vi hung hãn)
-- Nếu `disciplineScore < 65 && aggressionIndex >= 5` => **BENCH** (theo dõi kỷ luật)
-
-### Fraud Alert
-
-Fraud risk được bật khi **đồng thời** có 5 điều kiện:
-
-1. `predictedScore < 4.5`
-2. `trendStatus = DOWN`
-3. `stabilityLevel = VOLATILE`
-4. `lossStreak >= 3`
-5. `redRate > 0` (ít nhất 1 thẻ đỏ trong lịch sử)
-
-Khi fraud alert bật => Recommendation = **REPLACE** (ưu tiên cao nhất)
-
-## Kiến Trúc Hệ Thống
-
-```
-┌─────────────────────────────────┐
-│   React/Next.js App             │
-│   ├─ AppShell (Navigation)      │
-│   ├─ TrackerApp (Rating)        │
-│   ├─ SquadManagement            │
-│   ├─ TransferRecommendation     │
-│   └─ PlayerDetail               │
-└────────────────────┬────────────┘
-                     │
-         ┌───────────┴──────────────┐
-         │                          │
-    ┌────▼─────┐           ┌────────▼──────┐
-    │ Vercel   │           │ AWS DynamoDB  │
-    │ Functions│◄────────►│ FCON_Table     │
-    │ API      │           │ (Single-table  │
-    │ Routes   │           │ design)        │
-    └──────────┘           └───────────────┘
-```
-
-### Các Thành Phần Analytics Mới
-
-- **Feature Engineering** (`lib/featureEngineering`): tổng hợp `avg_score`, `weighted_average`, `variance`, `trend`, `discipline_score`, `aggression_index`, `loss_streak`, `momentum` và các feature khác để cung cấp input cho Prediction / Risk / Recommendation engines.
-- **Discipline Engine** (`lib/analytics/discipline.ts`): tính `disciplineScore`, `aggressionIndex`, `disciplineTrend` và các chỉ số liên quan, có thể cấu hình penalty theo vị trí.
-
-
-## API Routes (Current - May 18, 2026)
-
-### Match Management (New)
-- `POST /api/matches` - Tạo trận mới (payload: `{ matchDate: "YYYY-MM-DD" }`)
-- `POST /api/matches/:matchId/ratings` - Lưu điểm trận cho cầu thủ (payload: `{ ratings: [...] }`)
-- `GET /api/matches` - Lấy danh sách trận đấu
-- `GET /api/matches/:matchId` - Chi tiết trận (bao gồm tất cả ratings)
-
-### Player Management
-- `GET /api/players` - Danh sách cầu thủ
-- `POST /api/players` - Thêm cầu thủ (với duplicate name checking)
-- `PATCH /api/players/{id}` - Cập nhật tên + vị trí + cardSeason
-- `DELETE /api/players/{id}` - Xóa cầu thủ và toàn bộ dữ liệu trận đấu
-- `PATCH /api/players/{id}/reset` - Xóa lịch sử điểm số, giữ lại cầu thủ
-
-### Analytics & Recommendations
-- `GET /api/player-status?id={id}` - Tính phong độ WMA/trend/prediction/risk
-- `GET /api/recommendations` - Khuyến nghị chuyển nhượng (KEEP/MONITOR/BENCH/SELL/REPLACE)
-- `GET /api/form-extremes` - Top performers & bottom performers
-
-### Debug Endpoints
-- `GET /api/debug-env` - Kiểm tra cấu hình AWS
-- `GET /api/debug-ratings?matchId={matchId}` - Xác minh ratings của trận
-
-**Legacy:**
-- `POST /api/rating` - **Deprecated** (returns 410 Gone)
-
-## Ảnh Chụp Màn Hình UI
-
-Nếu muốn đính kèm ảnh chụp màn hình cho tài liệu hoặc demo, có thể đặt chúng vào một thư mục như `public/screenshots/` và chèn liên kết trực tiếp trong README. Hiện tại dự án chưa bắt buộc có ảnh chụp để chạy.
-
-## DynamoDB Schema (Match-First, May 18, 2026)
-
-**Bảng:** `FCON_Table`
-
-| Loại Item | PK | SK | Nội dung |
-| :-- | :-- | :-- | :-- |
-| **PLAYER METADATA** | `PLAYER#{playerId}` | `METADATA` | Thông tin cầu thủ: `Name`, `CardSeason`, `Position` |
-| **RATING** (Match-First) | `PLAYER#{playerId}` | `MATCH#{matchId}` | Điểm trận: `Score`, `IsStarter`, `Result`, `PositionGroup`, `DetailedPosition`, `YellowCards`, `RedCards`, `Fouls`, `MatchDate` |
-| **MATCH METADATA** | `MATCH#{matchId}` | `METADATA` | Thông tin trận: `MatchDate`, `CreatedAt` |
-
-**Ví dụ:**
-
-Player Metadata:
-```json
-{
-  "PK": "PLAYER#CR7",
-  "SK": "METADATA",
-  "Name": "C. Ronaldo",
-  "CardSeason": "21CU",
-  "Position": "ST"
-}
-```
-
-Rating (Match-First):
-```json
-{
-  "PK": "PLAYER#CR7",
-  "SK": "MATCH#20260518T140000Z",
-  "Score": 7.5,
-  "IsStarter": true,
-  "Result": "Win",
-  "PositionGroup": "FWD",
-  "DetailedPosition": "ST",
-  "YellowCards": 0,
-  "RedCards": 0,
-  "Fouls": 1,
-  "MatchDate": "2026-05-18"
-}
-```
-
-**Ghi Chú:**
-- `matchId` trong SK đảm bảo tính duy nhất (không ghi đè nếu cùng ngày)
-- `CardSeason` thay thế legacy `Season` field
-- `PositionGroup` (DEF, MID, FWD) + `DetailedPosition` (CB, RB, ST, ...) theo dõi vị trí tại mỗi trận
-- `YellowCards`, `RedCards`, `Fouls` tùy chọn; field thiếu được coi là 0
-
-## Cấu Hình & Chạy
-
-### 1. Cài đặt dependency
+## Cài đặt
 
 ```bash
 npm install
 ```
 
-### 2. Cấu hình AWS Credentials
+## Cấu hình `.env`
 
-Cập nhật `.env.local` (local development):
+Tạo `.env.local` từ `.env.example`:
 
-```env
-AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
-AWS_REGION=ap-southeast-1
-DYNAMODB_TABLE_NAME=FCON_Table
-# Tùy chọn cho local DynamoDB:
-# DYNAMODB_ENDPOINT=http://localhost:8000
+```bash
+cp .env.example .env.local
 ```
 
-### 2.1. Triển Khai Vercel
+Trên Windows PowerShell:
 
-**Cấu Hình Environment Variables:**
-- Thêm vào **Settings > Environment Variables**:
-  - `AWS_ACCESS_KEY_ID`
-  - `AWS_SECRET_ACCESS_KEY`
-  - `AWS_REGION` (ví dụ: `ap-southeast-1`)
-  - `DYNAMODB_TABLE_NAME` (ví dụ: `FCON_Table`)
+```powershell
+Copy-Item .env.example .env.local
+```
 
-**Scope Triển Khai:**
-- Đặt scope là **Production** cho môi trường live
-- Scope Preview/Development là riêng biệt; cấu hình nếu cần
-- Sau khi sửa biến, **redeploy** production deployment để runtime lấy cấu hình mới
+Các biến được source code sử dụng:
 
-**Xác Minh:**
-- Dùng endpoint `/api/debug-env` để kiểm tra xem credentials có được load đúng không
+| Biến | Bắt buộc | Mô tả |
+| --- | --- | --- |
+| `AWS_ACCESS_KEY_ID` | Có | AWS access key, không commit giá trị thật |
+| `AWS_SECRET_ACCESS_KEY` | Có | AWS secret key, không commit giá trị thật |
+| `AWS_REGION` | Có | Region chứa bảng DynamoDB |
+| `DYNAMODB_TABLE_NAME` | Có* | Tên bảng DynamoDB |
+| `DYNAMODB_TABLE` | Có* | Alias thay thế cho `DYNAMODB_TABLE_NAME` |
+| `DYNAMODB_LIST_INDEX_NAME` | Không | GSI dùng để tối ưu danh sách cầu thủ; nếu thiếu app fallback sang Scan |
 
-### 3. Tạo bảng DynamoDB
+\* Chỉ cần cấu hình một trong `DYNAMODB_TABLE_NAME` hoặc `DYNAMODB_TABLE`. Nên ưu tiên `DYNAMODB_TABLE_NAME`.
 
-- Table name: `FCON_Table`
-- Partition Key: `PK` (String)
-- Sort Key: `SK` (String)
-
-### 4. Chạy ứng dụng
+## Chạy local
 
 ```bash
 npm run dev
 ```
 
-Mở `http://localhost:3000`
+Mở [http://localhost:3000](http://localhost:3000).
 
-### 5. Chạy tests
+## Kiểm thử và build
 
 ```bash
 npm test
-```
-
-### 6. Build production
-
-```bash
 npm run build
 npm start
 ```
 
-## Logic Khuyến Nghị (Phân Loại Phong Độ)
+Các scripts hiện có:
 
-Dữ liệu đánh giá hiện không còn phụ thuộc vào average đơn giản. UI và API ưu tiên WMA, trend, variance, prediction, risk, discipline và fraud alert để quyết định hành động:
+| Script | Công dụng |
+| --- | --- |
+| `npm run dev` | Chạy Next.js development server |
+| `npm run build` | Build production |
+| `npm start` | Chạy production server sau khi build |
+| `npm test` | Chạy toàn bộ unit tests bằng Vitest |
+| `npm run seed` | Chạy script seed no-op; hiện không tạo dữ liệu |
 
-| Điều kiện | Recommendation | Priority | Ý nghĩa |
-| :-- | :-- | :-- | :-- |
-| Fraud risk bật | **REPLACE** | 5 | Thay thế khẩn cấp, cảnh báo gian lận/rủi ro cao |
-| riskLevel = HIGH hoặc predictedScore < 4 | **SELL** | 4 | Thanh lý, rủi ro cao + phong độ thấp |
-| riskScore >= 55 hoặc VOLATILE hoặc DOWN hoặc COLD | **BENCH** | 3 | Đưa dự bị, phong độ không ổn định |
-| disciplineScore < 50 && aggressionIndex >= 8 | **REPLACE** | 5 | Vấn đề kỷ luật nghiêm trọng, thay thế |
-| disciplineScore < 65 && aggressionIndex >= 5 | **BENCH** | 3 | Kỷ luật kém, theo dõi dự bị |
-| riskScore >= 30 hoặc trendStatus != UP hoặc confidence < 0.6 | **MONITOR** | 2 | Theo dõi thêm, chưa ổn định hoàn toàn |
-| riskScore < 30 && trendStatus = UP && wmaScore >= 6 | **KEEP** | 1 | Giữ, phong độ ổn định |
+## DynamoDB single-table
 
-**Ưu tiên:** Khi có nhiều điều kiện khớp, hệ thống chọn recommendation với priority cao nhất.
+Các item chính:
 
-## State Management
+| Loại item | PK | SK |
+| --- | --- | --- |
+| Metadata cầu thủ | `PLAYER#{playerId}` | `METADATA` |
+| Lịch sử/rating theo cầu thủ | `PLAYER#{playerId}` | `MATCH#{matchId}` |
+| Metadata trận | `MATCH#{matchId}` | `METADATA` |
+| Rating theo trận | `MATCH#{matchId}` | `RATING#{playerId}` |
 
-App sử dụng React Context (`AppContext`) để quản lý:
-- Tab/screen hiện tại
-- Cầu thủ đang chọn ở màn chi tiết
-- Refresh trigger để làm mới dữ liệu
-- Danh sách cầu thủ thực tế đang dùng cho Rating và Squad Management
-
-## Testing
-
-### Unit tests
-
-```bash
-npm test
-```
-
-Kiểm tra:
-- WMA / trend / variance / momentum
-- Prediction / risk / fraud logic
-- Recommendation ranking
-
-### Manual testing
-
-1. Thêm cầu thủ ở Squad Management
-2. Cập nhật tên/vị trí cầu thủ
-3. Nhập điểm trận ở Rating (hệ thống đánh giá ngay khi có từ 1 trận)
-4. Xem khuyến nghị ở Transfer Recommendation
-5. Reset lịch sử điểm số trong Player Detail
-
-## Ghi chú hiện tại
-
-- Không còn dữ liệu mock/default cho danh sách cầu thủ
-- `playerId` được tạo tự động khi thêm cầu thủ
-- `npm run seed` hiện không còn là luồng bắt buộc cho app
-- UI “Phong độ” được tối giản cho mobile và tập trung vào Risk badge
-- Build production và test suite phải pass trước khi push lên GitHub / redeploy Vercel
+Các rating mới lưu thêm `MatchDate` để analytics sắp xếp theo ngày thi đấu. Dữ liệu cũ thiếu `MatchDate` sẽ fallback sang `CreatedAt` hoặc sort key.
 
 ## Deploy
 
-Quy trình chuẩn:
+Project có thể deploy lên Vercel hoặc chạy bằng Node.js server:
 
-1. Chạy `npm test`
-2. Chạy `npm run build`
-3. Commit thay đổi
-4. Push branch hiện tại lên GitHub
-5. Chờ Vercel auto redeploy production deployment
+1. Cấu hình đầy đủ environment variables trên môi trường deploy.
+2. Đảm bảo DynamoDB và IAM permissions đã sẵn sàng.
+3. Chạy `npm test` và `npm run build`.
+4. Deploy source hoặc chạy `npm start` sau build.
 
-## Các Tính Năng Mở Rộng
+Với Vercel, thêm env trong **Project Settings > Environment Variables**, sau đó redeploy.
 
-- Export danh sách khuyến nghị (CSV/PDF)
-- Lịch sử chuyển nhượng + lợi nhuận/lỗ
-- Đăng nhập & phân quyền
-- Tích hợp dữ liệu bóng đá từ API ngoài
-- Machine learning để dự đoán phong độ thực thụ, ví dụ Bayesian Ridge Regression
-- Gemini AI chatbot để tư vấn chuyển nhượng
+## Ghi chú quan trọng
 
-**Version:** 2.0 | **Status:** Production Ready | **Tech:** Next.js 15 + AWS DynamoDB
+- Project không có dữ liệu mock/default; danh sách cầu thủ lấy từ DynamoDB.
+- Project hiện chưa có đăng nhập hoặc phân quyền.
+- `GET /api/debug-env` và `GET /api/debug-ratings` phục vụ chẩn đoán. Cần kiểm tra thêm việc giới hạn hoặc tắt các endpoint này trước khi public production.
+- `/api/debug-env` chỉ báo trạng thái env và tên bảng, không trả secret AWS.
+- Xóa cầu thủ sẽ xóa metadata, lịch sử theo cầu thủ và rating liên quan.
+- Bulk delete dùng DynamoDB batch write và retry/backoff cho item chưa được xử lý.
+- Reset cầu thủ hiện chỉ xóa các item `PLAYER#{playerId}` / `MATCH#{matchId}`; rating phía `MATCH#{matchId}` / `RATING#{playerId}` cần kiểm tra thêm nếu yêu cầu xóa đồng bộ hai chiều.
+- `DYNAMODB_LIST_INDEX_NAME` cần trỏ tới GSI phù hợp; cấu hình GSI cụ thể cần kiểm tra thêm trên AWS hiện tại.
+- Không commit `.env` hoặc `.env.local`.
