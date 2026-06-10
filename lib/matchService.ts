@@ -16,7 +16,7 @@ import type {
  * Generate unique match ID
  */
 function generateMatchId(): string {
-  return `match_${formatMatchTimestamp()}`;
+  return `match_${formatMatchTimestamp()}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function roundToOneDecimal(value: number): number {
@@ -375,7 +375,10 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         const playerMatchItem: Record<string, unknown> = {
           PK: `PLAYER#${ratingData.playerId}`,
           SK: playerSk,
-          MatchDate: match.matchDateTime ?? match.matchDate,
+          MatchId: matchId,
+          MatchDateTime: match.matchDateTime,
+          MatchDate: match.matchDate,
+          MatchTime: match.matchTime,
           CreatedAt: now,
           Score: roundToOneDecimal(ratingData.rating),
           IsStarter: true,
@@ -385,6 +388,9 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
           YellowCards: ratingData.yellowCards ?? 0,
           RedCards: ratingData.redCards ?? 0,
           Fouls: ratingData.fouls ?? 0,
+          Goals: ratingData.goals ?? 0,
+          Assists: ratingData.assists ?? 0,
+          Note: ratingData.note,
           IsBigWin: !!match.isBigWin,
           IsBigLoss: !!match.isBigLoss
         };

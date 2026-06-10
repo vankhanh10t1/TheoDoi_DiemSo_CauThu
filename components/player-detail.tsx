@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
+import { getMatchDateTime } from '../lib/match-history';
+
+function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
+  const timestamp = getMatchDateTime(match);
+  return timestamp
+    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))
+    : 'Không rõ thời gian';
+}
 
 function getTrendLabel(status?: string): string {
   if (status === 'UP') return 'Tăng';
@@ -182,11 +190,11 @@ export function PlayerDetail() {
 
             {statusData && 'recentMatches' in statusData && statusData.recentMatches.length > 0 ? (
               <div>
-                <h4 style={{ marginTop: '8px' }}>5 Trận Gần Nhất</h4>
+                <h4 style={{ marginTop: '8px' }}>Lịch sử điểm đánh giá ({statusData.recentMatches.length} trận)</h4>
                 <div className="recent-list">
                   {statusData.recentMatches.map((match) => (
                     <div key={match.sk} className="recent-item">
-                      <span>{match.sk}</span>
+                      <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>
                       <em>{match.result}</em>
                       <small>
@@ -198,6 +206,10 @@ export function PlayerDetail() {
                           🟥{(match as any).redCards ?? 0} 
                           ⚠️{(match as any).fouls ?? 0}
                         </span>
+                        {(match.goals ?? 0) > 0 || (match.assists ?? 0) > 0
+                          ? ` · Bàn ${match.goals ?? 0} · Kiến tạo ${match.assists ?? 0}`
+                          : ''}
+                        {match.note ? ` · ${match.note}` : ''}
                       </small>
                     </div>
                   ))}

@@ -43,7 +43,10 @@ export interface PlayerMetadataItem {
 export interface StoredMatchItem {
   PK: string;
   SK: string;
+  MatchId?: string;
+  MatchDateTime?: string;
   MatchDate?: string;
+  MatchTime?: string;
   CreatedAt?: string;
   Score: number;
   IsStarter: boolean;
@@ -53,13 +56,19 @@ export interface StoredMatchItem {
   YellowCards?: number;
   RedCards?: number;
   Fouls?: number;
+  Goals?: number;
+  Assists?: number;
+  Note?: string;
   IsBigWin?: boolean;
   IsBigLoss?: boolean;
 }
 
 export interface RecentMatch {
   sk: string;
+  matchId?: string;
+  matchDateTime?: string;
   matchDate?: string;
+  matchTime?: string;
   createdAt?: string;
   score: number;
   result: MatchResult;
@@ -68,6 +77,9 @@ export interface RecentMatch {
   yellowCards?: number;
   redCards?: number;
   fouls?: number;
+  goals?: number;
+  assists?: number;
+  note?: string;
   repeatedOffenses?: number;
   isBigWin?: boolean;
   isBigLoss?: boolean;

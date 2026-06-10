@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   const allMatches = await getRecentMatches(playerId);
-  const recentMatches = allMatches.slice(0, 5);
+  const matchesForAnalysis = allMatches.slice(0, 5);
 
   if (allMatches.length === 0) {
     return NextResponse.json(
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const analysis = analyzeRecentMatches(recentMatches);
+  const analysis = analyzeRecentMatches(matchesForAnalysis);
   const assessment = analysis.currentFormScore > 8
     ? { status: 'Star Player', action: 'Giữ chặt đội hình chính', color: 'green' as const }
     : analysis.currentFormScore >= 6
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       disciplineScore: analysis.disciplineScore,
       aggressionIndex: analysis.aggressionIndex,
       disciplineTrend: analysis.disciplineTrend,
-      recentMatches
+      recentMatches: allMatches
     },
     { status: 200 }
   );

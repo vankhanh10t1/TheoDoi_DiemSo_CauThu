@@ -1,5 +1,12 @@
 import type { Match, RecentMatch } from './types';
 
+type MatchDateTimeFields = {
+  matchDateTime?: string;
+  matchDate?: string;
+  matchTime?: string;
+  createdAt?: string;
+};
+
 function parseDateValue(value: unknown): number | null {
   if (typeof value !== 'string' || !value.trim()) {
     return null;
@@ -57,13 +64,18 @@ function parseMatchSortKey(sk: unknown): number | null {
   );
 }
 
-export function getMatchChronologyValue(match: RecentMatch): number {
+export function getMatchDateTime(match: MatchDateTimeFields): number {
   return (
+    parseDateValue(match.matchDateTime) ??
+    parseLocalMatchDateTime(match.matchDate, match.matchTime ?? '07:00') ??
     parseDateValue(match.matchDate) ??
     parseDateValue(match.createdAt) ??
-    parseMatchSortKey(match.sk) ??
     0
   );
+}
+
+export function getMatchChronologyValue(match: RecentMatch): number {
+  return getMatchDateTime(match) || parseMatchSortKey(match.sk) || 0;
 }
 
 export function sortRecentMatchesNewestFirst(matches: RecentMatch[]): RecentMatch[] {
@@ -78,12 +90,7 @@ export function sortRecentMatchesNewestFirst(matches: RecentMatch[]): RecentMatc
 export function getMatchSortDateTime(
   match: Pick<Match, 'matchDateTime' | 'matchDate' | 'matchTime' | 'createdAt'>
 ): number {
-  return (
-    parseDateValue(match.matchDateTime) ??
-    parseLocalMatchDateTime(match.matchDate, match.matchTime ?? '07:00') ??
-    parseDateValue(match.createdAt) ??
-    0
-  );
+  return getMatchDateTime(match);
 }
 
 export function sortMatchHistoryNewestFirst(matches: Match[]): Match[] {

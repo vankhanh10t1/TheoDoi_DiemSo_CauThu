@@ -133,7 +133,10 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
 
     return {
       sk: match.SK,
+      matchId: match.MatchId ?? match.SK.replace(/^MATCH#/, ''),
+      matchDateTime: match.MatchDateTime,
       matchDate: match.MatchDate,
+      matchTime: match.MatchTime,
       createdAt: match.CreatedAt,
       score: match.Score,
       result: match.Result,
@@ -142,12 +145,17 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       yellowCards: typeof match.YellowCards === 'number' ? match.YellowCards : 0,
       redCards: typeof match.RedCards === 'number' ? match.RedCards : 0,
       fouls: typeof match.Fouls === 'number' ? match.Fouls : 0,
+      goals: typeof match.Goals === 'number' ? match.Goals : 0,
+      assists: typeof match.Assists === 'number' ? match.Assists : 0,
+      note: typeof match.Note === 'string' ? match.Note : undefined,
       isBigWin: typeof match.IsBigWin === 'boolean' ? match.IsBigWin : false,
       isBigLoss: typeof match.IsBigLoss === 'boolean' ? match.IsBigLoss : false
     };
   });
 
-  const sortedMatches = sortRecentMatchesNewestFirst(matches);
+  const sortedMatches = sortRecentMatchesNewestFirst(matches).filter(
+    (match) => Number.isFinite(match.score)
+  );
   return typeof limit === 'number' ? sortedMatches.slice(0, limit) : sortedMatches;
 }
 

@@ -12,7 +12,10 @@ type RecommendationTableItem = {
   Position?: unknown;
   Score?: unknown;
   Result?: unknown;
+  MatchId?: unknown;
+  MatchDateTime?: unknown;
   MatchDate?: unknown;
+  MatchTime?: unknown;
   CreatedAt?: unknown;
   YellowCards?: unknown;
   RedCards?: unknown;
@@ -111,7 +114,10 @@ export function buildRecommendationsFromTableItems(
 
     existingRecord.recentMatches.push({
       sk,
+      matchId: toStringValue(item.MatchId) || sk.replace(/^MATCH#/, ''),
+      matchDateTime: toStringValue(item.MatchDateTime) || undefined,
       matchDate: toStringValue(item.MatchDate) || undefined,
+      matchTime: toStringValue(item.MatchTime) || undefined,
       createdAt: toStringValue(item.CreatedAt) || undefined,
       score: item.Score,
       result: item.Result,
@@ -131,7 +137,7 @@ export function buildRecommendationsFromTableItems(
         return null;
       }
 
-      const recentMatches = sortRecentMatchesNewestFirst(record.recentMatches).slice(0, 5);
+      const recentMatches = sortRecentMatchesNewestFirst(record.recentMatches);
 
       if (recentMatches.length === 0) {
         return null;

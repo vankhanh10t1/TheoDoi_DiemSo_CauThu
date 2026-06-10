@@ -7,6 +7,14 @@ import { PerformanceTable } from './PerformanceTable';
 import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
 import { fetchWithDebug } from '../lib/client-api';
+import { getMatchDateTime } from '../lib/match-history';
+
+function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
+  const timestamp = getMatchDateTime(match);
+  return timestamp
+    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))
+    : 'Không rõ thời gian';
+}
 
 type AllPlayersFormRow = {
   name?: string;
@@ -508,7 +516,7 @@ export function TrackerApp() {
                 <div className="recent-list">
                   {statusData.recentMatches.map((match) => (
                     <div key={match.sk} className="recent-item">
-                      <span>{match.sk}</span>
+                      <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>
                       <em>{match.result}</em>
                       <small>
@@ -520,6 +528,10 @@ export function TrackerApp() {
                           🟥{match.redCards ?? 0} 
                           ⚠️{match.fouls ?? 0}
                         </span>
+                        {(match.goals ?? 0) > 0 || (match.assists ?? 0) > 0
+                          ? ` · Bàn ${match.goals ?? 0} · Kiến tạo ${match.assists ?? 0}`
+                          : ''}
+                        {match.note ? ` · ${match.note}` : ''}
                       </small>
                     </div>
                   ))}

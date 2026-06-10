@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getMatchSortDateTime, sortMatchHistoryNewestFirst } from '../lib/match-history';
-import type { Match } from '../lib/types';
+import { getMatchDateTime, getMatchSortDateTime, sortMatchHistoryNewestFirst, sortRecentMatchesNewestFirst } from '../lib/match-history';
+import type { Match, RecentMatch } from '../lib/types';
 
 function makeMatch(id: string, values: Partial<Match>): Match {
   return {
@@ -51,5 +51,20 @@ describe('sortMatchHistoryNewestFirst', () => {
       'previous-day'
     ]);
     expect(getMatchSortDateTime(matches[0])).not.toBe(Date.parse(matches[0].createdAt));
+  });
+
+  it('sort đầy đủ rating mới/cũ và không crash khi ngày không hợp lệ', () => {
+    const ratings: RecentMatch[] = [
+      { sk: 'MATCH#old', matchDate: '2026-06-09', score: 7, result: 'Win' },
+      { sk: 'MATCH#new', matchDateTime: '2026-06-10T10:00:00.000Z', score: 8, result: 'Win' },
+      { sk: 'MATCH#fallback', matchDate: 'invalid', createdAt: '2026-06-08T12:00:00.000Z', score: 6, result: 'Draw' }
+    ];
+
+    expect(sortRecentMatchesNewestFirst(ratings).map((match) => match.sk)).toEqual([
+      'MATCH#new',
+      'MATCH#old',
+      'MATCH#fallback'
+    ]);
+    expect(getMatchDateTime({ matchDate: 'invalid', createdAt: 'invalid' })).toBe(0);
   });
 });
