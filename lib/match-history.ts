@@ -7,39 +7,97 @@ type MatchDateTimeFields = {
   createdAt?: string;
 };
 
-function parseDateValue(value: unknown): number | null {
+const DEFAULT_MATCH_TIME = '07:00';
+
+function createUtcTimestamp(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  millisecond = 0
+): number | null {
+  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  const date = new Date(timestamp);
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    date.getUTCHours() !== hour ||
+    date.getUTCMinutes() !== minute ||
+    date.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+
+  return timestamp;
+}
+
+function parseDateParts(value: string): [number, number, number] | null {
+  const isoDate = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    return [Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3])];
+  }
+
+  const legacyDate = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (legacyDate) {
+    return [Number(legacyDate[3]), Number(legacyDate[2]), Number(legacyDate[1])];
+  }
+
+  return null;
+}
+
+function parseTimeParts(value: string): [number, number, number, number] | null {
+  const time = value.match(/^(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+  if (!time) {
+    return null;
+  }
+
+  const milliseconds = time[4] ? Number(time[4].padEnd(3, '0')) : 0;
+  return [Number(time[1]), Number(time[2]), Number(time[3] ?? 0), milliseconds];
+}
+
+function parseDateAndTime(dateValue: unknown, timeValue = DEFAULT_MATCH_TIME): number | null {
+  if (typeof dateValue !== 'string' || typeof timeValue !== 'string') {
+    return null;
+  }
+
+  const dateParts = parseDateParts(dateValue.trim());
+  const timeParts = parseTimeParts(timeValue.trim());
+  if (!dateParts || !timeParts) {
+    return null;
+  }
+
+  return createUtcTimestamp(...dateParts, ...timeParts);
+}
+
+function parseDateTimeValue(value: unknown): number | null {
   if (typeof value !== 'string' || !value.trim()) {
     return null;
   }
 
-  const timestamp = Date.parse(value);
+  const normalized = value.trim();
+  const localDateTime = normalized.match(
+    /^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})[T\s](\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/
+  );
+  if (localDateTime) {
+    return parseDateAndTime(localDateTime[1], localDateTime[2]);
+  }
+
+  const dateOnly = parseDateAndTime(normalized);
+  if (dateOnly !== null) {
+    return dateOnly;
+  }
+
+  // Date.parse is only used for timestamps with an explicit timezone.
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized)) {
+    return null;
+  }
+
+  const timestamp = Date.parse(normalized);
   return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function parseLocalMatchDateTime(dateValue: unknown, timeValue = '07:00'): number | null {
-  if (
-    typeof dateValue !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(dateValue) ||
-    !/^\d{2}:\d{2}$/.test(timeValue)
-  ) {
-    return null;
-  }
-
-  const [year, month, day] = dateValue.split('-').map(Number);
-  const [hour, minute] = timeValue.split(':').map(Number);
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day ||
-    date.getHours() !== hour ||
-    date.getMinutes() !== minute
-  ) {
-    return null;
-  }
-
-  return date.getTime();
 }
 
 function parseMatchSortKey(sk: unknown): number | null {
@@ -64,18 +122,19 @@ function parseMatchSortKey(sk: unknown): number | null {
   );
 }
 
-export function getMatchDateTime(match: MatchDateTimeFields): number {
+export function getMatchSortTimestamp(match: MatchDateTimeFields): number {
   return (
-    parseDateValue(match.matchDateTime) ??
-    parseLocalMatchDateTime(match.matchDate, match.matchTime ?? '07:00') ??
-    parseDateValue(match.matchDate) ??
-    parseDateValue(match.createdAt) ??
+    parseDateTimeValue(match.matchDateTime) ??
+    parseDateAndTime(match.matchDate, match.matchTime ?? DEFAULT_MATCH_TIME) ??
+    parseDateTimeValue(match.createdAt) ??
     0
   );
 }
 
+export const getMatchDateTime = getMatchSortTimestamp;
+
 export function getMatchChronologyValue(match: RecentMatch): number {
-  return getMatchDateTime(match) || parseMatchSortKey(match.sk) || 0;
+  return getMatchSortTimestamp(match) || parseMatchSortKey(match.sk) || 0;
 }
 
 export function sortRecentMatchesNewestFirst(matches: RecentMatch[]): RecentMatch[] {
@@ -90,7 +149,7 @@ export function sortRecentMatchesNewestFirst(matches: RecentMatch[]): RecentMatc
 export function getMatchSortDateTime(
   match: Pick<Match, 'matchDateTime' | 'matchDate' | 'matchTime' | 'createdAt'>
 ): number {
-  return getMatchDateTime(match);
+  return getMatchSortTimestamp(match);
 }
 
 export function sortMatchHistoryNewestFirst(matches: Match[]): Match[] {

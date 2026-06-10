@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
-import { getMatchDateTime } from '../lib/match-history';
+import { getMatchSortTimestamp, sortRecentMatchesNewestFirst } from '../lib/match-history';
 
 function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
-  const timestamp = getMatchDateTime(match);
+  const timestamp = getMatchSortTimestamp(match);
   return timestamp
-    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))
+    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(timestamp))
     : 'Không rõ thời gian';
 }
 
@@ -192,7 +192,7 @@ export function PlayerDetail() {
               <div>
                 <h4 style={{ marginTop: '8px' }}>Lịch sử điểm đánh giá ({statusData.recentMatches.length} trận)</h4>
                 <div className="recent-list">
-                  {statusData.recentMatches.map((match) => (
+                  {sortRecentMatchesNewestFirst(statusData.recentMatches).map((match) => (
                     <div key={match.sk} className="recent-item">
                       <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>

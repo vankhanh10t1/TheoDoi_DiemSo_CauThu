@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { getPlayerMetadata, getRecentMatches } from '../../../lib/playerService';
+import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 
 export const runtime = 'nodejs';
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Player not found' }, { status: 404 });
   }
 
-  const allMatches = await getRecentMatches(playerId);
+  const allMatches = sortRecentMatchesNewestFirst(await getRecentMatches(playerId));
   const matchesForAnalysis = allMatches.slice(0, 5);
 
   if (allMatches.length === 0) {

@@ -23,7 +23,8 @@ function formatMatchDateTime(match: Match): string {
     ? match.createdAt
     : new Intl.DateTimeFormat('vi-VN', {
         dateStyle: 'medium',
-        timeStyle: 'short'
+        timeStyle: 'short',
+        timeZone: 'UTC'
       }).format(date);
 }
 

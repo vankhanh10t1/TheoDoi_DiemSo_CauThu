@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listPlayers, getRecentMatches } from '../../../lib/playerService';
 import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
+import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import type { RecentMatch } from '../../../lib/types';
 
 export const runtime = 'nodejs';
@@ -53,7 +54,7 @@ export async function GET() {
     // Fetch form data for all players
     for (const player of players) {
       try {
-        const recentMatches = await getRecentMatches(player.playerId);
+        const recentMatches = sortRecentMatchesNewestFirst(await getRecentMatches(player.playerId));
 
         if (recentMatches.length > 0) {
           const analysis = analyzeRecentMatches(recentMatches);

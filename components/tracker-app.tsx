@@ -7,13 +7,13 @@ import { PerformanceTable } from './PerformanceTable';
 import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
 import { fetchWithDebug } from '../lib/client-api';
-import { getMatchDateTime } from '../lib/match-history';
+import { getMatchSortTimestamp, sortRecentMatchesNewestFirst } from '../lib/match-history';
 import { createMatchDateTime } from '../lib/match-datetime';
 
 function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
-  const timestamp = getMatchDateTime(match);
+  const timestamp = getMatchSortTimestamp(match);
   return timestamp
-    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))
+    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(timestamp))
     : 'Không rõ thời gian';
 }
 
@@ -515,7 +515,7 @@ export function TrackerApp() {
                 ) : null}
 
                 <div className="recent-list">
-                  {statusData.recentMatches.map((match) => (
+                  {sortRecentMatchesNewestFirst(statusData.recentMatches).map((match) => (
                     <div key={match.sk} className="recent-item">
                       <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>
