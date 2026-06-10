@@ -83,7 +83,7 @@ export async function PATCH(
     if (body.matchDateTime && !isValidMatchDateTime(body.matchDateTime)) {
       return NextResponse.json(
         {
-          error: 'matchDateTime phải có định dạng YYYY-MM-DDTHH:mm hợp lệ',
+          error: 'matchDateTime phải là thời gian ISO hợp lệ',
           code: 'INVALID_DATETIME_FORMAT'
         },
         { status: 400 }

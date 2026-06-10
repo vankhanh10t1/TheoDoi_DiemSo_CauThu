@@ -6,6 +6,7 @@ describe('match datetime validation', () => {
     expect(isValidMatchDate('2026-06-10')).toBe(true);
     expect(isValidMatchDate('2026-02-31')).toBe(false);
     expect(isValidMatchDateTime('2026-06-10T20:30')).toBe(true);
+    expect(isValidMatchDateTime('2026-06-10T20:30:15.123Z')).toBe(true);
     expect(isValidMatchDateTime('2026-06-10T24:00')).toBe(false);
   });
 });

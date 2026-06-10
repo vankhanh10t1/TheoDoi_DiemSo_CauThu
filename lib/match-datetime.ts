@@ -6,8 +6,26 @@ export function isValidMatchDate(value: unknown): value is string {
 }
 
 export function isValidMatchDateTime(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
-  const [date, time] = value.split('T');
-  const [hour, minute] = time.split(':').map(Number);
-  return isValidMatchDate(date) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  if (typeof value !== 'string' || !value.trim()) return false;
+
+  const dateTimeMatch = value.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?$/
+  );
+  if (!dateTimeMatch) return false;
+
+  const [, date, hourValue, minuteValue, secondValue] = dateTimeMatch;
+  const hour = Number(hourValue);
+  const minute = Number(minuteValue);
+  const second = secondValue === undefined ? 0 : Number(secondValue);
+  const timestamp = Date.parse(value);
+  return (
+    isValidMatchDate(date) &&
+    hour >= 0 &&
+    hour <= 23 &&
+    minute >= 0 &&
+    minute <= 59 &&
+    second >= 0 &&
+    second <= 59 &&
+    Number.isFinite(timestamp)
+  );
 }

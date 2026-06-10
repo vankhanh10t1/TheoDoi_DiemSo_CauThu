@@ -13,10 +13,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Validate required fields
-    if (!body.matchDate || !body.matchDateTime || body.myScore === undefined || body.opponentScore === undefined) {
+    if (!body.matchDate || body.myScore === undefined || body.opponentScore === undefined) {
       return NextResponse.json(
         {
-          error: 'Vui lòng nhập đầy đủ ngày và giờ thi đấu',
+          error: 'Vui lòng nhập đầy đủ ngày thi đấu và tỉ số',
           code: 'INVALID_REQUEST'
         },
         { status: 400 }
@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isValidMatchDateTime(body.matchDateTime) || !body.matchDateTime.startsWith(`${body.matchDate}T`)) {
+    if (body.matchDateTime !== undefined && !isValidMatchDateTime(body.matchDateTime)) {
       return NextResponse.json(
         {
-          error: 'matchDateTime phải có định dạng YYYY-MM-DDTHH:mm hợp lệ',
+          error: 'matchDateTime phải là thời gian ISO hợp lệ',
           code: 'INVALID_DATETIME_FORMAT'
         },
         { status: 400 }
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const payload: CreateMatchPayload = {
       matchDate: body.matchDate,
-      matchDateTime: body.matchDateTime,
+      matchDateTime: body.matchDateTime ?? new Date().toISOString(),
       opponentName: body.opponentName,
       myScore: body.myScore,
       opponentScore: body.opponentScore,
