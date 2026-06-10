@@ -2,20 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMatch, listMatches } from '../../../lib/matchService';
 import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
 import type { CreateMatchPayload } from '../../../lib/types';
+import { isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
 
 /**
  * POST /api/matches - Create a new match
- * Body: { matchDate, opponentName?, myScore, opponentScore, note? }
+ * Body: { matchDate, matchDateTime, opponentName?, myScore, opponentScore, note? }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     // Validate required fields
-    if (!body.matchDate || body.myScore === undefined || body.opponentScore === undefined) {
+    if (!body.matchDate || !body.matchDateTime || body.myScore === undefined || body.opponentScore === undefined) {
       return NextResponse.json(
         {
-          error: 'Missing required fields: matchDate, myScore, opponentScore',
+          error: 'Vui lòng nhập đầy đủ ngày và giờ thi đấu',
           code: 'INVALID_REQUEST'
         },
         { status: 400 }
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate date format (YYYY-MM-DD)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.matchDate)) {
+    if (!isValidMatchDate(body.matchDate)) {
       return NextResponse.json(
         {
           error: 'matchDate must be in YYYY-MM-DD format',
@@ -44,8 +45,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!isValidMatchDateTime(body.matchDateTime) || !body.matchDateTime.startsWith(`${body.matchDate}T`)) {
+      return NextResponse.json(
+        {
+          error: 'matchDateTime phải có định dạng YYYY-MM-DDTHH:mm hợp lệ',
+          code: 'INVALID_DATETIME_FORMAT'
+        },
+        { status: 400 }
+      );
+    }
+
     const payload: CreateMatchPayload = {
       matchDate: body.matchDate,
+      matchDateTime: body.matchDateTime,
       opponentName: body.opponentName,
       myScore: body.myScore,
       opponentScore: body.opponentScore,

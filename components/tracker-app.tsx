@@ -79,6 +79,7 @@ export function TrackerApp() {
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [createForm, setCreateForm] = useState({
     matchDate: new Date().toISOString().split('T')[0],
+    matchTime: new Date().toTimeString().slice(0, 5),
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
@@ -196,6 +197,10 @@ export function TrackerApp() {
       setCreateMessage({ tone: 'error', text: 'Ngày phải có định dạng YYYY-MM-DD' });
       return;
     }
+    if (!/^[0-9]{2}:[0-9]{2}$/.test(createForm.matchTime)) {
+      setCreateMessage({ tone: 'error', text: 'Vui lòng chọn giờ thi đấu.' });
+      return;
+    }
     if (!Number.isInteger(createForm.myScore) || !Number.isInteger(createForm.opponentScore) || createForm.myScore < 0 || createForm.opponentScore < 0) {
       setCreateMessage({ tone: 'error', text: 'Tỉ số phải là số nguyên không âm' });
       return;
@@ -206,7 +211,14 @@ export function TrackerApp() {
       const res = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm)
+        body: JSON.stringify({
+          matchDate: createForm.matchDate,
+          matchDateTime: `${createForm.matchDate}T${createForm.matchTime}`,
+          opponentName: createForm.opponentName,
+          myScore: createForm.myScore,
+          opponentScore: createForm.opponentScore,
+          note: createForm.note
+        })
       }, { caller: 'TrackerApp.handleCreateMatch' });
 
       const payload = await res.json();
@@ -286,6 +298,18 @@ export function TrackerApp() {
                   />
                 </label>
 
+                <label className="field">
+                  <span>Giờ thi đấu</span>
+                  <input
+                    type="time"
+                    value={createForm.matchTime}
+                    onChange={(e) => setCreateForm({ ...createForm, matchTime: e.target.value })}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="field-grid">
                 <label className="field">
                   <span>Đối thủ</span>
                   <input

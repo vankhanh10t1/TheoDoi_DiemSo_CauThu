@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchById, updateMatch, deleteMatch, getMatchWithRatings } from '../../../../lib/matchService';
+import { isValidMatchDate, isValidMatchDateTime } from '../../../../lib/match-datetime';
 
 /**
  * GET /api/matches/:id - Get match by ID
@@ -69,11 +70,21 @@ export async function PATCH(
     }
 
     // Validate date format if provided
-    if (body.matchDate && !/^\d{4}-\d{2}-\d{2}$/.test(body.matchDate)) {
+    if (body.matchDate && !isValidMatchDate(body.matchDate)) {
       return NextResponse.json(
         {
           error: 'matchDate must be in YYYY-MM-DD format',
           code: 'INVALID_DATE_FORMAT'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (body.matchDateTime && !isValidMatchDateTime(body.matchDateTime)) {
+      return NextResponse.json(
+        {
+          error: 'matchDateTime phải có định dạng YYYY-MM-DDTHH:mm hợp lệ',
+          code: 'INVALID_DATETIME_FORMAT'
         },
         { status: 400 }
       );

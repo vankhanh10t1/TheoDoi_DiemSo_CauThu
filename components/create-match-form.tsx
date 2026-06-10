@@ -12,6 +12,7 @@ interface CreateMatchFormProps {
 export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatchFormProps) {
   const [formData, setFormData] = useState({
     matchDate: new Date().toISOString().split('T')[0],
+    matchTime: new Date().toTimeString().slice(0, 5),
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
@@ -62,6 +63,12 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         return;
       }
 
+      if (!/^\d{2}:\d{2}$/.test(formData.matchTime)) {
+        setMessage({ type: 'error', text: 'Vui lòng chọn giờ thi đấu' });
+        setLoading(false);
+        return;
+      }
+
       if (formData.myScore < 0 || formData.opponentScore < 0) {
         setMessage({ type: 'error', text: '❌ Tỉ số phải là số không âm' });
         setLoading(false);
@@ -71,7 +78,14 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
       const response = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          matchDate: formData.matchDate,
+          matchDateTime: `${formData.matchDate}T${formData.matchTime}`,
+          opponentName: formData.opponentName,
+          myScore: formData.myScore,
+          opponentScore: formData.opponentScore,
+          note: formData.note
+        })
       }, { caller: 'CreateMatchForm.handleSubmit' });
 
       const data = await response.json();
@@ -88,6 +102,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
       // Reset form
       setFormData({
         matchDate: new Date().toISOString().split('T')[0],
+        matchTime: new Date().toTimeString().slice(0, 5),
         opponentName: '',
         myScore: 0,
         opponentScore: 0,
@@ -132,6 +147,19 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
             id="matchDate"
             name="matchDate"
             value={formData.matchDate}
+            onChange={handleInputChange}
+            required
+            disabled={loading}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="matchTime">Giờ thi đấu</label>
+          <input
+            type="time"
+            id="matchTime"
+            name="matchTime"
+            value={formData.matchTime}
             onChange={handleInputChange}
             required
             disabled={loading}

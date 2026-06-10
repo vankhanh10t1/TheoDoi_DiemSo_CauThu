@@ -179,7 +179,9 @@ export interface RatingPayload {
  */
 export interface Match {
   id: string;
-  matchDate: string; // YYYY-MM-DD
+  matchDate: string; // YYYY-MM-DD, kept for player-centric analytics compatibility
+  matchDateTime?: string; // Local ISO datetime, fallback to matchDate/createdAt for old data
+  matchTime?: string; // HH:mm, supported for legacy/separate-field data
   opponentName?: string;
   myScore: number;
   opponentScore: number;
@@ -187,6 +189,7 @@ export interface Match {
   isBigWin?: boolean;
   isBigLoss?: boolean;
   note?: string;
+  ratingCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -197,7 +200,9 @@ export interface Match {
 export interface StoredMatch {
   PK: string; // MATCH#{matchId}
   SK: 'METADATA';
-  MatchDate: string;
+  MatchDate?: string;
+  MatchDateTime?: string;
+  MatchTime?: string;
   OpponentName?: string;
   MyScore: number;
   OpponentScore: number;
@@ -205,6 +210,7 @@ export interface StoredMatch {
   IsBigWin?: boolean;
   IsBigLoss?: boolean;
   Note?: string;
+  RatingCount?: number;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -254,6 +260,7 @@ export interface StoredPlayerMatchRating {
  */
 export interface CreateMatchPayload {
   matchDate: string; // YYYY-MM-DD
+  matchDateTime: string; // YYYY-MM-DDTHH:mm
   opponentName?: string;
   myScore: number;
   opponentScore: number;
@@ -275,4 +282,10 @@ export interface SaveMatchRatingsPayload {
     assists?: number;
     note?: string;
   }>;
+}
+
+export interface PlayerMatchRatingDetail extends PlayerMatchRating {
+  playerName: string;
+  cardSeason?: string;
+  playerPosition?: string;
 }

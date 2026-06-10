@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { fetchWithDebug } from '../lib/client-api';
 
-export type AppTab = 'tracker' | 'squad' | 'recommendations' | 'player-detail';
+export type AppTab = 'tracker' | 'match-history' | 'squad' | 'recommendations' | 'player-detail';
 
 interface AppContextType {
   currentTab: AppTab;

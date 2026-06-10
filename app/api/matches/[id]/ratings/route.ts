@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRating } from '../../../../../lib/matchService';
-import { listPlayers } from '../../../../../lib/playerService';
+import { getPlayerMetadata, listPlayers } from '../../../../../lib/playerService';
 import { isDynamoThrottleError } from '../../../../../lib/dynamodb-helpers';
 import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
 
@@ -215,14 +215,24 @@ export async function GET(
       );
     }
 
-    const ratings = await getMatchRatings(matchId);
+    const ratings = (await getMatchRatings(matchId)).filter((rating) => Number.isFinite(rating.rating));
+    const players = await Promise.all(ratings.map((rating) => getPlayerMetadata(rating.playerId)));
+    const ratingDetails = ratings.map((rating, index) => {
+        const player = players[index];
+        return {
+          ...rating,
+          playerName: player?.name ?? rating.playerId,
+          cardSeason: player?.cardSeason,
+          playerPosition: player?.position
+        };
+      });
 
     return NextResponse.json(
       {
         success: true,
         match,
-        ratings,
-        count: ratings.length
+        ratings: ratingDetails,
+        count: ratingDetails.length
       },
       { status: 200 }
     );
