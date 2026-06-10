@@ -2,21 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRating } from '../../../../../lib/matchService';
 import { getPlayerMetadata, listPlayers } from '../../../../../lib/playerService';
 import { isDynamoThrottleError } from '../../../../../lib/dynamodb-helpers';
+import { hasAtMostOneDecimalPlace, parseDecimalRating } from '../../../../../lib/rating-validation';
 import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
-
-function hasAtMostOneDecimalPlace(value: number): boolean {
-  return Number.isFinite(value) && Math.abs(value * 10 - Math.round(value * 10)) < 1e-9;
-}
-
-function parseDecimalRating(value: unknown): number | null {
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-
-  return Math.round(parsed * 10) / 10;
-}
 
 /**
  * POST /api/matches/:id/ratings - Save multiple player ratings for a match
@@ -95,7 +82,7 @@ export async function POST(
         );
       }
 
-      rating.rating = parsedRating;
+      rating.rating = Math.round(parsedRating * 10) / 10;
 
       if (!playerIds.has(rating.playerId.toLowerCase())) {
         return NextResponse.json(

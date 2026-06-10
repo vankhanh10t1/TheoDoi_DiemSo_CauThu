@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidMatchDate, isValidMatchDateTime } from '../lib/match-datetime';
+import { createMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../lib/match-datetime';
 
 describe('match datetime validation', () => {
   it('chấp nhận ngày giờ hợp lệ và từ chối giá trị bị rollover', () => {
@@ -8,5 +8,11 @@ describe('match datetime validation', () => {
     expect(isValidMatchDateTime('2026-06-10T20:30')).toBe(true);
     expect(isValidMatchDateTime('2026-06-10T20:30:15.123Z')).toBe(true);
     expect(isValidMatchDateTime('2026-06-10T24:00')).toBe(false);
+  });
+
+  it('tạo thời gian trận từ ngày thi đấu thay vì thời điểm nhập dữ liệu', () => {
+    expect(createMatchDateTime('2026-06-10')).toBe('2026-06-10T07:00');
+    expect(createMatchDateTime('2026-06-10', '20:30')).toBe('2026-06-10T20:30');
+    expect(() => createMatchDateTime('2026-02-31')).toThrow('Invalid match date or time');
   });
 });

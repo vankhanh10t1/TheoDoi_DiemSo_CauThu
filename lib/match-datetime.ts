@@ -29,3 +29,16 @@ export function isValidMatchDateTime(value: unknown): value is string {
     Number.isFinite(timestamp)
   );
 }
+
+export function createMatchDateTime(matchDate: string, matchTime = '07:00'): string {
+  if (!isValidMatchDate(matchDate) || !/^\d{2}:\d{2}$/.test(matchTime)) {
+    throw new Error('Invalid match date or time');
+  }
+
+  const matchDateTime = `${matchDate}T${matchTime}`;
+  if (!isValidMatchDateTime(matchDateTime)) {
+    throw new Error('Invalid match date or time');
+  }
+
+  return matchDateTime;
+}

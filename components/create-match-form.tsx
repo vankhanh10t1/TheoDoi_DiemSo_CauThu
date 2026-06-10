@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import type { Match } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
+import { createMatchDateTime } from '../lib/match-datetime';
 
 interface CreateMatchFormProps {
   onMatchCreated?: (match: Match) => void;
@@ -73,7 +74,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matchDate: formData.matchDate,
-          matchDateTime: new Date().toISOString(),
+          matchDateTime: createMatchDateTime(formData.matchDate),
           opponentName: formData.opponentName,
           myScore: formData.myScore,
           opponentScore: formData.opponentScore,

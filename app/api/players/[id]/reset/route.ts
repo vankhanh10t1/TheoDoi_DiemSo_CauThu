@@ -1,7 +1,5 @@
-import { QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocumentClient, getTableName } from '../../../../../lib/dynamodb';
-import { retryWithBackoff } from '../../../../../lib/dynamodb-helpers';
+import { resetPlayerMatchHistory } from '../../../../../lib/matchService';
 
 export const runtime = 'nodejs';
 
@@ -18,42 +16,7 @@ export async function PATCH(
   }
 
   try {
-    // Find all MATCH records for this player (don't delete METADATA)
-    const matchResponse = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-            ExpressionAttributeValues: {
-              ':pk': `PLAYER#${playerId}`,
-              ':matchPrefix': 'MATCH#'
-            }
-          })
-        ),
-      { label: 'playerReset.queryMatches' }
-    );
-
-    const matches = matchResponse.Items ?? [];
-    let deletedCount = 0;
-
-    // Delete only MATCH items, not METADATA
-    for (const match of matches) {
-      await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new DeleteCommand({
-              TableName: getTableName(),
-              Key: {
-                PK: match.PK,
-                SK: match.SK
-              }
-            })
-          ),
-        { label: 'playerReset.deleteMatchItem' }
-      );
-      deletedCount++;
-    }
+    const deletedCount = await resetPlayerMatchHistory(playerId);
 
     return NextResponse.json(
       { message: 'Player match history reset successfully', deletedCount },

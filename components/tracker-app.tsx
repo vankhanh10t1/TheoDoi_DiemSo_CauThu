@@ -8,6 +8,7 @@ import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib
 import BulkRatingInputForm from './bulk-rating-input-form';
 import { fetchWithDebug } from '../lib/client-api';
 import { getMatchDateTime } from '../lib/match-history';
+import { createMatchDateTime } from '../lib/match-datetime';
 
 function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
   const timestamp = getMatchDateTime(match);
@@ -216,7 +217,7 @@ export function TrackerApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matchDate: createForm.matchDate,
-          matchDateTime: new Date().toISOString(),
+          matchDateTime: createMatchDateTime(createForm.matchDate),
           opponentName: createForm.opponentName,
           myScore: createForm.myScore,
           opponentScore: createForm.opponentScore,
