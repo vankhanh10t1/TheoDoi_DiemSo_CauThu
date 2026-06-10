@@ -171,6 +171,7 @@ function createPlayerMatchItem(
     MatchDate: match.matchDate,
     MatchTime: match.matchTime,
     CreatedAt: createdAt,
+    UpdatedAt: rating.UpdatedAt,
     Score: roundToOneDecimal(rating.Rating),
     IsStarter: true,
     Result: toPlayerResult(match.result),

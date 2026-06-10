@@ -4,13 +4,12 @@ import { useEffect, useState } from 'react';
 import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
-import { getMatchSortTimestamp, sortRecentMatchesNewestFirst } from '../lib/match-history';
+import { formatMatchDateTimeValue, sortRecentMatchesNewestFirst } from '../lib/match-history';
 
-function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
-  const timestamp = getMatchSortTimestamp(match);
-  return timestamp
-    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(timestamp))
-    : 'Không rõ thời gian';
+const RATING_HISTORY_ITEMS_PER_PAGE = 5;
+
+function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string; updatedAt?: string }): string {
+  return formatMatchDateTimeValue(match);
 }
 
 function getTrendLabel(status?: string): string {
@@ -49,6 +48,7 @@ export function PlayerDetail() {
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
   const [resetState, setResetState] = useState<{ message: string; type: 'success' | 'error' } | null>(
     null
   );
@@ -86,6 +86,10 @@ export function PlayerDetail() {
     loadStatus();
   }, [selectedPlayerId, refreshTrigger]);
 
+  useEffect(() => {
+    setRatingHistoryPage(1);
+  }, [selectedPlayerId]);
+
   async function handleResetData() {
     if (!selectedPlayerId) {
       setResetState({ message: 'Không có cầu thủ nào được chọn', type: 'error' });
@@ -117,6 +121,22 @@ export function PlayerDetail() {
   }
 
   const statusTone = statusData && 'color' in statusData ? statusData.color : 'neutral';
+  const sortedRatingHistory =
+    statusData && 'recentMatches' in statusData
+      ? sortRecentMatchesNewestFirst(statusData.recentMatches)
+      : [];
+  const ratingHistoryTotalPages = Math.max(
+    1,
+    Math.ceil(sortedRatingHistory.length / RATING_HISTORY_ITEMS_PER_PAGE)
+  );
+  const visibleRatingHistory = sortedRatingHistory.slice(
+    (ratingHistoryPage - 1) * RATING_HISTORY_ITEMS_PER_PAGE,
+    ratingHistoryPage * RATING_HISTORY_ITEMS_PER_PAGE
+  );
+
+  useEffect(() => {
+    setRatingHistoryPage((currentPage) => Math.min(currentPage, ratingHistoryTotalPages));
+  }, [ratingHistoryTotalPages]);
 
   return (
     <div className="screen-panel">
@@ -192,7 +212,7 @@ export function PlayerDetail() {
               <div>
                 <h4 style={{ marginTop: '8px' }}>Lịch sử điểm đánh giá ({statusData.recentMatches.length} trận)</h4>
                 <div className="recent-list">
-                  {sortRecentMatchesNewestFirst(statusData.recentMatches).map((match) => (
+                  {visibleRatingHistory.map((match) => (
                     <div key={match.sk} className="recent-item">
                       <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>
@@ -213,6 +233,27 @@ export function PlayerDetail() {
                       </small>
                     </div>
                   ))}
+                </div>
+                <div className="match-history-pagination" aria-label="Phân trang lịch sử điểm đánh giá">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={ratingHistoryPage === 1}
+                    onClick={() => setRatingHistoryPage((page) => Math.max(1, page - 1))}
+                  >
+                    Trang trước
+                  </button>
+                  <span>Trang {ratingHistoryPage}/{ratingHistoryTotalPages}</span>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={ratingHistoryPage === ratingHistoryTotalPages}
+                    onClick={() =>
+                      setRatingHistoryPage((page) => Math.min(ratingHistoryTotalPages, page + 1))
+                    }
+                  >
+                    Trang sau
+                  </button>
                 </div>
                 {'fraudRisk' in statusData && statusData.fraudRisk ? (
                   <p className="inline-message error" style={{ marginTop: '12px' }}>

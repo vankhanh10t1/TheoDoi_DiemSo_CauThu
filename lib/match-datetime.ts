@@ -1,3 +1,22 @@
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const vietnamDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: VIETNAM_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+
+export function getVietnamDateInputValue(date = new Date()): string {
+  const parts = Object.fromEntries(
+    vietnamDateFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export function isValidMatchDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -35,7 +54,7 @@ export function createMatchDateTime(matchDate: string, matchTime = '07:00'): str
     throw new Error('Invalid match date or time');
   }
 
-  const matchDateTime = `${matchDate}T${matchTime}`;
+  const matchDateTime = `${matchDate}T${matchTime}:00+07:00`;
   if (!isValidMatchDateTime(matchDateTime)) {
     throw new Error('Invalid match date or time');
   }

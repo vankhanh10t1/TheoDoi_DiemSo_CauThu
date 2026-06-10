@@ -7,14 +7,17 @@ import { PerformanceTable } from './PerformanceTable';
 import type { Match, PlayerStatusResponse, RiskLevel, TrendStatus } from '../lib/types';
 import BulkRatingInputForm from './bulk-rating-input-form';
 import { fetchWithDebug } from '../lib/client-api';
-import { getMatchSortTimestamp, sortRecentMatchesNewestFirst } from '../lib/match-history';
-import { createMatchDateTime } from '../lib/match-datetime';
+import {
+  formatMatchDateTimeValue,
+  formatMatchDateValue,
+  sortRecentMatchesNewestFirst
+} from '../lib/match-history';
+import { createMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
 
-function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string }): string {
-  const timestamp = getMatchSortTimestamp(match);
-  return timestamp
-    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(timestamp))
-    : 'Không rõ thời gian';
+const RATING_HISTORY_ITEMS_PER_PAGE = 5;
+
+function formatRatingDate(match: { matchDateTime?: string; matchDate?: string; matchTime?: string; createdAt?: string; updatedAt?: string }): string {
+  return formatMatchDateTimeValue(match);
 }
 
 type AllPlayersFormRow = {
@@ -83,11 +86,12 @@ export function TrackerApp() {
   const [statusData, setStatusData] = useState<PlayerStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
   const [allPlayersFormData, setAllPlayersFormData] = useState<AllPlayersFormRow[]>([]);
   const [formDataLoading, setFormDataLoading] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [createForm, setCreateForm] = useState({
-    matchDate: new Date().toISOString().split('T')[0],
+    matchDate: getVietnamDateInputValue(),
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
@@ -97,6 +101,26 @@ export function TrackerApp() {
   const [createMessage, setCreateMessage] = useState<{ tone: 'idle' | 'success' | 'error'; text: string } | null>(null);
 
   const selectedPlayer = players.find((player) => player.playerId === selectedPlayerId) ?? null;
+  const sortedRatingHistory =
+    statusData && 'recentMatches' in statusData
+      ? sortRecentMatchesNewestFirst(statusData.recentMatches)
+      : [];
+  const ratingHistoryTotalPages = Math.max(
+    1,
+    Math.ceil(sortedRatingHistory.length / RATING_HISTORY_ITEMS_PER_PAGE)
+  );
+  const visibleRatingHistory = sortedRatingHistory.slice(
+    (ratingHistoryPage - 1) * RATING_HISTORY_ITEMS_PER_PAGE,
+    ratingHistoryPage * RATING_HISTORY_ITEMS_PER_PAGE
+  );
+
+  useEffect(() => {
+    setRatingHistoryPage(1);
+  }, [selectedPlayerId]);
+
+  useEffect(() => {
+    setRatingHistoryPage((currentPage) => Math.min(currentPage, ratingHistoryTotalPages));
+  }, [ratingHistoryTotalPages]);
 
   useEffect(() => {
     if (selectedPlayerId && !players.some((player) => player.playerId === selectedPlayerId)) {
@@ -277,7 +301,7 @@ export function TrackerApp() {
             <div style={{ display: 'grid', gap: 16 }}>
               <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}>
                 <div><strong>Trận:</strong> {currentMatch.opponentName || 'N/A'} — {currentMatch.myScore}-{currentMatch.opponentScore}</div>
-                <div><strong>Ngày:</strong> {new Date(currentMatch.matchDate).toLocaleDateString('vi-VN')}</div>
+                <div><strong>Ngày:</strong> {formatMatchDateValue(currentMatch)}</div>
                 <div><strong>Kết quả:</strong> {currentMatch.result}</div>
               </div>
 
@@ -515,7 +539,7 @@ export function TrackerApp() {
                 ) : null}
 
                 <div className="recent-list">
-                  {sortRecentMatchesNewestFirst(statusData.recentMatches).map((match) => (
+                  {visibleRatingHistory.map((match) => (
                     <div key={match.sk} className="recent-item">
                       <span>{formatRatingDate(match)}</span>
                       <strong>{match.score.toFixed(1)}</strong>
@@ -536,6 +560,27 @@ export function TrackerApp() {
                       </small>
                     </div>
                   ))}
+                </div>
+                <div className="match-history-pagination" aria-label="Phân trang lịch sử điểm đánh giá">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={ratingHistoryPage === 1}
+                    onClick={() => setRatingHistoryPage((page) => Math.max(1, page - 1))}
+                  >
+                    Trang trước
+                  </button>
+                  <span>Trang {ratingHistoryPage}/{ratingHistoryTotalPages}</span>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={ratingHistoryPage === ratingHistoryTotalPages}
+                    onClick={() =>
+                      setRatingHistoryPage((page) => Math.min(ratingHistoryTotalPages, page + 1))
+                    }
+                  >
+                    Trang sau
+                  </button>
                 </div>
               </>
             ) : null}

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import type { Match, PlayerSummary, DetailedPosition, PositionGroup } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
+import { formatMatchDateValue } from '../lib/match-history';
 
 interface BulkRatingInputFormProps {
   match: Match;
@@ -277,7 +278,7 @@ export default function BulkRatingInputForm({ match, onRatingsSaved, onCancel }:
         >
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
             <div>
-              <strong>Ngày:</strong> {new Date(match.matchDate).toLocaleDateString('vi-VN')}
+              <strong>Ngày:</strong> {formatMatchDateValue(match)}
             </div>
             <div>
               <strong>Đối thủ:</strong> {match.opponentName || 'N/A'}

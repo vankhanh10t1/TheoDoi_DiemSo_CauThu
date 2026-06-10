@@ -5,9 +5,27 @@ type MatchDateTimeFields = {
   matchDate?: string;
   matchTime?: string;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 const DEFAULT_MATCH_TIME = '07:00';
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
+const vietnamDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: VIETNAM_TIME_ZONE,
+  hourCycle: 'h23',
+  hour: '2-digit',
+  minute: '2-digit',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+});
+const vietnamDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: VIETNAM_TIME_ZONE,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+});
 
 function createUtcTimestamp(
   year: number,
@@ -33,6 +51,28 @@ function createUtcTimestamp(
   }
 
   return timestamp;
+}
+
+function createVietnamTimestamp(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  millisecond = 0
+): number | null {
+  const vietnamWallClock = createUtcTimestamp(
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    millisecond
+  );
+
+  return vietnamWallClock === null ? null : vietnamWallClock - VIETNAM_OFFSET_MS;
 }
 
 function parseDateParts(value: string): [number, number, number] | null {
@@ -70,7 +110,7 @@ function parseDateAndTime(dateValue: unknown, timeValue = DEFAULT_MATCH_TIME): n
     return null;
   }
 
-  return createUtcTimestamp(...dateParts, ...timeParts);
+  return createVietnamTimestamp(...dateParts, ...timeParts);
 }
 
 function parseDateTimeValue(value: unknown): number | null {
@@ -79,6 +119,20 @@ function parseDateTimeValue(value: unknown): number | null {
   }
 
   const normalized = value.trim();
+  const compactUtc = normalized.match(
+    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/
+  );
+  if (compactUtc) {
+    return createUtcTimestamp(
+      Number(compactUtc[1]),
+      Number(compactUtc[2]),
+      Number(compactUtc[3]),
+      Number(compactUtc[4]),
+      Number(compactUtc[5]),
+      Number(compactUtc[6])
+    );
+  }
+
   const localDateTime = normalized.match(
     /^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})[T\s](\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/
   );
@@ -127,11 +181,39 @@ export function getMatchSortTimestamp(match: MatchDateTimeFields): number {
     parseDateTimeValue(match.matchDateTime) ??
     parseDateAndTime(match.matchDate, match.matchTime ?? DEFAULT_MATCH_TIME) ??
     parseDateTimeValue(match.createdAt) ??
+    parseDateTimeValue(match.updatedAt) ??
     0
   );
 }
 
 export const getMatchDateTime = getMatchSortTimestamp;
+
+export function formatMatchDateTimeValue(
+  match: MatchDateTimeFields,
+  fallback = 'Không rõ thời gian'
+): string {
+  const timestamp = getMatchSortTimestamp(match);
+  if (!timestamp) {
+    return fallback;
+  }
+
+  const parts = Object.fromEntries(
+    vietnamDateTimeFormatter
+      .formatToParts(new Date(timestamp))
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${parts.hour}:${parts.minute} - ${parts.day}/${parts.month}/${parts.year}`;
+}
+
+export function formatMatchDateValue(
+  match: MatchDateTimeFields,
+  fallback = 'Không rõ ngày'
+): string {
+  const timestamp = getMatchSortTimestamp(match);
+  return timestamp ? vietnamDateFormatter.format(new Date(timestamp)) : fallback;
+}
 
 export function getMatchChronologyValue(match: RecentMatch): number {
   return getMatchSortTimestamp(match) || parseMatchSortKey(match.sk) || 0;
@@ -147,7 +229,7 @@ export function sortRecentMatchesNewestFirst(matches: RecentMatch[]): RecentMatc
 }
 
 export function getMatchSortDateTime(
-  match: Pick<Match, 'matchDateTime' | 'matchDate' | 'matchTime' | 'createdAt'>
+  match: Pick<Match, 'matchDateTime' | 'matchDate' | 'matchTime' | 'createdAt' | 'updatedAt'>
 ): number {
   return getMatchSortTimestamp(match);
 }

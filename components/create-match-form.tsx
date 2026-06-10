@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import type { Match } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
-import { createMatchDateTime } from '../lib/match-datetime';
+import { createMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
 
 interface CreateMatchFormProps {
   onMatchCreated?: (match: Match) => void;
@@ -12,7 +12,7 @@ interface CreateMatchFormProps {
 
 export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatchFormProps) {
   const [formData, setFormData] = useState({
-    matchDate: new Date().toISOString().split('T')[0],
+    matchDate: getVietnamDateInputValue(),
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
@@ -95,7 +95,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
 
       // Reset form
       setFormData({
-        matchDate: new Date().toISOString().split('T')[0],
+        matchDate: getVietnamDateInputValue(),
         opponentName: '',
         myScore: 0,
         opponentScore: 0,

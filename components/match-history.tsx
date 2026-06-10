@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Match, PlayerMatchRatingDetail } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
-import { getMatchSortDateTime, sortMatchHistoryNewestFirst } from '../lib/match-history';
+import { formatMatchDateTimeValue, sortMatchHistoryNewestFirst } from '../lib/match-history';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -18,14 +18,7 @@ type MatchDetailResponse = {
 };
 
 function formatMatchDateTime(match: Match): string {
-  const date = new Date(getMatchSortDateTime(match));
-  return Number.isNaN(date.getTime())
-    ? match.createdAt
-    : new Intl.DateTimeFormat('vi-VN', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC'
-      }).format(date);
+  return formatMatchDateTimeValue(match);
 }
 
 function getResultLabel(result: Match['result']): string {

@@ -159,7 +159,7 @@ describe('match service two-way data synchronization', () => {
 
     expect(playerPut).toMatchObject({
       MatchDate: '2026-06-10',
-      MatchDateTime: '2026-06-10T07:00',
+      MatchDateTime: '2026-06-10T07:00:00+07:00',
       Result: 'Win',
       IsBigWin: true,
       IsBigLoss: false

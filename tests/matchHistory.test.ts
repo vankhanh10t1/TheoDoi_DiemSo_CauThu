@@ -3,6 +3,8 @@ import {
   getMatchDateTime,
   getMatchSortDateTime,
   getMatchSortTimestamp,
+  formatMatchDateTimeValue,
+  formatMatchDateValue,
   sortMatchHistoryNewestFirst,
   sortRecentMatchesNewestFirst
 } from '../lib/match-history';
@@ -61,13 +63,13 @@ describe('sortMatchHistoryNewestFirst', () => {
 
   it('parses legacy DD/MM/YYYY manually and independently from runtime timezone', () => {
     expect(getMatchSortTimestamp({ matchDateTime: '10/06/2026 09:00' })).toBe(
-      Date.UTC(2026, 5, 10, 9, 0)
+      Date.UTC(2026, 5, 10, 2, 0)
     );
     expect(getMatchSortTimestamp({ matchDate: '10/06/2026', matchTime: '08:30' })).toBe(
-      Date.UTC(2026, 5, 10, 8, 30)
+      Date.UTC(2026, 5, 10, 1, 30)
     );
     expect(getMatchSortTimestamp({ matchDate: '10/06/2026' })).toBe(
-      Date.UTC(2026, 5, 10, 7, 0)
+      Date.UTC(2026, 5, 10, 0, 0)
     );
   });
 
@@ -79,7 +81,7 @@ describe('sortMatchHistoryNewestFirst', () => {
         matchTime: '20:00',
         createdAt: '2026-12-31T23:59:00.000Z'
       })
-    ).toBe(Date.UTC(2026, 4, 9, 20, 0));
+    ).toBe(Date.UTC(2026, 4, 9, 13, 0));
 
     expect(
       getMatchSortTimestamp({
@@ -88,6 +90,52 @@ describe('sortMatchHistoryNewestFirst', () => {
         createdAt: '2026-06-08T12:00:00.000Z'
       })
     ).toBe(Date.parse('2026-06-08T12:00:00.000Z'));
+  });
+
+  it('supports compact timestamps and falls back from createdAt to updatedAt', () => {
+    expect(getMatchSortTimestamp({ createdAt: '20260610T120000Z' })).toBe(
+      Date.UTC(2026, 5, 10, 12, 0)
+    );
+    expect(
+      getMatchSortTimestamp({
+        createdAt: 'invalid',
+        updatedAt: '20260611T083000Z'
+      })
+    ).toBe(Date.UTC(2026, 5, 11, 8, 30));
+  });
+
+  it('formats all supported time sources consistently', () => {
+    expect(formatMatchDateTimeValue({ matchDateTime: '2026-06-10T09:00' })).toBe(
+      '09:00 - 10/06/2026'
+    );
+    expect(formatMatchDateTimeValue({ matchDate: '10/06/2026' })).toBe(
+      '07:00 - 10/06/2026'
+    );
+    expect(formatMatchDateTimeValue({ createdAt: '20260610T120000Z' })).toBe(
+      '19:00 - 10/06/2026'
+    );
+    expect(formatMatchDateTimeValue({ updatedAt: '20260611T083000Z' })).toBe(
+      '15:30 - 11/06/2026'
+    );
+    expect(formatMatchDateTimeValue({})).toBe('Không rõ thời gian');
+  });
+
+  it('converts explicit UTC timestamps to Vietnam time and treats local values as Vietnam time', () => {
+    const utcTimestamp = { matchDateTime: '2026-06-10T02:00:00.000Z' };
+    const vietnamOffsetTimestamp = { matchDateTime: '2026-06-10T09:00:00+07:00' };
+    const legacyLocalTimestamp = { matchDateTime: '2026-06-10T09:00' };
+
+    expect(getMatchSortTimestamp(utcTimestamp)).toBe(Date.parse('2026-06-10T02:00:00.000Z'));
+    expect(getMatchSortTimestamp(vietnamOffsetTimestamp)).toBe(
+      Date.parse('2026-06-10T02:00:00.000Z')
+    );
+    expect(getMatchSortTimestamp(legacyLocalTimestamp)).toBe(
+      Date.parse('2026-06-10T02:00:00.000Z')
+    );
+    expect(formatMatchDateTimeValue(utcTimestamp)).toBe('09:00 - 10/06/2026');
+    expect(formatMatchDateTimeValue(vietnamOffsetTimestamp)).toBe('09:00 - 10/06/2026');
+    expect(formatMatchDateTimeValue(legacyLocalTimestamp)).toBe('09:00 - 10/06/2026');
+    expect(formatMatchDateValue(utcTimestamp)).toBe('10/06/2026');
   });
 
   it('sorts same-day matches by later time first', () => {

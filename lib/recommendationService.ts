@@ -17,6 +17,7 @@ type RecommendationTableItem = {
   MatchDate?: unknown;
   MatchTime?: unknown;
   CreatedAt?: unknown;
+  UpdatedAt?: unknown;
   YellowCards?: unknown;
   RedCards?: unknown;
   Fouls?: unknown;
@@ -119,6 +120,7 @@ export function buildRecommendationsFromTableItems(
       matchDate: toStringValue(item.MatchDate) || undefined,
       matchTime: toStringValue(item.MatchTime) || undefined,
       createdAt: toStringValue(item.CreatedAt) || undefined,
+      updatedAt: toStringValue(item.UpdatedAt) || undefined,
       score: item.Score,
       result: item.Result,
       yellowCards: isValidScore(item.YellowCards) ? item.YellowCards : 0,

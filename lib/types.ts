@@ -48,6 +48,7 @@ export interface StoredMatchItem {
   MatchDate?: string;
   MatchTime?: string;
   CreatedAt?: string;
+  UpdatedAt?: string;
   Score: number;
   IsStarter: boolean;
   Result: MatchResult;
@@ -70,6 +71,7 @@ export interface RecentMatch {
   matchDate?: string;
   matchTime?: string;
   createdAt?: string;
+  updatedAt?: string;
   score: number;
   result: MatchResult;
   positionGroup?: PositionGroup;

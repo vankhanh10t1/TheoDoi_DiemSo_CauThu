@@ -138,6 +138,7 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       matchDate: match.MatchDate,
       matchTime: match.MatchTime,
       createdAt: match.CreatedAt,
+      updatedAt: match.UpdatedAt,
       score: match.Score,
       result: match.Result,
       positionGroup,
