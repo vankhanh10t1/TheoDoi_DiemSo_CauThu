@@ -274,7 +274,7 @@ export interface StoredPlayerMatchRating {
  */
 export interface CreateMatchPayload {
   matchDate: string; // YYYY-MM-DD
-  matchDateTime: string; // Local ISO datetime representing when the match was played
+  matchDateTime: string; // ISO timestamp captured when the create-match form is submitted
   opponentName?: string;
   myScore: number;
   opponentScore: number;

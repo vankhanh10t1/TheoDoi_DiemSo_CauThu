@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMatch, listMatches } from '../../../lib/matchService';
 import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
 import type { CreateMatchPayload } from '../../../lib/types';
-import { createMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
+import { createSubmitMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
 
 /**
  * POST /api/matches - Create a new match
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const payload: CreateMatchPayload = {
       matchDate: body.matchDate,
-      matchDateTime: body.matchDateTime ?? createMatchDateTime(body.matchDate),
+      matchDateTime: body.matchDateTime ?? createSubmitMatchDateTime(),
       opponentName: body.opponentName,
       myScore: body.myScore,
       opponentScore: body.opponentScore,

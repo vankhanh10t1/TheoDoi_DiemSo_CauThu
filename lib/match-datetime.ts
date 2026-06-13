@@ -17,6 +17,10 @@ export function getVietnamDateInputValue(date = new Date()): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+export function createSubmitMatchDateTime(date = new Date()): string {
+  return date.toISOString();
+}
+
 export function isValidMatchDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -49,6 +53,7 @@ export function isValidMatchDateTime(value: unknown): value is string {
   );
 }
 
+// Legacy/backfill helper only. New matches must use createSubmitMatchDateTime().
 export function createMatchDateTime(matchDate: string, matchTime = '07:00'): string {
   if (!isValidMatchDate(matchDate) || !/^\d{2}:\d{2}$/.test(matchTime)) {
     throw new Error('Invalid match date or time');

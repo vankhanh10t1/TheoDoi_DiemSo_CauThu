@@ -12,7 +12,7 @@ import {
   formatMatchDateValue,
   sortRecentMatchesNewestFirst
 } from '../lib/match-history';
-import { createMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
+import { createSubmitMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
 
 const RATING_HISTORY_ITEMS_PER_PAGE = 5;
 
@@ -236,12 +236,13 @@ export function TrackerApp() {
 
     setCreatingMatch(true);
     try {
+      const matchDateTime = createSubmitMatchDateTime();
       const res = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matchDate: createForm.matchDate,
-          matchDateTime: createMatchDateTime(createForm.matchDate),
+          matchDateTime,
           opponentName: createForm.opponentName,
           myScore: createForm.myScore,
           opponentScore: createForm.opponentScore,

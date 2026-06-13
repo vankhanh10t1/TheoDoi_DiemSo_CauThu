@@ -138,6 +138,12 @@ describe('sortMatchHistoryNewestFirst', () => {
     expect(formatMatchDateValue(utcTimestamp)).toBe('10/06/2026');
   });
 
+  it('displays a submit timestamp at the correct Vietnam wall-clock time', () => {
+    expect(formatMatchDateTimeValue({ matchDateTime: '2026-06-13T06:55:00.000Z' })).toBe(
+      '13:55 - 13/06/2026'
+    );
+  });
+
   it('sorts same-day matches by later time first', () => {
     const ratings: RecentMatch[] = [
       { sk: 'MATCH#0830', matchDate: '10/06/2026', matchTime: '08:30', score: 7, result: 'Win' },

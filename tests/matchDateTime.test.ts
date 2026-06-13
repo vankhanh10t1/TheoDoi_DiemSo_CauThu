@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createMatchDateTime,
+  createSubmitMatchDateTime,
   getVietnamDateInputValue,
   isValidMatchDate,
   isValidMatchDateTime
@@ -13,6 +14,12 @@ describe('match datetime validation', () => {
     expect(isValidMatchDateTime('2026-06-10T20:30')).toBe(true);
     expect(isValidMatchDateTime('2026-06-10T20:30:15.123Z')).toBe(true);
     expect(isValidMatchDateTime('2026-06-10T24:00')).toBe(false);
+  });
+
+  it('captures the real submit timestamp instead of the legacy 07:00 fallback', () => {
+    expect(createSubmitMatchDateTime(new Date('2026-06-13T06:55:42.123Z'))).toBe(
+      '2026-06-13T06:55:42.123Z'
+    );
   });
 
   it('tạo thời gian trận từ ngày thi đấu thay vì thời điểm nhập dữ liệu', () => {

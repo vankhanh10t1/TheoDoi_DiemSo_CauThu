@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import type { Match } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
-import { createMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
+import { createSubmitMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
 
 interface CreateMatchFormProps {
   onMatchCreated?: (match: Match) => void;
@@ -69,12 +69,13 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         return;
       }
 
+      const matchDateTime = createSubmitMatchDateTime();
       const response = await fetchWithDebug('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matchDate: formData.matchDate,
-          matchDateTime: createMatchDateTime(formData.matchDate),
+          matchDateTime,
           opponentName: formData.opponentName,
           myScore: formData.myScore,
           opponentScore: formData.opponentScore,
