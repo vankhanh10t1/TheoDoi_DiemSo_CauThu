@@ -3,6 +3,12 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 let cachedDocumentClient: DynamoDBDocumentClient | undefined;
 
+const REQUIRED_AWS_ENV_NAMES = [
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_REGION'
+] as const;
+
 function getFirstAvailableEnv(names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name];
@@ -31,12 +37,28 @@ export function getTableName(): string {
   return tableName;
 }
 
+export function getMissingDynamoEnvNames(): string[] {
+  const missing: string[] = REQUIRED_AWS_ENV_NAMES.filter((name) => !process.env[name]);
+  if (!getFirstAvailableEnv(['DYNAMODB_TABLE_NAME', 'DYNAMODB_TABLE'])) {
+    missing.push('DYNAMODB_TABLE_NAME');
+  }
+  return missing;
+}
+
+export function validateDynamoConfig(): void {
+  const missing = getMissingDynamoEnvNames();
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variable(s): ${missing.join(', ')}`);
+  }
+}
+
 export function getAwsRegion(): string {
   return getRequiredEnv('AWS_REGION');
 }
 
 export function getDocumentClient(): DynamoDBDocumentClient {
   if (!cachedDocumentClient) {
+    validateDynamoConfig();
     cachedDocumentClient = DynamoDBDocumentClient.from(
       new DynamoDBClient({
         region: getAwsRegion(),

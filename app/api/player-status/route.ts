@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { getPlayerMetadata, getRecentMatches } from '../../../lib/playerService';
 import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
+import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
 
 export const runtime = 'nodejs';
 
@@ -20,14 +21,15 @@ export async function GET(request: NextRequest) {
   const allMatches = sortRecentMatchesNewestFirst(await getRecentMatches(playerId));
   const matchesForAnalysis = allMatches.slice(0, 5);
 
-  if (allMatches.length === 0) {
+  if (allMatches.length < MIN_MATCHES_FOR_EVALUATION) {
     return NextResponse.json(
       {
         playerId,
         name: player.name,
-        matchCount: 0,
-        status: 'Đang theo dõi',
-        message: 'Chưa có dữ liệu trận để đánh giá'
+        matchCount: allMatches.length,
+        status: 'NOT_ENOUGH_DATA',
+        message: `Cần ít nhất ${MIN_MATCHES_FOR_EVALUATION} trận để đánh giá và đưa ra khuyến nghị`,
+        recentMatches: allMatches
       },
       { status: 200 }
     );

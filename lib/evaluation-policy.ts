@@ -1,0 +1,1 @@
+export const MIN_MATCHES_FOR_EVALUATION = 3;

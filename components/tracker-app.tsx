@@ -470,7 +470,7 @@ export function TrackerApp() {
               <>
                 {statusData.matchCount < 3 ? (
                   <div className="score-badge" style={{ textAlign: 'center', color: '#999' }}>
-                    Not enough data ({statusData.matchCount} match{statusData.matchCount !== 1 ? 'es' : ''})
+                    Chưa đủ dữ liệu ({statusData.matchCount} trận)
                   </div>
                 ) : (
                   <div className="score-badge">
@@ -489,7 +489,7 @@ export function TrackerApp() {
                     <strong>{getTrendLabel(statusData.trendStatus)}</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Variance</span>
+                    <span className="metric-label">Độ biến động</span>
                     <strong>{statusData.variance.toFixed(2)}</strong>
                   </div>
                   <div>
@@ -497,19 +497,19 @@ export function TrackerApp() {
                     <strong>{getStabilityLabel(statusData.stabilityLevel)}</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Momentum</span>
+                    <span className="metric-label">Đà phong độ</span>
                     <strong>{getMomentumLabel(statusData.momentumStatus)}</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Prediction</span>
+                    <span className="metric-label">Điểm dự đoán</span>
                     <strong>{statusData.predictedScore.toFixed(1)}</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Confidence</span>
+                    <span className="metric-label">Độ tin cậy</span>
                     <strong>{getConfidenceLabel(statusData.confidence)} ({Math.round(statusData.confidence * 100)}%)</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Risk</span>
+                    <span className="metric-label">Rủi ro</span>
                     <strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong>
                   </div>
                 </div>
@@ -524,11 +524,11 @@ export function TrackerApp() {
                     <strong>{getRecommendationLabel(statusData.recommendation)}</strong>
                   </div>
                   <div className={statusData.fraudRisk ? 'status-fraud-cell alert' : 'status-fraud-cell'}>
-                    <span className="metric-label">Fraud</span>
-                    <strong>{statusData.fraudRisk ? 'ALERT' : 'CLEAR'}</strong>
+                    <span className="metric-label">Cảnh báo gian lận</span>
+                    <strong>{statusData.fraudRisk ? 'CÓ' : 'KHÔNG'}</strong>
                   </div>
                   <div>
-                    <span className="metric-label">Loss streak</span>
+                    <span className="metric-label">Chuỗi thua</span>
                     <strong>{statusData.lossStreak}</strong>
                   </div>
                 </div>
@@ -589,7 +589,7 @@ export function TrackerApp() {
             {!statusError && statusData && 'message' in statusData ? (
               <div className="tracking-state">
                 <p>{statusData.message}</p>
-                <span>Nhập trận đầu tiên để bắt đầu đánh giá X̄.</span>
+                <span>Cần ít nhất 3 trận để bắt đầu đánh giá và đưa ra khuyến nghị.</span>
               </div>
             ) : null}
           </div>

@@ -14,6 +14,7 @@ import {
   deleteMatch,
   deletePlayerMatchRating,
   resetPlayerMatchHistory,
+  saveMatchRatings,
   updateMatch
 } from '../lib/matchService';
 
@@ -38,6 +39,42 @@ beforeEach(() => {
 });
 
 describe('match service two-way data synchronization', () => {
+  it('lưu rating hai chiều và RatingCount trong cùng transaction', async () => {
+    sendMock.mockImplementation(async (command) => {
+      if (commandName(command) === 'GetCommand') {
+        return {
+          Item: {
+            PK: 'MATCH#match-1',
+            SK: 'METADATA',
+            MatchDate: '2026-06-10',
+            MatchDateTime: '2026-06-10T09:00:00+07:00',
+            MyScore: 1,
+            OpponentScore: 0,
+            Result: 'WIN',
+            CreatedAt: 'created',
+            UpdatedAt: 'updated'
+          }
+        };
+      }
+      if (commandName(command) === 'QueryCommand') return { Items: [] };
+      return {};
+    });
+
+    await saveMatchRatings('match-1', {
+      ratings: [{ playerId: 'player-1', rating: 8, position: 'ST' }]
+    });
+
+    const transaction = sendMock.mock.calls.find(
+      ([command]) => commandName(command) === 'TransactWriteCommand'
+    );
+    const transactItems = commandInput(transaction?.[0]).TransactItems;
+    expect(transactItems).toHaveLength(3);
+    expect(transactItems.map((item: any) => item.Put?.Item?.PK).filter(Boolean)).toEqual(
+      expect.arrayContaining(['MATCH#match-1', 'PLAYER#player-1'])
+    );
+    expect(transactItems.find((item: any) => item.Update)?.Update.ExpressionAttributeValues[':ratingCount']).toBe(1);
+  });
+
   it('xóa trận ở cả match-centric và player-centric records', async () => {
     sendMock.mockImplementation(async (command) => {
       if (commandName(command) === 'QueryCommand') {
@@ -70,20 +107,35 @@ describe('match service two-way data synchronization', () => {
   it('xóa riêng rating ở cả hai chiều và cập nhật RatingCount', async () => {
     sendMock.mockImplementation(async (command) => {
       if (commandName(command) === 'QueryCommand') return { Items: [] };
-      if (commandName(command) === 'GetCommand') return { Item: { PK: 'MATCH#match-1' } };
+      if (commandName(command) === 'GetCommand') {
+        return {
+          Item: {
+            PK: 'MATCH#match-1',
+            SK: 'METADATA',
+            MatchDate: '2026-06-10',
+            MyScore: 1,
+            OpponentScore: 0,
+            Result: 'WIN',
+            CreatedAt: 'created',
+            UpdatedAt: 'updated'
+          }
+        };
+      }
       return { UnprocessedItems: {} };
     });
 
     expect(await deletePlayerMatchRating('match-1', 'player-1')).toBe(true);
-    expect(getBatchDeleteKeys()).toEqual(
+    const transaction = sendMock.mock.calls.find(
+      ([command]) => commandName(command) === 'TransactWriteCommand'
+    );
+    const transactItems = commandInput(transaction?.[0]).TransactItems;
+    expect(transactItems.map((item: any) => item.Delete?.Key).filter(Boolean)).toEqual(
       expect.arrayContaining([
         { PK: 'MATCH#match-1', SK: 'RATING#player-1' },
         { PK: 'PLAYER#player-1', SK: 'MATCH#match-1' }
       ])
     );
-
-    const update = sendMock.mock.calls.find(([command]) => commandName(command) === 'UpdateCommand');
-    expect(commandInput(update?.[0]).ExpressionAttributeValues[':ratingCount']).toBe(0);
+    expect(transactItems.find((item: any) => item.Update)?.Update.ExpressionAttributeValues[':ratingCount']).toBe(0);
   });
 
   it('reset cầu thủ xóa rating hai chiều và cập nhật trận liên quan', async () => {

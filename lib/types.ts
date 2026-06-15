@@ -91,8 +91,9 @@ export interface PlayerStatusTrackingResponse {
   playerId: string;
   name: string;
   matchCount: number;
-  status: 'Đang theo dõi';
+  status: 'NOT_ENOUGH_DATA';
   message: string;
+  recentMatches: RecentMatch[];
 }
 
 export interface PlayerStatusEvaluatedResponse {
@@ -204,6 +205,7 @@ export interface Match {
   isBigLoss?: boolean;
   note?: string;
   ratingCount?: number;
+  ratingVersion?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +227,7 @@ export interface StoredMatch {
   IsBigLoss?: boolean;
   Note?: string;
   RatingCount?: number;
+  RatingVersion?: number;
   CreatedAt: string;
   UpdatedAt: string;
 }

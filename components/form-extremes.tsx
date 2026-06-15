@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchWithDebug } from '../lib/client-api';
+import { useAppContext } from './app-context';
 
 interface RecentMatch {
   sk: string;
@@ -35,6 +36,7 @@ interface FormExtremesResponse {
 type LoadingState = 'idle' | 'loading' | 'error' | 'success';
 
 export function FormExtremesCard() {
+  const { refreshTrigger } = useAppContext();
   const [data, setData] = useState<FormExtremesResponse | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function FormExtremesCard() {
     };
 
     void loadFormExtremes();
-  }, []);
+  }, [refreshTrigger]);
 
   if (loadingState === 'loading') {
     return (

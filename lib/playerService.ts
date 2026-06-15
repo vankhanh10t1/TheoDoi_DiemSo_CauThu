@@ -3,6 +3,7 @@ import { getDocumentClient, getTableName } from './dynamodb';
 import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
 import { sortRecentMatchesNewestFirst } from './match-history';
 import { isDetailedPositionForGroup, isPositionGroup } from './positions';
+import { getPlayerNameReservationKey, normalizePlayerName } from './player-name';
 import type { PlayerMetadataItem, PlayerSummary, RecentMatch, StoredMatchItem } from './types';
 
 function toPlayerIdFromPk(pk: string): string {
@@ -24,22 +25,30 @@ export async function listPlayers(): Promise<PlayerSummary[]> {
 
     if (listIndexName) {
       try {
-        const indexed = await retryWithBackoff(
-          () =>
-            getDocumentClient().send(
-              new QueryCommand({
-                TableName: getTableName(),
-                IndexName: listIndexName,
-                KeyConditionExpression: 'SK = :metadata',
-                ExpressionAttributeValues: {
-                  ':metadata': 'METADATA'
-                }
-              })
-            ),
-          { label: 'listPlayers.queryIndex' }
-        );
+        const indexedItems: PlayerMetadataItem[] = [];
+        let exclusiveStartKey: Record<string, unknown> | undefined;
 
-        const indexedItems = (indexed.Items ?? []) as PlayerMetadataItem[];
+        do {
+          const indexed = await retryWithBackoff(
+            () =>
+              getDocumentClient().send(
+                new QueryCommand({
+                  TableName: getTableName(),
+                  IndexName: listIndexName,
+                  KeyConditionExpression: 'SK = :metadata',
+                  ExpressionAttributeValues: {
+                    ':metadata': 'METADATA'
+                  },
+                  ExclusiveStartKey: exclusiveStartKey
+                })
+              ),
+            { label: 'listPlayers.queryIndex' }
+          );
+
+          indexedItems.push(...((indexed.Items ?? []) as PlayerMetadataItem[]));
+          exclusiveStartKey = indexed.LastEvaluatedKey;
+        } while (exclusiveStartKey);
+
         return indexedItems
           .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
           .map(mapMetadataItem)
@@ -52,28 +61,36 @@ export async function listPlayers(): Promise<PlayerSummary[]> {
       }
     }
 
-    const resp = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new ScanCommand({
-            TableName: getTableName(),
-            FilterExpression: 'SK = :metadata',
-            ExpressionAttributeValues: {
-              ':metadata': 'METADATA'
-            }
-          })
-        ),
-      { label: 'listPlayers.scan' }
-    );
+    const items: PlayerMetadataItem[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
 
-    const items = (resp.Items ?? []) as PlayerMetadataItem[];
+    do {
+      const response = await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new ScanCommand({
+              TableName: getTableName(),
+              FilterExpression: 'SK = :metadata',
+              ExpressionAttributeValues: {
+                ':metadata': 'METADATA'
+              },
+              ExclusiveStartKey: exclusiveStartKey
+            })
+          ),
+        { label: 'listPlayers.scan' }
+      );
+
+      items.push(...((response.Items ?? []) as PlayerMetadataItem[]));
+      exclusiveStartKey = response.LastEvaluatedKey;
+    } while (exclusiveStartKey);
+
     return items
       .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
       .map(mapMetadataItem)
       .filter((player) => player.playerId.trim().length > 0 && player.name.trim().length > 0);
-  } catch {
-    // If DynamoDB is unavailable or table not present, return empty list
-    return [];
+  } catch (error) {
+    console.error('[playerService] Failed to list players', error);
+    throw error;
   }
 }
 
@@ -92,8 +109,9 @@ export async function getPlayerMetadata(playerId: string): Promise<PlayerSummary
     if (!response.Item) return null;
 
     return mapMetadataItem(response.Item as PlayerMetadataItem);
-  } catch {
-    return null;
+  } catch (error) {
+    console.error('[playerService] Failed to get player metadata', { playerId, error });
+    throw error;
   }
 }
 
@@ -174,13 +192,9 @@ export async function deletePlayersAndRelatedData(playerIds: string[]): Promise<
   const allKeys: DynamoKey[] = [];
 
   for (const playerId of uniquePlayerIds) {
-    const [playerItemKeys, matchRatingKeys] = await Promise.all([
-      queryAllPlayerKeys(playerId),
-      scanAllMatchRatingKeys(playerId)
-    ]);
-
-    allKeys.push(...playerItemKeys, ...matchRatingKeys);
+    allKeys.push(...(await queryAllPlayerKeys(playerId)));
   }
+  allKeys.push(...(await scanAllMatchRatingKeys(uniquePlayerIds)));
 
   const deletedItemCount = await deleteKeysInBatches(allKeys);
 
@@ -194,9 +208,7 @@ export async function deletePlayersAndRelatedData(playerIds: string[]): Promise<
 /**
  * Normalize player name for duplicate checking (trim spaces, lowercase)
  */
-export function normalizePlayerName(name: string): string {
-  return name.trim().toLowerCase();
-}
+export { normalizePlayerName };
 
 /**
  * Check if a player with the same name already exists (case-insensitive, trimmed)
@@ -281,6 +293,9 @@ async function queryAllPlayerKeys(playerId: string): Promise<DynamoKey[]> {
       if (typeof item.PK === 'string' && typeof item.SK === 'string') {
         keys.push({ PK: item.PK, SK: item.SK });
       }
+      if (item.SK === 'METADATA' && typeof item.Name === 'string' && item.Name.trim()) {
+        keys.push(getPlayerNameReservationKey(item.Name));
+      }
     }
 
     exclusiveStartKey = response.LastEvaluatedKey;
@@ -289,8 +304,9 @@ async function queryAllPlayerKeys(playerId: string): Promise<DynamoKey[]> {
   return keys;
 }
 
-async function scanAllMatchRatingKeys(playerId: string): Promise<DynamoKey[]> {
+async function scanAllMatchRatingKeys(playerIds: string[]): Promise<DynamoKey[]> {
   const keys: DynamoKey[] = [];
+  const targetPlayerIds = new Set(playerIds.map((playerId) => playerId.toLowerCase()));
   let exclusiveStartKey: Record<string, unknown> | undefined;
 
   do {
@@ -299,11 +315,12 @@ async function scanAllMatchRatingKeys(playerId: string): Promise<DynamoKey[]> {
         getDocumentClient().send(
           new ScanCommand({
             TableName: getTableName(),
-            FilterExpression: 'begins_with(PK, :matchPrefix) AND SK = :ratingKey',
+            FilterExpression: 'begins_with(PK, :matchPrefix) AND begins_with(SK, :ratingPrefix)',
             ExpressionAttributeValues: {
               ':matchPrefix': 'MATCH#',
-              ':ratingKey': `RATING#${playerId}`
+              ':ratingPrefix': 'RATING#'
             },
+            ProjectionExpression: 'PK, SK',
             ExclusiveStartKey: exclusiveStartKey
           })
         ),
@@ -311,7 +328,12 @@ async function scanAllMatchRatingKeys(playerId: string): Promise<DynamoKey[]> {
     );
 
     for (const item of response.Items ?? []) {
-      if (typeof item.PK === 'string' && typeof item.SK === 'string') {
+      const playerId = typeof item.SK === 'string' ? item.SK.replace(/^RATING#/, '') : '';
+      if (
+        typeof item.PK === 'string' &&
+        typeof item.SK === 'string' &&
+        targetPlayerIds.has(playerId.toLowerCase())
+      ) {
         keys.push({ PK: item.PK, SK: item.SK });
       }
     }

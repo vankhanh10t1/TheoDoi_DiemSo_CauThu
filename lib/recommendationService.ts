@@ -2,6 +2,7 @@ import { analyzeRecentMatches } from './analytics/performance';
 import { recommendationRank } from './recommendation';
 import { sortRecentMatchesNewestFirst } from './match-history';
 import type { MatchResult, RecentMatch, RecommendationAction } from './types';
+import { MIN_MATCHES_FOR_EVALUATION } from './evaluation-policy';
 
 type RecommendationTableItem = {
   PK?: unknown;
@@ -141,7 +142,7 @@ export function buildRecommendationsFromTableItems(
 
       const recentMatches = sortRecentMatchesNewestFirst(record.recentMatches);
 
-      if (recentMatches.length === 0) {
+      if (recentMatches.length < MIN_MATCHES_FOR_EVALUATION) {
         return null;
       }
 

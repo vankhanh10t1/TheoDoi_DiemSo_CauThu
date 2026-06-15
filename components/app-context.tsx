@@ -49,6 +49,32 @@ async function readApiMessagePayload(response: Response): Promise<ApiMessagePayl
   }
 }
 
+async function readPlayersPayload(response: Response): Promise<
+  | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
+  | {
+      items?: Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>;
+      message?: string;
+      error?: string;
+      requestId?: string;
+      durationMs?: number;
+    }
+> {
+  const responseText = await response.text().catch(() => '');
+
+  if (!responseText) {
+    return { message: `API trả về response rỗng (${response.status} ${response.statusText}).` };
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return {
+      message: `API trả về dữ liệu không phải JSON (${response.status} ${response.statusText}).`,
+      error: responseText.slice(0, 500)
+    };
+  }
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -78,15 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         console.info('[players] loading from /api/players');
         const res = await fetchWithDebug('/api/players', undefined, { caller: 'AppContext.loadPlayers' });
-        const payload = (await res.json()) as
-          | Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>
-          | {
-              items?: Array<{ playerId: string; name: string; cardSeason?: string; season?: string; position: string }>;
-              message?: string;
-              error?: string;
-              requestId?: string;
-              durationMs?: number;
-            };
+        const payload = await readPlayersPayload(res);
 
         console.info('[players] /api/players response', {
           ok: res.ok,
@@ -97,10 +115,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (!res.ok) {
           const message = !Array.isArray(payload)
-            ? payload.error ?? payload.message ?? 'Failed to load players'
-            : 'Failed to load players';
+            ? payload.message ?? payload.error ?? 'Không thể tải danh sách cầu thủ.'
+            : 'Không thể tải danh sách cầu thủ.';
           if (isLatestRequest()) {
-            setPlayers([]);
             setPlayersError(message);
           }
           console.error('[players] load failed', {
@@ -136,8 +153,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         if (isLatestRequest()) {
-          setPlayers([]);
-          setPlayersError(error instanceof Error ? error.message : 'Failed to load players');
+          setPlayersError(
+            error instanceof Error
+              ? `Không thể tải danh sách cầu thủ: ${error.message}`
+              : 'Không thể tải danh sách cầu thủ.'
+          );
         }
         console.error('[players] load exception', error);
       } finally {
@@ -161,6 +181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
       await loadPlayers({ force: true });
+      triggerRefresh();
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : 'Failed' };
@@ -173,6 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payload = await res.json();
       if (!res.ok) return { ok: false, message: payload.message };
       await loadPlayers({ force: true });
+      triggerRefresh();
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : 'Failed' };
@@ -211,6 +233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       await loadPlayers({ force: true });
+      triggerRefresh();
       return { ok: true, deletedCount: payload.deletedCount };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : 'Failed' };

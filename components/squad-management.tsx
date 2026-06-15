@@ -331,13 +331,16 @@ export function SquadManagement() {
       try {
         const res = await fetchWithDebug(`/api/players/${encodeURIComponent(playerId)}`, undefined, { caller: 'SquadManagement.handleViewDetail' });
         if (!res.ok) {
-          alert('Cầu thủ không tồn tại trong hệ thống');
+          setSaveMessage({ text: 'Cầu thủ không tồn tại trong hệ thống', type: 'error' });
           return;
         }
 
         openPlayerDetail(playerId);
       } catch (err) {
-        alert('Không thể kiểm tra thông tin cầu thủ');
+        setSaveMessage({
+          text: err instanceof Error ? err.message : 'Không thể kiểm tra thông tin cầu thủ',
+          type: 'error'
+        });
       }
     })();
   }

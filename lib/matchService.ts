@@ -1,4 +1,4 @@
-import { BatchWriteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getDocumentClient, getTableName, formatMatchTimestamp } from './dynamodb';
 import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
 import { getPositionGroup } from './positions';
@@ -44,6 +44,7 @@ function mapStoredMatch(item: StoredMatch): Match {
     isBigLoss: !!item.IsBigLoss,
     note: item.Note,
     ratingCount: typeof item.RatingCount === 'number' ? item.RatingCount : undefined,
+    ratingVersion: typeof item.RatingVersion === 'number' ? item.RatingVersion : 0,
     createdAt: item.CreatedAt,
     updatedAt: item.UpdatedAt
   };
@@ -246,6 +247,8 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
       IsBigWin: isBigWin,
       IsBigLoss: isBigLoss,
       Note: payload.note,
+      RatingCount: 0,
+      RatingVersion: 0,
       CreatedAt: now,
       UpdatedAt: now
     };
@@ -272,6 +275,8 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
       isBigWin,
       isBigLoss,
       note: payload.note,
+      ratingCount: 0,
+      ratingVersion: 0,
       createdAt: now,
       updatedAt: now
     };
@@ -306,7 +311,7 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
     return mapStoredMatch(item);
   } catch (error) {
     console.error('Error getting match:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -315,20 +320,44 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
  */
 export async function listMatches(): Promise<Match[]> {
   try {
+    // TODO(schema): add a match-list GSI keyed by item type and match timestamp.
+    // Until then, scan only metadata fields and cap the API result to the newest 100 matches.
     const items: StoredMatch[] = [];
     let lastEvaluatedKey: Record<string, unknown> | undefined;
 
     do {
-      const response = await getDocumentClient().send(
-        new ScanCommand({
-          TableName: getTableName(),
-          FilterExpression: 'begins_with(PK, :matchPrefix) AND SK = :metadata',
-          ExpressionAttributeValues: {
-            ':matchPrefix': 'MATCH#',
-            ':metadata': 'METADATA'
-          },
-          ExclusiveStartKey: lastEvaluatedKey
-        })
+      const response = await retryWithBackoff(
+        () =>
+          getDocumentClient().send(
+            new ScanCommand({
+              TableName: getTableName(),
+              FilterExpression: 'begins_with(PK, :matchPrefix) AND SK = :metadata',
+              ExpressionAttributeValues: {
+                ':matchPrefix': 'MATCH#',
+                ':metadata': 'METADATA'
+              },
+              ProjectionExpression:
+                'PK, SK, #matchDate, #matchDateTime, #matchTime, #opponentName, #myScore, #opponentScore, #result, #isBigWin, #isBigLoss, #note, #ratingCount, #ratingVersion, #createdAt, #updatedAt',
+              ExpressionAttributeNames: {
+                '#matchDate': 'MatchDate',
+                '#matchDateTime': 'MatchDateTime',
+                '#matchTime': 'MatchTime',
+                '#opponentName': 'OpponentName',
+                '#myScore': 'MyScore',
+                '#opponentScore': 'OpponentScore',
+                '#result': 'Result',
+                '#isBigWin': 'IsBigWin',
+                '#isBigLoss': 'IsBigLoss',
+                '#note': 'Note',
+                '#ratingCount': 'RatingCount',
+                '#ratingVersion': 'RatingVersion',
+                '#createdAt': 'CreatedAt',
+                '#updatedAt': 'UpdatedAt'
+              },
+              ExclusiveStartKey: lastEvaluatedKey
+            })
+          ),
+        { label: 'listMatches.scan' }
       );
       items.push(...((response.Items ?? []) as StoredMatch[]));
       lastEvaluatedKey = response.LastEvaluatedKey;
@@ -339,7 +368,7 @@ export async function listMatches(): Promise<Match[]> {
     return matches;
   } catch (error) {
     console.error('Error listing matches:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -376,6 +405,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
       IsBigLoss: isBigLoss,
       Note: payload.note ?? existing.note,
       RatingCount: existing.ratingCount,
+      RatingVersion: existing.ratingVersion,
       CreatedAt: existing.createdAt,
       UpdatedAt: now
     };
@@ -383,7 +413,12 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
     await getDocumentClient().send(
       new PutCommand({
         TableName: getTableName(),
-        Item: storedMatch
+        Item: storedMatch,
+        ConditionExpression:
+          'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
+        ExpressionAttributeValues: {
+          ':expectedVersion': existing.ratingVersion ?? 0
+        }
       })
     );
 
@@ -400,6 +435,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
       isBigLoss: !!storedMatch.IsBigLoss,
       note: storedMatch.Note,
       ratingCount: storedMatch.RatingCount,
+      ratingVersion: storedMatch.RatingVersion,
       createdAt: storedMatch.CreatedAt,
       updatedAt: storedMatch.UpdatedAt
     };
@@ -415,7 +451,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
     return updatedMatch;
   } catch (error) {
     console.error('Error updating match:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -438,7 +474,7 @@ export async function deleteMatch(matchId: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error deleting match:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -466,6 +502,9 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
     if (uniqueIds.size !== ids.length) {
       throw new Error('Duplicate playerId found in ratings payload');
     }
+    if (payload.ratings.length > 49) {
+      throw new Error('A maximum of 49 ratings can be saved atomically per request');
+    }
 
     const existingRatings = await getMatchRatings(matchId);
     const existingCreatedAtByPlayer = new Map(
@@ -476,7 +515,7 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
     let updated = 0;
     const now = formatMatchTimestamp();
     const tableName = getTableName();
-    const writeItems: unknown[] = [];
+    const transactItems: NonNullable<ConstructorParameters<typeof TransactWriteCommand>[0]['TransactItems']> = [];
 
     for (const ratingData of payload.ratings) {
       const storedRating: StoredPlayerMatchRating = {
@@ -494,30 +533,11 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
         CreatedAt: existingCreatedAtByPlayer.get(ratingData.playerId.toLowerCase()) ?? now,
         UpdatedAt: now
       };
-      writeItems.push(storedRating);
-
-      // Also write per-player match entry for quick player-centric queries
-      try {
-        // Use matchId in SK to ensure uniqueness per match (fixes bug where same-day matches overwrite each other)
-        const playerMatchItem = createPlayerMatchItem(
-          match,
-          storedRating,
-          storedRating.CreatedAt
-        );
-
-        writeItems.push(playerMatchItem);
-
-        console.debug('[matchService] wrote player-centric match item', { 
-          PK: playerMatchItem.PK, 
-          SK: playerMatchItem.SK,
-          matchId: matchId,
-          playerId: ratingData.playerId,
-          rating: playerMatchItem.Score,
-          detail: `Unique key: PK=${playerMatchItem.PK}, SK=${playerMatchItem.SK} ensures no overwrites for same-day matches`
-        });
-      } catch (err) {
-        console.error('Failed to write player-centric match item:', err);
-      }
+      const playerMatchItem = createPlayerMatchItem(match, storedRating, storedRating.CreatedAt);
+      transactItems.push(
+        { Put: { TableName: tableName, Item: storedRating } },
+        { Put: { TableName: tableName, Item: playerMatchItem } }
+      );
 
       if (existingCreatedAtByPlayer.has(ratingData.playerId.toLowerCase())) {
         updated++;
@@ -526,25 +546,33 @@ export async function saveMatchRatings(matchId: string, payload: SaveMatchRating
       }
     }
 
-    await writeBatchedItems(tableName, writeItems);
+    transactItems.push({
+      Update: {
+        TableName: tableName,
+        Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
+        UpdateExpression:
+          'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt, RatingVersion = if_not_exists(RatingVersion, :zero) + :one',
+        ConditionExpression:
+          'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
+        ExpressionAttributeValues: {
+          ':ratingCount': new Set([
+            ...existingRatings.map((rating) => rating.playerId.toLowerCase()),
+            ...payload.ratings.map((rating) => rating.playerId.toLowerCase())
+          ]).size,
+          ':updatedAt': now,
+          ':zero': 0,
+          ':one': 1,
+          ':expectedVersion': match.ratingVersion ?? 0
+        }
+      }
+    });
 
     await retryWithBackoff(
       () =>
         getDocumentClient().send(
-          new UpdateCommand({
-            TableName: tableName,
-            Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
-            UpdateExpression: 'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt',
-            ExpressionAttributeValues: {
-              ':ratingCount': new Set([
-                ...existingRatings.map((rating) => rating.playerId.toLowerCase()),
-                ...payload.ratings.map((rating) => rating.playerId.toLowerCase())
-              ]).size,
-              ':updatedAt': now
-            }
-          })
+          new TransactWriteCommand({ TransactItems: transactItems })
         ),
-      { label: 'saveMatchRatings.updateMatchCount' }
+      { label: 'saveMatchRatings.transaction' }
     );
 
     console.info('[matchService] saveMatchRatings COMPLETE', { 
@@ -584,7 +612,7 @@ export async function getMatchRatings(matchId: string): Promise<PlayerMatchRatin
     }));
   } catch (error) {
     console.error('Error getting match ratings:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -623,7 +651,7 @@ export async function debugListMatchRatings(matchId: string) {
     return { matchRatings, playerCentricRatings };
   } catch (error) {
     console.error('Error in debugListMatchRatings:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -661,7 +689,7 @@ export async function getPlayerMatchRating(matchId: string, playerId: string): P
     };
   } catch (error) {
     console.error('Error getting player match rating:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -670,17 +698,49 @@ export async function getPlayerMatchRating(matchId: string, playerId: string): P
  */
 export async function deletePlayerMatchRating(matchId: string, playerId: string): Promise<boolean> {
   try {
-    await deleteBatchedKeys(getTableName(), [
-      { PK: `MATCH#${matchId}`, SK: `RATING#${playerId}` },
-      { PK: `PLAYER#${playerId}`, SK: `MATCH#${matchId}` }
-    ]);
+    const match = await getMatchById(matchId);
+    if (!match) {
+      throw new Error(`Match ${matchId} not found`);
+    }
+    const ratings = await queryStoredMatchRatings(matchId);
+    const remainingCount = ratings.filter(
+      (rating) => rating.PlayerId.toLowerCase() !== playerId.toLowerCase()
+    ).length;
+    const tableName = getTableName();
 
-    const remainingRatings = await queryStoredMatchRatings(matchId);
-    await updateMatchRatingCount(matchId, remainingRatings.length);
+    await retryWithBackoff(
+      () =>
+        getDocumentClient().send(
+          new TransactWriteCommand({
+            TransactItems: [
+              { Delete: { TableName: tableName, Key: { PK: `MATCH#${matchId}`, SK: `RATING#${playerId}` } } },
+              { Delete: { TableName: tableName, Key: { PK: `PLAYER#${playerId}`, SK: `MATCH#${matchId}` } } },
+              {
+                Update: {
+                  TableName: tableName,
+                  Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
+                  UpdateExpression:
+                    'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt, RatingVersion = if_not_exists(RatingVersion, :zero) + :one',
+                  ConditionExpression:
+                    'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
+                  ExpressionAttributeValues: {
+                    ':ratingCount': remainingCount,
+                    ':updatedAt': formatMatchTimestamp(),
+                    ':zero': 0,
+                    ':one': 1,
+                    ':expectedVersion': match.ratingVersion ?? 0
+                  }
+                }
+              }
+            ]
+          })
+        ),
+      { label: 'deletePlayerMatchRating.transaction' }
+    );
     return true;
   } catch (error) {
     console.error('Error deleting player match rating:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -747,6 +807,6 @@ export async function getMatchWithRatings(matchId: string): Promise<{ match: Mat
     return { match, ratings };
   } catch (error) {
     console.error('Error getting match with ratings:', error);
-    return null;
+    throw error;
   }
 }

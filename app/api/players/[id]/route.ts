@@ -1,8 +1,10 @@
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentClient, getTableName } from '../../../../lib/dynamodb';
 import { retryWithBackoff } from '../../../../lib/dynamodb-helpers';
 import { deletePlayersAndRelatedData, findDuplicatePlayerByName } from '../../../../lib/playerService';
+import { normalizeDetailedPosition } from '../../../../lib/positions';
+import { getPlayerNameReservationKey, normalizePlayerName } from '../../../../lib/player-name';
 
 export const runtime = 'nodejs';
 
@@ -75,11 +77,19 @@ export async function PATCH(
   const candidate = body as Record<string, unknown>;
   const name = (candidate.name as string)?.trim() ?? '';
   const cardSeason = (candidate.cardSeason as string)?.trim() ?? (candidate.season as string)?.trim() ?? '';
-  const position = (candidate.position as string)?.trim() ?? '';
+  const rawPosition = (candidate.position as string)?.trim() ?? '';
+  const position = normalizeDetailedPosition(rawPosition);
 
-  if (!name || !cardSeason || !position) {
+  if (!name || !cardSeason || !rawPosition) {
     return NextResponse.json(
       { message: 'Required fields: name, cardSeason, position' },
+      { status: 400 }
+    );
+  }
+
+  if (!position) {
+    return NextResponse.json(
+      { message: 'position không hợp lệ', code: 'INVALID_POSITION' },
       { status: 400 }
     );
   }
@@ -121,21 +131,50 @@ export async function PATCH(
       }
     }
 
+    const tableName = getTableName();
+    const transactItems: NonNullable<ConstructorParameters<typeof TransactWriteCommand>[0]['TransactItems']> = [];
+    if (normalizePlayerName(existingName) !== normalizePlayerName(name)) {
+      transactItems.push({
+        Delete: {
+          TableName: tableName,
+          Key: getPlayerNameReservationKey(existingName),
+          ConditionExpression: 'attribute_not_exists(PK) OR PlayerId = :playerId',
+          ExpressionAttributeValues: { ':playerId': playerId }
+        }
+      });
+    }
+    transactItems.push(
+      {
+        Put: {
+          TableName: tableName,
+          Item: {
+            ...getPlayerNameReservationKey(name),
+            PlayerId: playerId,
+            NormalizedName: normalizePlayerName(name)
+          },
+          ConditionExpression: 'attribute_not_exists(PK) OR PlayerId = :playerId',
+          ExpressionAttributeValues: { ':playerId': playerId }
+        }
+      },
+      {
+        Put: {
+          TableName: tableName,
+          Item: {
+            PK: `PLAYER#${playerId}`,
+            SK: 'METADATA',
+            Name: name,
+            NormalizedName: normalizePlayerName(name),
+            CardSeason: cardSeason,
+            Position: position,
+            CreatedAt: existingItem.CreatedAt ?? new Date().toISOString()
+          },
+          ConditionExpression: 'attribute_exists(PK)'
+        }
+      }
+    );
+
     await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new PutCommand({
-            TableName: getTableName(),
-            Item: {
-              PK: `PLAYER#${playerId}`,
-              SK: 'METADATA',
-              Name: name,
-              CardSeason: cardSeason,
-              Position: position,
-              CreatedAt: existingItem.CreatedAt ?? new Date().toISOString()
-            }
-          })
-        ),
+      () => getDocumentClient().send(new TransactWriteCommand({ TransactItems: transactItems })),
       { label: 'player.updateMetadata' }
     );
 
@@ -151,6 +190,16 @@ export async function PATCH(
     );
   } catch (error) {
     console.error('Failed to update player', error);
+    if (
+      error instanceof Error &&
+      (error.name === 'TransactionCanceledException' ||
+        error.message.includes('TransactionCanceledException'))
+    ) {
+      return NextResponse.json(
+        { message: `Cầu thủ "${name}" đã tồn tại trong hệ thống.`, code: 'DUPLICATE_PLAYER_NAME' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ message: 'Failed to update player' }, { status: 500 });
   }
 }

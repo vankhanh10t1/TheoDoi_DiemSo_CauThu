@@ -5,6 +5,7 @@ import type { PlayerStatusResponse, RatingPayload } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
 import { formatMatchDateTimeValue, sortRecentMatchesNewestFirst } from '../lib/match-history';
+import { ConfirmationDialog } from './confirmation-dialog';
 
 const RATING_HISTORY_ITEMS_PER_PAGE = 5;
 
@@ -49,6 +50,8 @@ export function PlayerDetail() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [resetState, setResetState] = useState<{ message: string; type: 'success' | 'error' } | null>(
     null
   );
@@ -96,12 +99,8 @@ export function PlayerDetail() {
       return;
     }
 
-    const confirmed = window.confirm(
-      'Bạn có chắc chắn muốn reset toàn bộ lịch sử trận đấu của cầu thủ này không? Hành động này không thể hoàn tác.'
-    );
-    if (!confirmed) return;
-
     setResetState(null);
+    setResetting(true);
 
     try {
       const result = await resetPlayerData(selectedPlayerId);
@@ -112,11 +111,14 @@ export function PlayerDetail() {
         type: 'success'
       });
       triggerRefresh();
+      setShowResetConfirm(false);
     } catch (err) {
       setResetState({
         message: err instanceof Error ? err.message : 'Không thể reset lịch sử',
         type: 'error'
       });
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -159,13 +161,13 @@ export function PlayerDetail() {
                 <div style={{ marginTop: 8 }}>
                   {('matchCount' in statusData && statusData.matchCount < 3) ? (
                     <div className="score-badge" style={{ textAlign: 'center', color: '#999' }}>
-                      Not enough data ({statusData.matchCount} match{statusData.matchCount !== 1 ? 'es' : ''})
+                      Chưa đủ dữ liệu ({statusData.matchCount} trận)
                     </div>
                   ) : ('wmaScore' in statusData) ? (
                     <div className="score-badge">
-                      <div>Average: {statusData.averageScore.toFixed(1)}</div>
+                      <div>Điểm trung bình: {statusData.averageScore.toFixed(1)}</div>
                       <div style={{ marginTop: '4px' }}>WMA: {statusData.wmaScore.toFixed(1)}</div>
-                      <div style={{ marginTop: '4px' }}>Trend: {getTrendLabel(statusData.trendStatus)}</div>
+                      <div style={{ marginTop: '4px' }}>Xu hướng: {getTrendLabel(statusData.trendStatus)}</div>
                     </div>
                   ) : (
                     <div className="score-badge">WMA N/A</div>
@@ -174,23 +176,23 @@ export function PlayerDetail() {
                 {'wmaScore' in statusData ? (
                   <>
                     <div className="status-grid" style={{ marginTop: 12 }}>
-                      <div><span className="metric-label">Trend</span><strong>{getTrendLabel(statusData.trendStatus)}</strong></div>
-                      <div><span className="metric-label">Variance</span><strong>{statusData.variance.toFixed(2)}</strong></div>
-                      <div><span className="metric-label">Stability</span><strong>{getStabilityLabel(statusData.stabilityLevel)}</strong></div>
-                      <div><span className="metric-label">Momentum</span><strong>{getMomentumLabel(statusData.momentumStatus)}</strong></div>
-                      <div><span className="metric-label">Predicted</span><strong>{statusData.predictedScore.toFixed(1)}</strong></div>
-                      <div><span className="metric-label">Risk</span><strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong></div>
-                      <div><span className="metric-label">Confidence</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div>
-                      <div><span className="metric-label">Recommend</span><strong>{getRecommendationLabel(statusData.recommendation)}</strong></div>
+                      <div><span className="metric-label">Xu hướng</span><strong>{getTrendLabel(statusData.trendStatus)}</strong></div>
+                      <div><span className="metric-label">Độ biến động</span><strong>{statusData.variance.toFixed(2)}</strong></div>
+                      <div><span className="metric-label">Độ ổn định</span><strong>{getStabilityLabel(statusData.stabilityLevel)}</strong></div>
+                      <div><span className="metric-label">Đà phong độ</span><strong>{getMomentumLabel(statusData.momentumStatus)}</strong></div>
+                      <div><span className="metric-label">Điểm dự đoán</span><strong>{statusData.predictedScore.toFixed(1)}</strong></div>
+                      <div><span className="metric-label">Rủi ro</span><strong>{statusData.riskLevel} ({statusData.riskScore.toFixed(1)})</strong></div>
+                      <div><span className="metric-label">Độ tin cậy</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div>
+                      <div><span className="metric-label">Khuyến nghị</span><strong>{getRecommendationLabel(statusData.recommendation)}</strong></div>
                     </div>
 
                     {'adjustedAverageScore' in statusData ? (
                       <div className="status-grid" style={{ marginTop: 12 }}>
-                        <div><span className="metric-label">Average</span><strong>{statusData.averageScore.toFixed(1)}</strong></div>
-                        <div><span className="metric-label">Adjusted Avg</span><strong>{statusData.adjustedAverageScore.toFixed(1)}</strong></div>
-                        <div><span className="metric-label">Match Impact</span><strong>{statusData.matchImpactAvg.toFixed(2)}</strong></div>
-                        <div><span className="metric-label">Big Wins</span><strong>{statusData.bigWinCountLast5} ({(statusData.bigWinRate * 100).toFixed(0)}%)</strong></div>
-                        <div><span className="metric-label">Big Losses</span><strong>{statusData.bigLossCountLast5} ({(statusData.bigLossRate * 100).toFixed(0)}%)</strong></div>
+                        <div><span className="metric-label">Điểm trung bình</span><strong>{statusData.averageScore.toFixed(1)}</strong></div>
+                        <div><span className="metric-label">Điểm điều chỉnh</span><strong>{statusData.adjustedAverageScore.toFixed(1)}</strong></div>
+                        <div><span className="metric-label">Ảnh hưởng trận</span><strong>{statusData.matchImpactAvg.toFixed(2)}</strong></div>
+                        <div><span className="metric-label">Thắng đậm</span><strong>{statusData.bigWinCountLast5} ({(statusData.bigWinRate * 100).toFixed(0)}%)</strong></div>
+                        <div><span className="metric-label">Thua đậm</span><strong>{statusData.bigLossCountLast5} ({(statusData.bigLossRate * 100).toFixed(0)}%)</strong></div>
                       </div>
                     ) : null}
                   </>
@@ -222,9 +224,9 @@ export function PlayerDetail() {
                           ? `${match.positionGroup} - ${match.detailedPosition}`
                           : 'N/A'}
                         <span style={{ marginLeft: 8 }}>
-                          🟨{(match as any).yellowCards ?? 0} 
-                          🟥{(match as any).redCards ?? 0} 
-                          ⚠️{(match as any).fouls ?? 0}
+                          🟨{match.yellowCards ?? 0}
+                          🟥{match.redCards ?? 0}
+                          ⚠️{match.fouls ?? 0}
                         </span>
                         {(match.goals ?? 0) > 0 || (match.assists ?? 0) > 0
                           ? ` · Bàn ${match.goals ?? 0} · Kiến tạo ${match.assists ?? 0}`
@@ -261,6 +263,11 @@ export function PlayerDetail() {
                   </p>
                 ) : null}
               </div>
+            ) : statusData && !loadingStatus && !statusError ? (
+              <div className="tracking-state">
+                <p>Chưa có lịch sử điểm đánh giá.</p>
+                <span>Nhập điểm cho cầu thủ ở Evaluation Flow để bắt đầu theo dõi.</span>
+              </div>
             ) : null}
 
             {resetState && (
@@ -269,7 +276,7 @@ export function PlayerDetail() {
 
             <button
               className="secondary-button"
-              onClick={handleResetData}
+              onClick={() => setShowResetConfirm(true)}
               style={{ marginTop: '16px', width: '100%' }}
             >
               🔄 Reset Lịch Sử
@@ -277,6 +284,19 @@ export function PlayerDetail() {
           </div>
         </div>
       )}
+      <ConfirmationDialog
+        open={showResetConfirm}
+        title="Reset lịch sử cầu thủ?"
+        description="Toàn bộ lịch sử điểm của cầu thủ sẽ bị xóa khỏi cả hai chiều dữ liệu. Hành động này không thể hoàn tác."
+        confirmLabel="Reset lịch sử"
+        busyLabel="Đang reset..."
+        busy={resetting}
+        danger
+        onCancel={() => {
+          if (!resetting) setShowResetConfirm(false);
+        }}
+        onConfirm={() => void handleResetData()}
+      />
     </div>
   );
 }

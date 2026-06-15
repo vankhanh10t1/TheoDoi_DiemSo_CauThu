@@ -44,6 +44,20 @@ describe('recommendationService', () => {
         Name: 'Player Three',
         CardSeason: '23WB',
         Position: 'MF'
+      },
+      {
+        PK: 'PLAYER#P003',
+        SK: 'MATCH#one',
+        MatchDate: '2026-05-03',
+        Score: 9,
+        Result: 'Win'
+      },
+      {
+        PK: 'PLAYER#P003',
+        SK: 'MATCH#two',
+        MatchDate: '2026-05-02',
+        Score: 9,
+        Result: 'Win'
       }
     ]);
 

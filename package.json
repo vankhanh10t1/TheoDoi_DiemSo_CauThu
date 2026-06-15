@@ -3,10 +3,11 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "audit:data": "ts-node scripts/audit-data.ts",
     "seed": "ts-node scripts/seed.ts"
   },
   "dependencies": {

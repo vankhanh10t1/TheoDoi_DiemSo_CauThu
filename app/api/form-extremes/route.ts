@@ -3,6 +3,7 @@ import { listPlayers, getRecentMatches } from '../../../lib/playerService';
 import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import type { RecentMatch } from '../../../lib/types';
+import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
 
 export const runtime = 'nodejs';
 
@@ -49,17 +50,17 @@ export async function GET() {
     );
     }
 
-    const playerForms: PlayerFormData[] = [];
-
-    // Fetch form data for all players
-    for (const player of players) {
-      try {
+    // TODO(schema): replace per-player queries with a materialized form view/GSI.
+    // Queries run in parallel so one slow player does not serialize the whole response.
+    const playerForms = (
+      await Promise.all(
+        players.map(async (player): Promise<PlayerFormData | null> => {
         const recentMatches = sortRecentMatchesNewestFirst(await getRecentMatches(player.playerId));
 
-        if (recentMatches.length > 0) {
+        if (recentMatches.length >= MIN_MATCHES_FOR_EVALUATION) {
           const analysis = analyzeRecentMatches(recentMatches);
 
-          playerForms.push({
+          return {
             playerId: player.playerId,
             name: player.name,
             cardSeason: player.cardSeason ?? '',
@@ -75,13 +76,12 @@ export async function GET() {
             momentumStatus: analysis.momentumStatus,
             riskLevel: analysis.riskLevel,
             recentMatches
-          });
+          };
         }
-      } catch (error) {
-        console.error(`Error fetching form for player ${player.playerId}:`, error);
-        // Skip this player and continue
-      }
-    }
+        return null;
+        })
+      )
+    ).filter((form): form is PlayerFormData => form !== null);
 
     let bestForm: PlayerFormData | null = null;
     let worstForm: PlayerFormData | null = null;

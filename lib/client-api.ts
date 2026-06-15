@@ -14,7 +14,11 @@ type FetchDebugDetails = {
   statusText?: string;
   responseText?: string;
   requestBody?: unknown;
-  error?: string;
+  error?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
 };
 
 const REDACTED_BODY_KEYS = /password|token|secret|authorization|cookie|credential|key/i;
@@ -60,8 +64,7 @@ export async function fetchWithDebug(input: RequestInfo | URL, init: RequestInit
         : details.responseText
     };
 
-    console.error(label, normalizedDetails);
-    console.error(`${label} details`, JSON.stringify(normalizedDetails, null, 2));
+    console.error(`${label}\n${JSON.stringify(normalizedDetails, null, 2)}`);
   }
 
   try {
@@ -91,10 +94,25 @@ export async function fetchWithDebug(input: RequestInfo | URL, init: RequestInit
       requestUrl,
       method,
       requestBody: getRequestBodyForDebug(),
-      error: error instanceof Error ? error.message : String(error)
+      error: serializeError(error)
     });
     throw error;
   }
+}
+
+function serializeError(error: unknown): FetchDebugDetails['error'] {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return {
+    name: 'UnknownError',
+    message: String(error)
+  };
 }
 
 function redactRequestBody(value: unknown): unknown {

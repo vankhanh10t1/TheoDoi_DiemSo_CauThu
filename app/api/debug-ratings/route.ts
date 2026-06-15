@@ -7,6 +7,10 @@ import { debugListMatchRatings, getMatchById } from '../../../lib/matchService';
  * Shows both match-centric and player-centric rating records
  */
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
     const matchId = request.nextUrl.searchParams.get('matchId');
 

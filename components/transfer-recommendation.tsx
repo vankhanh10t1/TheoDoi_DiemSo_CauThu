@@ -95,10 +95,17 @@ export function TransferRecommendation() {
 
       try {
         const res = await fetchWithDebug('/api/recommendations', undefined, { caller: 'TransferRecommendation.loadRecommendations' });
-        const data = (await res.json()) as { recommendations: TransferRecommendation[] };
+        const data = (await res.json()) as {
+          recommendations?: TransferRecommendation[];
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(data.error ?? 'Không thể tải danh sách đề xuất');
+        }
         setRecommendations(data.recommendations || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load recommendations');
+        setRecommendations([]);
+        setError(err instanceof Error ? err.message : 'Không thể tải danh sách đề xuất');
       } finally {
         setLoading(false);
       }
@@ -216,7 +223,7 @@ export function TransferRecommendation() {
             </section>
           ) : null}
 
-          {recommendations.length === 0 && (
+          {!error && recommendations.length === 0 && (
             <p style={{ marginTop: '20px' }}>Chưa có cầu thủ nào có dữ liệu rating.</p>
           )}
         </>

@@ -43,6 +43,15 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (body.ratings.length > 49) {
+      return NextResponse.json(
+        {
+          error: 'Chỉ có thể lưu tối đa 49 rating trong một request để đảm bảo transaction atomic.',
+          code: 'TOO_MANY_RATINGS'
+        },
+        { status: 400 }
+      );
+    }
 
     // Get list of valid players for validation
     const validPlayers = await listPlayers();

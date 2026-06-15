@@ -1,10 +1,31 @@
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
+import {
+  getDocumentClient,
+  getMissingDynamoEnvNames,
+  getTableName,
+  validateDynamoConfig
+} from '../../../lib/dynamodb';
 import { findDuplicatePlayerByName, listPlayers } from '../../../lib/playerService';
 import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
+import { normalizeDetailedPosition } from '../../../lib/positions';
+import { getPlayerNameReservationKey, normalizePlayerName } from '../../../lib/player-name';
 
 export const runtime = 'nodejs';
+
+function serializeApiError(error: unknown) {
+  return {
+    name: error instanceof Error ? error.name : 'UnknownError',
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function isDynamoUnavailableError(error: unknown): boolean {
+  const serialized = serializeApiError(error);
+  return /CredentialsProviderError|ExpiredToken|InvalidSignature|NetworkingError|TimeoutError|ECONN|ENOTFOUND|EAI_AGAIN|ServiceUnavailable|InternalServerError/i.test(
+    `${serialized.name} ${serialized.message}`
+  );
+}
 
 function isValidPlayerId(id: string): boolean {
   return /^[A-Z0-9]{1,20}$/.test(id.trim());
@@ -27,22 +48,13 @@ export async function GET() {
       AWS_SECRET_ACCESS_KEY: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
       AWS_REGION: Boolean(process.env.AWS_REGION),
       DYNAMODB_TABLE_NAME: process.env.DYNAMODB_TABLE_NAME ?? null,
-      DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null
+      DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null,
+      missing: getMissingDynamoEnvNames()
     };
 
     console.info(`[${requestId}] /api/players GET start`, envChecks);
 
-    if (!envChecks.AWS_ACCESS_KEY_ID || !envChecks.AWS_SECRET_ACCESS_KEY || !envChecks.AWS_REGION) {
-      throw new Error(
-        `Missing AWS env vars: ${[
-          !envChecks.AWS_ACCESS_KEY_ID ? 'AWS_ACCESS_KEY_ID' : null,
-          !envChecks.AWS_SECRET_ACCESS_KEY ? 'AWS_SECRET_ACCESS_KEY' : null,
-          !envChecks.AWS_REGION ? 'AWS_REGION' : null
-        ]
-          .filter(Boolean)
-          .join(', ')}`
-      );
-    }
+    validateDynamoConfig();
 
     const items = await listPlayers();
 
@@ -63,13 +75,13 @@ export async function GET() {
       { status: 200 }
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const serializedError = serializeApiError(error);
     const durationMs = Date.now() - startedAt;
     if (isDynamoThrottleError(error)) {
       return NextResponse.json(
         {
           message: 'DynamoDB đang bị giới hạn đọc danh sách cầu thủ. Vui lòng thử lại sau vài giây.',
-          error: errorMessage,
+          error: serializedError.message,
           durationMs,
           requestId,
           code: 'DYNAMODB_THROTTLED'
@@ -78,7 +90,7 @@ export async function GET() {
       );
     }
     console.error(`[${requestId}] Failed to load players`, {
-      errorMessage,
+      error: serializedError,
       durationMs,
       envSnapshot: {
         nodeEnv: process.env.NODE_ENV ?? null,
@@ -92,32 +104,22 @@ export async function GET() {
         tableAlias: process.env.DYNAMODB_TABLE ?? null
       }
     });
+    const missingEnv = getMissingDynamoEnvNames();
+    const status = isDynamoUnavailableError(error) ? 503 : 500;
     return NextResponse.json(
       {
-        message: 'Failed to load players from DynamoDB',
-        error: errorMessage,
+        message:
+          missingEnv.length > 0
+            ? `Thiếu cấu hình DynamoDB local: ${missingEnv.join(', ')}`
+            : status === 503
+              ? 'Không thể kết nối DynamoDB. Vui lòng kiểm tra AWS credentials, region và kết nối mạng.'
+              : 'Không thể tải danh sách cầu thủ từ DynamoDB.',
+        error: serializedError.message,
         durationMs,
         requestId,
-        runtime: {
-          nodeEnv: process.env.NODE_ENV ?? null,
-          vercelEnv: process.env.VERCEL_ENV ?? null,
-          vercelRegion: process.env.VERCEL_REGION ?? null,
-          nextRuntime: process.env.NEXT_RUNTIME ?? null
-        },
-        envStatus: {
-          AWS_ACCESS_KEY_ID: Boolean(process.env.AWS_ACCESS_KEY_ID),
-          AWS_SECRET_ACCESS_KEY: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
-          AWS_REGION: Boolean(process.env.AWS_REGION),
-          DYNAMODB_TABLE_NAME: process.env.DYNAMODB_TABLE_NAME ?? null,
-          DYNAMODB_TABLE: process.env.DYNAMODB_TABLE ?? null
-        },
-        hints: [
-          'Check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and DYNAMODB_TABLE_NAME/DYNAMODB_TABLE on Vercel',
-          'Confirm the IAM user has dynamodb:Scan permission on the target table',
-          'Verify the table name exists in the same AWS region configured for the app'
-        ]
+        code: missingEnv.length > 0 ? 'DYNAMODB_CONFIG_ERROR' : 'DYNAMODB_ERROR'
       },
-      { status: 500 }
+      { status }
     );
   }
 }
@@ -149,9 +151,10 @@ export async function POST(request: NextRequest) {
   let playerId = (candidate.playerId as string)?.trim() ?? '';
   const name = (candidate.name as string)?.trim() ?? '';
   const season = (candidate.season as string)?.trim() ?? '';
-  const position = (candidate.position as string)?.trim() ?? '';
+  const rawPosition = (candidate.position as string)?.trim() ?? '';
+  const position = normalizeDetailedPosition(rawPosition);
 
-  if (!playerId || !name || !season || !position) {
+  if (!playerId || !name || !season || !rawPosition) {
     // Allow server to generate playerId when missing
     if (!name || !season || !position) {
       return NextResponse.json(
@@ -162,6 +165,13 @@ export async function POST(request: NextRequest) {
     if (!playerId) {
       playerId = generatePlayerIdFromName(name);
     }
+  }
+
+  if (!position) {
+    return NextResponse.json(
+      { message: 'position không hợp lệ', code: 'INVALID_POSITION' },
+      { status: 400 }
+    );
   }
 
   if (!isValidPlayerId(playerId)) {
@@ -202,18 +212,37 @@ export async function POST(request: NextRequest) {
   // Try inserting, if playerId collides generate a new one and retry a few times
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
+      const tableName = getTableName();
       await getDocumentClient().send(
-        new PutCommand({
-          TableName: getTableName(),
-          Item: {
-            PK: `PLAYER#${playerId}`,
-            SK: 'METADATA',
-            Name: name,
-            CardSeason: season,
-            Position: position,
-            CreatedAt: new Date().toISOString()
-          },
-          ConditionExpression: 'attribute_not_exists(PK)'
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: tableName,
+                Item: {
+                  ...getPlayerNameReservationKey(name),
+                  PlayerId: playerId,
+                  NormalizedName: normalizePlayerName(name)
+                },
+                ConditionExpression: 'attribute_not_exists(PK)'
+              }
+            },
+            {
+              Put: {
+                TableName: tableName,
+                Item: {
+                  PK: `PLAYER#${playerId}`,
+                  SK: 'METADATA',
+                  Name: name,
+                  NormalizedName: normalizePlayerName(name),
+                  CardSeason: season,
+                  Position: position,
+                  CreatedAt: new Date().toISOString()
+                },
+                ConditionExpression: 'attribute_not_exists(PK)'
+              }
+            }
+          ]
         })
       );
 
@@ -224,7 +253,14 @@ export async function POST(request: NextRequest) {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      if (message.includes('ConditionalCheckFailedException')) {
+      if (message.includes('TransactionCanceledException') || message.includes('ConditionalCheckFailedException')) {
+        const duplicatePlayerId = await findDuplicatePlayerByName(name).catch(() => null);
+        if (duplicatePlayerId) {
+          return NextResponse.json(
+            { message: `Cầu thủ "${name}" đã tồn tại trong hệ thống.`, code: 'DUPLICATE_PLAYER_NAME', duplicatePlayerId },
+            { status: 409 }
+          );
+        }
         // collision, generate new id and retry
         playerId = generatePlayerIdFromName(name + Math.random().toString(36).slice(2, 6));
         continue;
