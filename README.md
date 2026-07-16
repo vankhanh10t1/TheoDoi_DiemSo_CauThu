@@ -1,30 +1,32 @@
 # FCON Performance Tracker
 
-Ứng dụng web theo dõi phong độ cầu thủ bóng đá, quản lý đội hình, tạo trận, nhập điểm đánh giá và đưa ra khuyến nghị dựa trên dữ liệu lưu trong AWS DynamoDB.
+## Tiếng Việt
 
-## Công nghệ
+Web app cá nhân để theo dõi phong độ cầu thủ bóng đá: quản lý đội hình, tạo trận, nhập rating, xem lịch sử phong độ và đưa ra khuyến nghị dựa trên dữ liệu trận đấu.
 
-- Next.js 15 App Router và Route Handlers
-- React 19, React Context và TypeScript strict
-- AWS SDK for JavaScript v3, DynamoDB single-table
+### Công nghệ
+
+- Next.js 15 App Router, Route Handlers
+- React 19, TypeScript strict
+- Neon Postgres qua `@neondatabase/serverless`
 - Vitest
-- CSS thuần trong `app/globals.css`
+- CSS trong `app/globals.css`
 
-## Tính năng chính
+### Cơ sở dữ liệu
 
-- Quản lý cầu thủ và đội hình.
-- Tạo trận, nhập rating hàng loạt và lưu rating theo hai chiều match/player.
-- Xem lịch sử trận và lịch sử điểm cầu thủ, sắp xếp theo thời gian trận đấu.
-- Evaluation Flow với WMA, xu hướng, biến động, momentum, dự đoán, rủi ro và kỷ luật.
-- Xem chi tiết cầu thủ từ Đội hình và Phong độ.
-- Khuyến nghị `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
-- Reset hoặc xóa dữ liệu cầu thủ và đồng bộ rating liên quan.
-- Audit/reconciliation dữ liệu DynamoDB theo chế độ dry-run mặc định.
-- Chỉ đánh giá và tạo khuyến nghị khi cầu thủ có ít nhất 3 trận.
+Runtime app hiện dùng Neon Postgres với 3 bảng chính:
 
-## Cài đặt
+- `players`: thông tin cầu thủ
+- `matches`: thông tin trận đấu
+- `match_ratings`: rating/thống kê của cầu thủ trong từng trận
 
-Yêu cầu Node.js 20 LTS hoặc phiên bản tương thích Next.js 15.
+View hỗ trợ:
+
+- `v_player_match_history`: lịch sử phong độ theo cầu thủ, dùng cho status/recommendations
+
+DynamoDB hiện chỉ còn dùng cho script audit/migration legacy, không còn là database runtime của app.
+
+### Cài đặt local
 
 ```bash
 npm install
@@ -36,86 +38,42 @@ Tạo `.env.local` từ `.env.example`:
 Copy-Item .env.example .env.local
 ```
 
-## Biến môi trường
+Biến runtime bắt buộc:
 
-| Biến | Bắt buộc | Mô tả |
-| --- | --- | --- |
-| `AWS_ACCESS_KEY_ID` | Có | AWS access key, không commit giá trị thật |
-| `AWS_SECRET_ACCESS_KEY` | Có | AWS secret key, không commit giá trị thật |
-| `AWS_REGION` | Có | Region chứa bảng DynamoDB |
-| `DYNAMODB_TABLE_NAME` | Có* | Tên bảng DynamoDB |
-| `DYNAMODB_TABLE` | Có* | Alias tương thích cho tên bảng |
-| `DYNAMODB_LIST_INDEX_NAME` | Không | GSI tùy chọn để đọc danh sách cầu thủ |
+```env
+DATABASE_URL=postgresql://...
+```
 
-\* Chỉ cần cấu hình một trong `DYNAMODB_TABLE_NAME` hoặc `DYNAMODB_TABLE`.
+Nếu cần chạy script migrate/audit DynamoDB cũ, bổ sung:
 
-IAM dùng cho app cần các quyền DynamoDB phù hợp như `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query`, `Scan` và `BatchWriteItem` trên bảng mục tiêu.
+```env
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=...
+DYNAMODB_TABLE_NAME=...
+```
 
-## Chạy local
+Chạy local:
 
 ```bash
 npm run dev
 ```
 
-Mở [http://localhost:3000](http://localhost:3000).
+Mở `http://localhost:3000`.
 
-## Scripts
-
-```bash
-npm test
-npm run build
-npm start
-npm run audit:data
-```
+### Scripts
 
 | Script | Công dụng |
 | --- | --- |
-| `npm run dev` | Chạy development server |
-| `npm test` | Chạy unit tests Vitest |
+| `npm run dev` | Chạy dev server |
+| `npm test` | Chạy Vitest |
 | `npm run build` | Build production và kiểm tra TypeScript |
-| `npm start` | Chạy production server sau khi build |
-| `npm run audit:data` | Audit DynamoDB ở chế độ dry-run, không ghi/xóa |
-| `npm run audit:data -- --verbose` | Hiển thị toàn bộ chi tiết audit |
-| `npm run audit:data -- --fix` | Áp dụng các sửa chữa an toàn, không tự xóa orphan |
-| `npm run seed` | Script seed no-op, không tạo mock data |
+| `npm start` | Chạy production sau khi build |
+| `npm run migrate:neon` | Migrate dữ liệu DynamoDB sang Neon |
+| `npm run audit:data` | Audit dữ liệu DynamoDB legacy |
+| `npm run seed` | No-op seed script |
 
-Luôn chạy audit dry-run và xem summary trước khi dùng `--fix`. Fix mode chỉ:
-
-- backfill `MatchDateTime` khi có `MatchDate` hợp lệ;
-- bổ sung rating/history đối ứng khi match và player đều tồn tại;
-- đồng bộ player history từ match-rating canonical;
-- sửa `RatingCount`.
-
-Các rating tham chiếu player/match đã bị xóa chỉ được báo cáo, không tự động xóa hoặc phục hồi.
-
-## DynamoDB single-table
-
-| Loại item | PK | SK |
-| --- | --- | --- |
-| Metadata cầu thủ | `PLAYER#{playerId}` | `METADATA` |
-| Khóa giữ tên cầu thủ | `PLAYER_NAME#{normalizedName}` | `RESERVATION` |
-| Lịch sử rating theo cầu thủ | `PLAYER#{playerId}` | `MATCH#{matchId}` |
-| Metadata trận | `MATCH#{matchId}` | `METADATA` |
-| Rating theo trận | `MATCH#{matchId}` | `RATING#{playerId}` |
-
-Match-rating là nguồn canonical khi reconciliation. Khi lưu/xóa rating riêng lẻ, app dùng DynamoDB transaction cho cả hai chiều, `RatingCount` và optimistic `RatingVersion`. Dữ liệu cũ thiếu `MatchDateTime` vẫn fallback sang `MatchDate`, `CreatedAt`, `UpdatedAt` hoặc sort key legacy.
-
-Tên cầu thủ được chuẩn hóa bằng `trim().toLowerCase()` và giữ bằng reservation key trong cùng transaction create/update. Audit `--fix` có thể backfill reservation cho tên legacy duy nhất; tên legacy bị trùng chỉ được báo cáo.
-
-Thời gian hiển thị dùng múi giờ `Asia/Ho_Chi_Minh`. Timestamp UTC được giữ nguyên khi lưu và convert khi hiển thị.
-
-## Recommendation
-
-Nguồn recommendation canonical là:
-
-```text
-lib/analytics/performance.ts
-  -> lib/recommendation/index.ts
-```
-
-Evaluation Flow, chi tiết cầu thủ và API transfer recommendation đều sử dụng kết quả từ cùng pipeline `analyzeRecentMatches`. `lib/recommendationService.ts` chỉ làm nhiệm vụ map dữ liệu DynamoDB và xếp hạng kết quả.
-
-## API chính
+### API chính
 
 - Players: `/api/players`, `/api/players/{id}`, `/api/players/bulk-delete`, `/api/players/{id}/reset`
 - Matches: `/api/matches`, `/api/matches/{id}`, `/api/matches/{id}/ratings`
@@ -123,29 +81,145 @@ Evaluation Flow, chi tiết cầu thủ và API transfer recommendation đều s
 
 `POST /api/rating` là endpoint cũ và trả `410 Gone`.
 
-Các API debug `/api/debug-env` và `/api/debug-ratings` chỉ hoạt động ngoài production.
+### Logic đánh giá
 
-`listMatches` và recommendations hiện vẫn cần filtered scan để tương thích dữ liệu cũ. Source đã giới hạn projection/pagination và có TODO chuyển sang GSI hoặc materialized view khi migration schema được chuẩn bị.
+Pipeline đánh giá nằm ở:
 
-## Deploy Vercel
+```text
+lib/analytics/performance.ts
+lib/evaluationEngine.ts
+lib/recommendationService.ts
+```
 
-1. Cấu hình các biến môi trường cho đúng môi trường Preview/Production.
-2. Đảm bảo AWS Region, tên bảng và IAM permissions khớp DynamoDB.
-3. Chạy:
+App chỉ đánh giá/khuyến nghị khi cầu thủ có ít nhất 3 trận. Các chỉ số gồm WMA, current form, trend, variance, momentum, risk, discipline và recommendation `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
+
+### Deploy Vercel
+
+1. Thêm `DATABASE_URL` vào Vercel Project Settings -> Environment Variables.
+2. Chọn đúng môi trường `Production`, `Preview`, `Development` nếu cần.
+3. Redeploy project sau khi thêm biến môi trường.
+4. Trước khi deploy nên chạy:
 
 ```bash
 npm test
 npm run build
-npm run audit:data
 ```
 
-4. Deploy hoặc redeploy project trên Vercel.
+### Lưu ý an toàn
 
-Production và local dùng cùng helper parse/sort thời gian; không parse trực tiếp ngày `DD/MM/YYYY` bằng `new Date(...)`.
+- Không commit `.env`, `.env.local`, connection string Neon hoặc AWS credentials.
+- Giữ DynamoDB một thời gian sau migration để backup/đối chiếu.
+- App hiện chưa có đăng nhập/phân quyền; nếu public rộng rãi cần bổ sung lớp bảo vệ.
 
-## Lưu ý an toàn
+---
 
-- Không commit `.env`, `.env.local` hoặc AWS credentials.
-- Audit mặc định chỉ đọc dữ liệu.
-- `--fix` không xóa orphan vì không thể chắc chắn record đó còn cần hay không.
-- App hiện chưa có đăng nhập/phân quyền; cần bổ sung lớp bảo vệ trước khi public cho nhiều người dùng.
+## English
+
+A personal web app for tracking football player performance: manage squads, create matches, enter ratings, review form history, and generate recommendations from match data.
+
+### Tech Stack
+
+- Next.js 15 App Router and Route Handlers
+- React 19, strict TypeScript
+- Neon Postgres via `@neondatabase/serverless`
+- Vitest
+- Plain CSS in `app/globals.css`
+
+### Database
+
+The runtime app currently uses Neon Postgres with 3 core tables:
+
+- `players`: player metadata
+- `matches`: match metadata
+- `match_ratings`: per-player ratings and stats for each match
+
+Supporting view:
+
+- `v_player_match_history`: player form history used by status and recommendation APIs
+
+DynamoDB is now only used by legacy audit/migration scripts, not by the runtime app.
+
+### Local Setup
+
+```bash
+npm install
+```
+
+Create `.env.local` from `.env.example`:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Required runtime variable:
+
+```env
+DATABASE_URL=postgresql://...
+```
+
+Optional variables for legacy DynamoDB migration/audit scripts:
+
+```env
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=...
+DYNAMODB_TABLE_NAME=...
+```
+
+Run locally:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+### Scripts
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm test` | Run Vitest |
+| `npm run build` | Build production and check TypeScript |
+| `npm start` | Run production after build |
+| `npm run migrate:neon` | Migrate DynamoDB data to Neon |
+| `npm run audit:data` | Audit legacy DynamoDB data |
+| `npm run seed` | No-op seed script |
+
+### Main APIs
+
+- Players: `/api/players`, `/api/players/{id}`, `/api/players/bulk-delete`, `/api/players/{id}/reset`
+- Matches: `/api/matches`, `/api/matches/{id}`, `/api/matches/{id}/ratings`
+- Analytics: `/api/player-status`, `/api/form-extremes`, `/api/recommendations`
+
+`POST /api/rating` is deprecated and returns `410 Gone`.
+
+### Evaluation Logic
+
+The evaluation pipeline lives in:
+
+```text
+lib/analytics/performance.ts
+lib/evaluationEngine.ts
+lib/recommendationService.ts
+```
+
+The app only evaluates/recommends players with at least 3 matches. Metrics include WMA, current form, trend, variance, momentum, risk, discipline, and recommendations: `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
+
+### Vercel Deployment
+
+1. Add `DATABASE_URL` in Vercel Project Settings -> Environment Variables.
+2. Select `Production`, `Preview`, and/or `Development` as needed.
+3. Redeploy after adding the environment variable.
+4. Before deploying, run:
+
+```bash
+npm test
+npm run build
+```
+
+### Safety Notes
+
+- Do not commit `.env`, `.env.local`, Neon connection strings, or AWS credentials.
+- Keep DynamoDB for a while after migration for backup/comparison.
+- The app currently has no authentication/authorization; add protection before making it broadly public.
