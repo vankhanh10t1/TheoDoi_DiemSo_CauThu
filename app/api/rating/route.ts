@@ -1,8 +1,5 @@
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { NextRequest, NextResponse } from 'next/server';
-import { createMatchSortKey, getDocumentClient, getTableName } from '../../../lib/dynamodb';
 import { isDetailedPositionForGroup, isPositionGroup } from '../../../lib/positions';
-import { getPlayerMetadata } from '../../../lib/playerService';
 import type { MatchResult, RatingPayload } from '../../../lib/types';
 
 export const runtime = 'nodejs';

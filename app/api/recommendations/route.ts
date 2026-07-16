@@ -1,64 +1,95 @@
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { NextResponse } from 'next/server';
-import { getDocumentClient, getTableName } from '../../../lib/dynamodb';
-import { isDynamoThrottleError, retryWithBackoff } from '../../../lib/dynamodb-helpers';
+import { sql } from '../../../lib/db';
 import { buildRecommendationsFromTableItems } from '../../../lib/recommendationService';
 
 export const runtime = 'nodejs';
 
-type RecommendationTableItem = Record<string, unknown>;
+type PlayerRow = {
+  player_id: string;
+  name: string;
+  card_season: string;
+  position: string;
+};
 
-async function scanAllTableItems(): Promise<RecommendationTableItem[]> {
-  // TODO(schema): add a player-history GSI or materialized recommendation view.
-  // A filtered scan is retained for backward compatibility with legacy player-history keys.
-  const items: RecommendationTableItem[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
+type HistoryRow = {
+  player_id: string;
+  match_id: string;
+  match_date: string | Date | null;
+  match_time: string | null;
+  match_datetime: string | Date | null;
+  result: 'Win' | 'Draw' | 'Loss';
+  rating: string | number;
+  yellow_cards: number | null;
+  red_cards: number | null;
+  fouls: number | null;
+  created_at: string | Date | null;
+  updated_at: string | Date | null;
+};
 
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new ScanCommand({
-            TableName: getTableName(),
-            FilterExpression: 'begins_with(PK, :playerPrefix)',
-            ExpressionAttributeValues: {
-              ':playerPrefix': 'PLAYER#'
-            },
-            ProjectionExpression:
-              'PK, SK, #name, #cardSeason, #season, #position, #score, #result, #matchId, #matchDateTime, #matchDate, #matchTime, #createdAt, #updatedAt, #yellowCards, #redCards, #fouls',
-            ExpressionAttributeNames: {
-              '#name': 'Name',
-              '#cardSeason': 'CardSeason',
-              '#season': 'Season',
-              '#position': 'Position',
-              '#score': 'Score',
-              '#result': 'Result',
-              '#matchId': 'MatchId',
-              '#matchDateTime': 'MatchDateTime',
-              '#matchDate': 'MatchDate',
-              '#matchTime': 'MatchTime',
-              '#createdAt': 'CreatedAt',
-              '#updatedAt': 'UpdatedAt',
-              '#yellowCards': 'YellowCards',
-              '#redCards': 'RedCards',
-              '#fouls': 'Fouls'
-            },
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'recommendations.scanAllTableItems' }
-    );
+function toIsoLike(value: string | Date | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : String(value);
+}
 
-    items.push(...((response.Items ?? []) as RecommendationTableItem[]));
-    exclusiveStartKey = response.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
+function toDateOnly(value: string | Date | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
 
-  return items;
+async function loadRecommendationItems(): Promise<Array<Record<string, unknown>>> {
+  const players = (await sql`
+    select player_id, name, card_season, position
+    from players
+    where is_active = true
+  `) as PlayerRow[];
+
+  const histories = (await sql`
+    select
+      player_id,
+      match_id,
+      match_date,
+      match_time::text as match_time,
+      match_datetime,
+      result,
+      rating,
+      yellow_cards,
+      red_cards,
+      fouls,
+      created_at,
+      updated_at
+    from v_player_match_history
+  `) as HistoryRow[];
+
+  return [
+    ...players.map((player) => ({
+      PK: `PLAYER#${player.player_id}`,
+      SK: 'METADATA',
+      Name: player.name,
+      CardSeason: player.card_season,
+      Position: player.position
+    })),
+    ...histories.map((history) => ({
+      PK: `PLAYER#${history.player_id}`,
+      SK: `MATCH#${history.match_id}`,
+      MatchId: history.match_id,
+      MatchDateTime: toIsoLike(history.match_datetime),
+      MatchDate: toDateOnly(history.match_date),
+      MatchTime: history.match_time ?? undefined,
+      CreatedAt: toIsoLike(history.created_at),
+      UpdatedAt: toIsoLike(history.updated_at),
+      Score: Number(history.rating),
+      Result: history.result,
+      YellowCards: history.yellow_cards ?? 0,
+      RedCards: history.red_cards ?? 0,
+      Fouls: history.fouls ?? 0
+    }))
+  ];
 }
 
 export async function GET() {
   try {
-    const tableItems = await scanAllTableItems();
+    const tableItems = await loadRecommendationItems();
     const ranked = buildRecommendationsFromTableItems(tableItems);
 
     return NextResponse.json(
@@ -67,17 +98,15 @@ export async function GET() {
     );
   } catch (error) {
     console.error('Error in GET /api/recommendations:', error);
-    const throttled = isDynamoThrottleError(error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       {
-        error: throttled
-          ? 'DynamoDB đang bị giới hạn đọc. Vui lòng thử lại sau vài giây.'
-          : 'Không thể tải danh sách đề xuất.',
-        code: throttled ? 'DYNAMODB_THROTTLED' : 'INTERNAL_ERROR',
-        ...(process.env.NODE_ENV === 'development' ? { detail: errorMessage } : {})
+        error: 'Khong the tai danh sach de xuat.',
+        code: 'INTERNAL_ERROR',
+        ...(process.env.NODE_ENV === 'development'
+          ? { detail: error instanceof Error ? error.message : String(error) }
+          : {})
       },
-      { status: throttled ? 429 : 500 }
+      { status: 500 }
     );
   }
 }

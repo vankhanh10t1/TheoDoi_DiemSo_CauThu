@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMatch, listMatches } from '../../../lib/matchService';
-import { isDynamoThrottleError } from '../../../lib/dynamodb-helpers';
 import type { CreateMatchPayload } from '../../../lib/types';
 import { createSubmitMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
 
-/**
- * POST /api/matches - Create a new match
- * Body: { matchDate, matchDateTime, opponentName?, myScore, opponentScore, note? }
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Validate required fields
     if (!body.matchDate || body.myScore === undefined || body.opponentScore === undefined) {
       return NextResponse.json(
         {
-          error: 'Vui lòng nhập đầy đủ ngày thi đấu và tỉ số',
+          error: 'Vui long nhap day du ngay thi dau va ti so',
           code: 'INVALID_REQUEST'
         },
         { status: 400 }
       );
     }
 
-    // Validate score is non-negative integer
     if (!Number.isInteger(body.myScore) || !Number.isInteger(body.opponentScore) || body.myScore < 0 || body.opponentScore < 0) {
       return NextResponse.json(
         {
@@ -34,7 +27,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate date format (YYYY-MM-DD)
     if (!isValidMatchDate(body.matchDate)) {
       return NextResponse.json(
         {
@@ -48,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (body.matchDateTime !== undefined && !isValidMatchDateTime(body.matchDateTime)) {
       return NextResponse.json(
         {
-          error: 'matchDateTime phải là thời gian ISO hợp lệ',
+          error: 'matchDateTime phai la thoi gian ISO hop le',
           code: 'INVALID_DATETIME_FORMAT'
         },
         { status: 400 }
@@ -70,21 +62,12 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         match,
-        message: `Tạo trận đấu thành công: ${match.opponentName || 'N/A'} (${match.myScore}-${match.opponentScore})`
+        message: `Tao tran dau thanh cong: ${match.opponentName || 'N/A'} (${match.myScore}-${match.opponentScore})`
       },
       { status: 201 }
     );
   } catch (error) {
     console.error('Error in POST /api/matches:', error);
-    if (isDynamoThrottleError(error)) {
-      return NextResponse.json(
-        {
-          error: 'DynamoDB đang bị giới hạn ghi. Vui lòng thử lại sau vài giây.',
-          code: 'DYNAMODB_THROTTLED'
-        },
-        { status: 429 }
-      );
-    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to create match',
@@ -95,9 +78,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET /api/matches - List all matches
- */
 export async function GET() {
   try {
     const matches = await listMatches();
@@ -112,15 +92,6 @@ export async function GET() {
     );
   } catch (error) {
     console.error('Error in GET /api/matches:', error);
-    if (isDynamoThrottleError(error)) {
-      return NextResponse.json(
-        {
-          error: 'DynamoDB đang bị giới hạn đọc. Vui lòng thử lại sau vài giây.',
-          code: 'DYNAMODB_THROTTLED'
-        },
-        { status: 429 }
-      );
-    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to list matches',

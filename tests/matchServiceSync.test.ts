@@ -1,13 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMock } = vi.hoisted(() => ({
-  sendMock: vi.fn()
-}));
+const { sqlMock, sqlCalls, transactionCalls } = vi.hoisted(() => {
+  const sqlCalls: Array<{ text: string; values: unknown[] }> = [];
+  const transactionCalls: Array<{ text: string; values: unknown[] }[]> = [];
 
-vi.mock('../lib/dynamodb', () => ({
-  getDocumentClient: () => ({ send: sendMock }),
-  getTableName: () => 'TEST_TABLE',
-  formatMatchTimestamp: () => '20260610T120000Z'
+  const sqlMock = vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => {
+    const text = strings.join('$');
+    sqlCalls.push({ text, values });
+    return Promise.resolve([]);
+  }) as any;
+
+  sqlMock.transaction = vi.fn(async (fn: (tx: any) => Array<{ text: string; values: unknown[] }>) => {
+    const txCalls: Array<{ text: string; values: unknown[] }> = [];
+    const tx = vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const query = { text: strings.join('$'), values };
+      txCalls.push(query);
+      return query;
+    });
+
+    const queries = fn(tx);
+    transactionCalls.push(txCalls);
+
+    return queries.map((query) => {
+      if (query.text.includes('delete from match_ratings')) return [{ player_id: 'player-1' }];
+      if (query.text.includes('update matches')) return [{ match_id: 'match-1' }];
+      return [];
+    });
+  });
+
+  return { sqlMock, sqlCalls, transactionCalls };
+});
+
+vi.mock('../lib/db', () => ({
+  sql: sqlMock
 }));
 
 import {
@@ -18,182 +43,107 @@ import {
   updateMatch
 } from '../lib/matchService';
 
-function commandName(command: unknown): string {
-  return (command as { constructor: { name: string } }).constructor.name;
-}
-
-function commandInput(command: unknown): Record<string, any> {
-  return (command as { input: Record<string, any> }).input;
-}
-
-function getBatchDeleteKeys(): Array<{ PK: string; SK: string }> {
-  return sendMock.mock.calls
-    .filter(([command]) => commandName(command) === 'BatchWriteCommand')
-    .flatMap(([command]) => commandInput(command).RequestItems.TEST_TABLE)
-    .map((request) => request.DeleteRequest?.Key)
-    .filter(Boolean);
-}
+const matchRow = {
+  match_id: 'match-1',
+  match_date: '2026-06-01',
+  match_time: '07:00',
+  match_datetime: '2026-06-01T07:00:00+07:00',
+  opponent_name: null,
+  my_score: 1,
+  opponent_score: 1,
+  result: 'DRAW',
+  is_big_win: false,
+  is_big_loss: false,
+  note: null,
+  rating_count: 0,
+  rating_version: 0,
+  created_at: '2026-06-01T00:00:00.000Z',
+  updated_at: '2026-06-01T00:00:00.000Z'
+};
 
 beforeEach(() => {
-  sendMock.mockReset();
+  sqlMock.mockReset();
+  sqlMock.mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => {
+    const text = strings.join('$');
+    sqlCalls.push({ text, values });
+    return Promise.resolve([]);
+  });
+  sqlMock.transaction.mockClear();
+  sqlCalls.length = 0;
+  transactionCalls.length = 0;
 });
 
-describe('match service two-way data synchronization', () => {
-  it('lưu rating hai chiều và RatingCount trong cùng transaction', async () => {
-    sendMock.mockImplementation(async (command) => {
-      if (commandName(command) === 'GetCommand') {
-        return {
-          Item: {
-            PK: 'MATCH#match-1',
-            SK: 'METADATA',
-            MatchDate: '2026-06-10',
-            MatchDateTime: '2026-06-10T09:00:00+07:00',
-            MyScore: 1,
-            OpponentScore: 0,
-            Result: 'WIN',
-            CreatedAt: 'created',
-            UpdatedAt: 'updated'
-          }
-        };
-      }
-      if (commandName(command) === 'QueryCommand') return { Items: [] };
-      return {};
+describe('match service Postgres synchronization', () => {
+  it('upserts ratings and increments match rating_version in one transaction', async () => {
+    sqlMock.mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join('$');
+      sqlCalls.push({ text, values });
+      if (text.includes('from matches m')) return Promise.resolve([matchRow]);
+      if (text.includes('from match_ratings')) return Promise.resolve([]);
+      return Promise.resolve([]);
     });
 
     await saveMatchRatings('match-1', {
       ratings: [{ playerId: 'player-1', rating: 8, position: 'ST' }]
     });
 
-    const transaction = sendMock.mock.calls.find(
-      ([command]) => commandName(command) === 'TransactWriteCommand'
-    );
-    const transactItems = commandInput(transaction?.[0]).TransactItems;
-    expect(transactItems).toHaveLength(3);
-    expect(transactItems.map((item: any) => item.Put?.Item?.PK).filter(Boolean)).toEqual(
-      expect.arrayContaining(['MATCH#match-1', 'PLAYER#player-1'])
-    );
-    expect(transactItems.find((item: any) => item.Update)?.Update.ExpressionAttributeValues[':ratingCount']).toBe(1);
+    const transaction = transactionCalls[0];
+    expect(transaction).toHaveLength(2);
+    expect(transaction[0].text).toContain('insert into match_ratings');
+    expect(transaction[0].text).toContain('on conflict (match_id, player_id)');
+    expect(transaction[1].text).toContain('rating_version = rating_version + 1');
   });
 
-  it('xóa trận ở cả match-centric và player-centric records', async () => {
-    sendMock.mockImplementation(async (command) => {
-      if (commandName(command) === 'QueryCommand') {
-        return {
-          Items: [
-            {
-              PK: 'MATCH#match-1',
-              SK: 'RATING#player-1',
-              PlayerId: 'player-1',
-              Rating: 8,
-              CreatedAt: 'created',
-              UpdatedAt: 'updated'
-            }
-          ]
-        };
-      }
-      return { UnprocessedItems: {} };
+  it('deletes a match from matches and relies on Postgres cascade for ratings', async () => {
+    sqlMock.mockImplementationOnce((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join('$');
+      sqlCalls.push({ text, values });
+      return Promise.resolve([{ match_id: 'match-1' }]);
     });
 
     expect(await deleteMatch('match-1')).toBe(true);
-    expect(getBatchDeleteKeys()).toEqual(
-      expect.arrayContaining([
-        { PK: 'MATCH#match-1', SK: 'METADATA' },
-        { PK: 'MATCH#match-1', SK: 'RATING#player-1' },
-        { PK: 'PLAYER#player-1', SK: 'MATCH#match-1' }
-      ])
-    );
+    expect(sqlCalls[0].text).toContain('delete from matches');
+    expect(sqlCalls[0].text).toContain('returning match_id');
   });
 
-  it('xóa riêng rating ở cả hai chiều và cập nhật RatingCount', async () => {
-    sendMock.mockImplementation(async (command) => {
-      if (commandName(command) === 'QueryCommand') return { Items: [] };
-      if (commandName(command) === 'GetCommand') {
-        return {
-          Item: {
-            PK: 'MATCH#match-1',
-            SK: 'METADATA',
-            MatchDate: '2026-06-10',
-            MyScore: 1,
-            OpponentScore: 0,
-            Result: 'WIN',
-            CreatedAt: 'created',
-            UpdatedAt: 'updated'
-          }
-        };
-      }
-      return { UnprocessedItems: {} };
-    });
+  it('deletes a single rating and increments match rating_version', async () => {
+    sqlMock.mockResolvedValueOnce([matchRow]);
 
     expect(await deletePlayerMatchRating('match-1', 'player-1')).toBe(true);
-    const transaction = sendMock.mock.calls.find(
-      ([command]) => commandName(command) === 'TransactWriteCommand'
-    );
-    const transactItems = commandInput(transaction?.[0]).TransactItems;
-    expect(transactItems.map((item: any) => item.Delete?.Key).filter(Boolean)).toEqual(
-      expect.arrayContaining([
-        { PK: 'MATCH#match-1', SK: 'RATING#player-1' },
-        { PK: 'PLAYER#player-1', SK: 'MATCH#match-1' }
-      ])
-    );
-    expect(transactItems.find((item: any) => item.Update)?.Update.ExpressionAttributeValues[':ratingCount']).toBe(0);
+    const transaction = transactionCalls[0];
+    expect(transaction[0].text).toContain('delete from match_ratings');
+    expect(transaction[1].text).toContain('update matches');
+    expect(transaction[1].text).toContain('rating_version = rating_version + 1');
   });
 
-  it('reset cầu thủ xóa rating hai chiều và cập nhật trận liên quan', async () => {
-    let queryCount = 0;
-    sendMock.mockImplementation(async (command) => {
-      if (commandName(command) === 'QueryCommand') {
-        queryCount++;
-        return queryCount === 1
-          ? { Items: [{ PK: 'PLAYER#player-1', SK: 'MATCH#match-1', MatchId: 'match-1' }] }
-          : { Items: [] };
-      }
-      if (commandName(command) === 'GetCommand') return { Item: { PK: 'MATCH#match-1' } };
-      return { UnprocessedItems: {} };
-    });
+  it('resets player history by deleting ratings and touching related matches', async () => {
+    sqlMock.mockResolvedValueOnce([{ match_id: 'match-1' }]);
 
     expect(await resetPlayerMatchHistory('player-1')).toBe(1);
-    expect(getBatchDeleteKeys()).toEqual(
-      expect.arrayContaining([
-        { PK: 'MATCH#match-1', SK: 'RATING#player-1' },
-        { PK: 'PLAYER#player-1', SK: 'MATCH#match-1' }
-      ])
-    );
-    expect(sendMock.mock.calls.some(([command]) => commandName(command) === 'UpdateCommand')).toBe(true);
+    const transaction = transactionCalls[0];
+    expect(transaction[0].text).toContain('delete from match_ratings');
+    expect(transaction[1].text).toContain('update matches');
   });
 
-  it('cập nhật trận ghi lại ngày, kết quả và cờ thắng đậm vào lịch sử cầu thủ', async () => {
-    sendMock.mockImplementation(async (command) => {
-      if (commandName(command) === 'GetCommand') {
-        return {
-          Item: {
-            PK: 'MATCH#match-1',
-            SK: 'METADATA',
-            MatchDate: '2026-06-01',
-            MatchDateTime: '2026-06-01T07:00',
-            MyScore: 1,
-            OpponentScore: 1,
-            Result: 'DRAW',
-            CreatedAt: 'created',
-            UpdatedAt: 'updated'
+  it('updates match score/result and preserves default time fallback', async () => {
+    sqlMock.mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join('$');
+      sqlCalls.push({ text, values });
+      if (text.includes('from matches m')) return Promise.resolve([matchRow]);
+      if (text.includes('update matches')) {
+        return Promise.resolve([
+          {
+            ...matchRow,
+            match_date: '2026-06-10',
+            match_datetime: '2026-06-10T07:00:00+07:00',
+            my_score: 4,
+            opponent_score: 0,
+            result: 'WIN',
+            is_big_win: true
           }
-        };
+        ]);
       }
-      if (commandName(command) === 'QueryCommand') {
-        return {
-          Items: [
-            {
-              PK: 'MATCH#match-1',
-              SK: 'RATING#player-1',
-              PlayerId: 'player-1',
-              Rating: 8,
-              Position: 'ST',
-              CreatedAt: 'rating-created',
-              UpdatedAt: 'rating-updated'
-            }
-          ]
-        };
-      }
-      return { UnprocessedItems: {} };
+      return Promise.resolve([]);
     });
 
     const updated = await updateMatch('match-1', {
@@ -203,18 +153,7 @@ describe('match service two-way data synchronization', () => {
     });
 
     expect(updated?.result).toBe('WIN');
-    const playerPut = sendMock.mock.calls
-      .filter(([command]) => commandName(command) === 'BatchWriteCommand')
-      .flatMap(([command]) => commandInput(command).RequestItems.TEST_TABLE)
-      .map((request) => request.PutRequest?.Item)
-      .find((item) => item?.PK === 'PLAYER#player-1');
-
-    expect(playerPut).toMatchObject({
-      MatchDate: '2026-06-10',
-      MatchDateTime: '2026-06-10T07:00:00+07:00',
-      Result: 'Win',
-      IsBigWin: true,
-      IsBigLoss: false
-    });
+    expect(updated?.isBigWin).toBe(true);
+    expect(updated?.matchDateTime).toBe('2026-06-10T07:00:00+07:00');
   });
 });

@@ -1,27 +1,60 @@
-import { BatchWriteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { getDocumentClient, getTableName, formatMatchTimestamp } from './dynamodb';
-import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
+import { sql } from './db';
 import { getPositionGroup } from './positions';
 import { sortMatchHistoryNewestFirst } from './match-history';
 import { createMatchDateTime } from './match-datetime';
 import type {
   Match,
   MatchResult,
-  StoredMatch,
   PlayerMatchRating,
   StoredPlayerMatchRating,
   CreateMatchPayload,
   SaveMatchRatingsPayload
 } from './types';
 
-type DynamoKey = {
-  PK: string;
-  SK: string;
+type MatchRow = {
+  match_id: string;
+  match_date: string | Date;
+  match_time: string | null;
+  match_datetime: string | Date | null;
+  opponent_name: string | null;
+  my_score: number;
+  opponent_score: number;
+  result: 'WIN' | 'DRAW' | 'LOSE';
+  is_big_win: boolean;
+  is_big_loss: boolean;
+  note: string | null;
+  rating_count?: number;
+  rating_version: number;
+  created_at: string | Date;
+  updated_at: string | Date;
 };
 
-/**
- * Generate unique match ID
- */
+type RatingRow = {
+  match_id: string;
+  player_id: string;
+  rating: string | number;
+  position: string | null;
+  yellow_cards: number | null;
+  red_cards: number | null;
+  fouls: number | null;
+  goals: number | null;
+  assists: number | null;
+  note: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+function formatMatchTimestamp(date = new Date()): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+}
+
 function generateMatchId(): string {
   return `match_${formatMatchTimestamp()}_${crypto.randomUUID().slice(0, 8)}`;
 }
@@ -30,127 +63,53 @@ function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function mapStoredMatch(item: StoredMatch): Match {
+function toIsoLike(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function toDateOnly(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function mapMatchRow(row: MatchRow): Match {
   return {
-    id: item.PK.replace(/^MATCH#/, ''),
-    matchDate: item.MatchDate || item.MatchDateTime?.slice(0, 10) || item.CreatedAt?.slice(0, 10) || '',
-    matchDateTime: item.MatchDateTime,
-    matchTime: item.MatchTime,
-    opponentName: item.OpponentName,
-    myScore: item.MyScore,
-    opponentScore: item.OpponentScore,
-    result: item.Result,
-    isBigWin: !!item.IsBigWin,
-    isBigLoss: !!item.IsBigLoss,
-    note: item.Note,
-    ratingCount: typeof item.RatingCount === 'number' ? item.RatingCount : undefined,
-    ratingVersion: typeof item.RatingVersion === 'number' ? item.RatingVersion : 0,
-    createdAt: item.CreatedAt,
-    updatedAt: item.UpdatedAt
+    id: row.match_id,
+    matchDate: toDateOnly(row.match_date),
+    matchDateTime: row.match_datetime ? toIsoLike(row.match_datetime) : undefined,
+    matchTime: row.match_time ?? undefined,
+    opponentName: row.opponent_name ?? undefined,
+    myScore: row.my_score,
+    opponentScore: row.opponent_score,
+    result: row.result,
+    isBigWin: !!row.is_big_win,
+    isBigLoss: !!row.is_big_loss,
+    note: row.note ?? undefined,
+    ratingCount: row.rating_count,
+    ratingVersion: row.rating_version,
+    createdAt: toIsoLike(row.created_at),
+    updatedAt: toIsoLike(row.updated_at)
   };
 }
 
-async function writeBatchedItems(tableName: string, items: unknown[]): Promise<void> {
-  for (const chunk of chunkArray(items, 25)) {
-    let pending = chunk;
-    let attempts = 0;
-
-    while (pending.length > 0) {
-      const response = await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new BatchWriteCommand({
-              RequestItems: {
-                [tableName]: pending.map((item) => ({ PutRequest: { Item: item as Record<string, unknown> } }))
-              }
-            })
-          ),
-        { label: 'saveMatchRatings.batchWrite' }
-      );
-
-      const unprocessed = response.UnprocessedItems?.[tableName] ?? [];
-      if (unprocessed.length === 0) {
-        break;
-      }
-
-      attempts++;
-      if (attempts > 4) {
-        throw new Error('BatchWrite returned unprocessed items after retries');
-      }
-
-      pending = unprocessed
-        .map((entry) => entry.PutRequest?.Item)
-        .filter((item): item is Record<string, unknown> => Boolean(item));
-    }
-  }
-}
-
-async function deleteBatchedKeys(tableName: string, keys: DynamoKey[]): Promise<void> {
-  const uniqueKeys = Array.from(
-    new Map(keys.map((key) => [`${key.PK}\u0000${key.SK}`, key])).values()
-  );
-
-  for (const chunk of chunkArray(uniqueKeys, 25)) {
-    let pending = chunk.map((key) => ({ DeleteRequest: { Key: key } }));
-    let attempts = 0;
-
-    while (pending.length > 0) {
-      const response = await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new BatchWriteCommand({
-              RequestItems: {
-                [tableName]: pending
-              }
-            })
-          ),
-        { label: 'match.deleteBatchWrite' }
-      );
-
-      const unprocessed = response.UnprocessedItems?.[tableName] ?? [];
-      if (unprocessed.length === 0) {
-        break;
-      }
-
-      attempts++;
-      if (attempts > 4) {
-        throw new Error('BatchWrite returned unprocessed delete requests after retries');
-      }
-
-      pending = unprocessed
-        .map((entry) => entry.DeleteRequest)
-        .filter((entry): entry is { Key: DynamoKey } => Boolean(entry?.Key))
-        .map((entry) => ({ DeleteRequest: entry }));
-    }
-  }
-}
-
-async function queryStoredMatchRatings(matchId: string): Promise<StoredPlayerMatchRating[]> {
-  const items: StoredPlayerMatchRating[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :ratingPrefix)',
-            ExpressionAttributeValues: {
-              ':pk': `MATCH#${matchId}`,
-              ':ratingPrefix': 'RATING#'
-            },
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'queryStoredMatchRatings' }
-    );
-
-    items.push(...((response.Items ?? []) as StoredPlayerMatchRating[]));
-    exclusiveStartKey = response.LastEvaluatedKey;
-  } while (exclusiveStartKey);
-
-  return items;
+function mapRatingRow(row: RatingRow): PlayerMatchRating {
+  return {
+    id: `${row.match_id}#${row.player_id}`,
+    matchId: row.match_id,
+    playerId: row.player_id,
+    rating: Number(row.rating),
+    position: (row.position ?? undefined) as PlayerMatchRating['position'],
+    yellowCards: row.yellow_cards ?? 0,
+    redCards: row.red_cards ?? 0,
+    fouls: row.fouls ?? 0,
+    goals: row.goals ?? 0,
+    assists: row.assists ?? 0,
+    note: row.note ?? undefined,
+    createdAt: toIsoLike(row.created_at),
+    updatedAt: toIsoLike(row.updated_at)
+  };
 }
 
 function toPlayerResult(result: Match['result']): MatchResult {
@@ -159,7 +118,345 @@ function toPlayerResult(result: Match['result']): MatchResult {
   return 'Loss';
 }
 
-function createPlayerMatchItem(
+function toDbMatchTime(matchDateTime?: string): string | null {
+  const match = matchDateTime?.match(/T(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : null;
+}
+
+export function calculateMatchResult(myScore: number, opponentScore: number): 'WIN' | 'DRAW' | 'LOSE' {
+  if (myScore > opponentScore) return 'WIN';
+  if (myScore === opponentScore) return 'DRAW';
+  return 'LOSE';
+}
+
+export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
+  try {
+    const matchId = generateMatchId();
+    const now = new Date().toISOString();
+    const result = calculateMatchResult(payload.myScore, payload.opponentScore);
+    const goalDiff = payload.myScore - payload.opponentScore;
+    const isBigWin = goalDiff >= 3;
+    const isBigLoss = goalDiff <= -3;
+    const matchTime = toDbMatchTime(payload.matchDateTime);
+
+    const rows = (await sql`
+      insert into matches (
+        match_id,
+        match_date,
+        match_time,
+        match_datetime,
+        opponent_name,
+        my_score,
+        opponent_score,
+        result,
+        is_big_win,
+        is_big_loss,
+        note,
+        rating_version,
+        created_at,
+        updated_at
+      )
+      values (
+        ${matchId},
+        ${payload.matchDate},
+        ${matchTime},
+        ${payload.matchDateTime},
+        ${payload.opponentName ?? null},
+        ${payload.myScore},
+        ${payload.opponentScore},
+        ${result},
+        ${isBigWin},
+        ${isBigLoss},
+        ${payload.note ?? null},
+        0,
+        ${now},
+        ${now}
+      )
+      returning *, 0::int as rating_count
+    `) as MatchRow[];
+
+    return mapMatchRow(rows[0]);
+  } catch (error) {
+    console.error('Error creating match:', error);
+    throw new Error(`Failed to create match: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function getMatchById(matchId: string): Promise<Match | null> {
+  const rows = (await sql`
+    select m.*, count(r.player_id)::int as rating_count
+    from matches m
+    left join match_ratings r on r.match_id = m.match_id
+    where m.match_id = ${matchId}
+    group by m.match_id
+    limit 1
+  `) as MatchRow[];
+
+  return rows[0] ? mapMatchRow(rows[0]) : null;
+}
+
+export async function listMatches(): Promise<Match[]> {
+  const rows = (await sql`
+    select m.*, count(r.player_id)::int as rating_count
+    from matches m
+    left join match_ratings r on r.match_id = m.match_id
+    group by m.match_id
+    order by m.match_date desc, m.match_time desc nulls last, m.created_at desc
+    limit 100
+  `) as MatchRow[];
+
+  return sortMatchHistoryNewestFirst(rows.map(mapMatchRow)).slice(0, 100);
+}
+
+export async function updateMatch(matchId: string, payload: Partial<CreateMatchPayload>): Promise<Match | null> {
+  const existing = await getMatchById(matchId);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const myScore = payload.myScore ?? existing.myScore;
+  const opponentScore = payload.opponentScore ?? existing.opponentScore;
+  const result = calculateMatchResult(myScore, opponentScore);
+  const goalDiff = myScore - opponentScore;
+  const isBigWin = goalDiff >= 3;
+  const isBigLoss = goalDiff <= -3;
+  const matchDate = payload.matchDate ?? payload.matchDateTime?.slice(0, 10) ?? existing.matchDate;
+  const matchDateTime =
+    payload.matchDateTime ??
+    (payload.matchDate ? createMatchDateTime(payload.matchDate, existing.matchTime ?? '07:00') : existing.matchDateTime);
+  const matchTime = toDbMatchTime(matchDateTime) ?? existing.matchTime ?? null;
+
+  const rows = (await sql`
+    update matches
+    set
+      match_date = ${matchDate},
+      match_time = ${matchTime},
+      match_datetime = ${matchDateTime ?? null},
+      opponent_name = ${payload.opponentName ?? existing.opponentName ?? null},
+      my_score = ${myScore},
+      opponent_score = ${opponentScore},
+      result = ${result},
+      is_big_win = ${isBigWin},
+      is_big_loss = ${isBigLoss},
+      note = ${payload.note ?? existing.note ?? null},
+      updated_at = ${now}
+    where match_id = ${matchId}
+      and rating_version = ${existing.ratingVersion ?? 0}
+    returning *, (
+      select count(*)::int
+      from match_ratings
+      where match_id = ${matchId}
+    ) as rating_count
+  `) as MatchRow[];
+
+  if (!rows[0]) {
+    throw new Error('Match was updated elsewhere. Please reload and try again.');
+  }
+
+  return mapMatchRow(rows[0]);
+}
+
+export async function deleteMatch(matchId: string): Promise<boolean> {
+  const rows = (await sql`
+    delete from matches
+    where match_id = ${matchId}
+    returning match_id
+  `) as Array<{ match_id: string }>;
+
+  return rows.length > 0;
+}
+
+export async function saveMatchRatings(
+  matchId: string,
+  payload: SaveMatchRatingsPayload
+): Promise<{ created: number; updated: number }> {
+  const match = await getMatchById(matchId);
+  if (!match) {
+    throw new Error(`Match ${matchId} not found`);
+  }
+
+  const ids = payload.ratings.map((rating) => rating.playerId.toLowerCase());
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('Duplicate playerId found in ratings payload');
+  }
+  if (payload.ratings.length > 49) {
+    throw new Error('A maximum of 49 ratings can be saved atomically per request');
+  }
+
+  const existingRows = (await sql`
+    select player_id
+    from match_ratings
+    where match_id = ${matchId}
+  `) as Array<{ player_id: string }>;
+  const existingPlayerIds = new Set(existingRows.map((row) => row.player_id.toLowerCase()));
+  const created = payload.ratings.filter((rating) => !existingPlayerIds.has(rating.playerId.toLowerCase())).length;
+  const updated = payload.ratings.length - created;
+  const now = new Date().toISOString();
+
+  const results = await sql.transaction((tx) => [
+    ...payload.ratings.map((ratingData) => {
+      const rating = roundToOneDecimal(ratingData.rating);
+      return tx`
+        insert into match_ratings (
+          match_id,
+          player_id,
+          rating,
+          position,
+          yellow_cards,
+          red_cards,
+          fouls,
+          goals,
+          assists,
+          note,
+          created_at,
+          updated_at
+        )
+        values (
+          ${matchId},
+          ${ratingData.playerId},
+          ${rating},
+          ${ratingData.position ?? null},
+          ${ratingData.yellowCards ?? 0},
+          ${ratingData.redCards ?? 0},
+          ${ratingData.fouls ?? 0},
+          ${ratingData.goals ?? 0},
+          ${ratingData.assists ?? 0},
+          ${ratingData.note ?? null},
+          ${now},
+          ${now}
+        )
+        on conflict (match_id, player_id)
+        do update set
+          rating = excluded.rating,
+          position = excluded.position,
+          yellow_cards = excluded.yellow_cards,
+          red_cards = excluded.red_cards,
+          fouls = excluded.fouls,
+          goals = excluded.goals,
+          assists = excluded.assists,
+          note = excluded.note,
+          updated_at = excluded.updated_at
+      `;
+    }),
+    tx`
+      update matches
+      set
+        rating_version = rating_version + 1,
+        updated_at = ${now}
+      where match_id = ${matchId}
+        and rating_version = ${match.ratingVersion ?? 0}
+      returning match_id
+    `
+  ]);
+
+  const updateResult = results[results.length - 1] as Array<{ match_id: string }>;
+  if (updateResult.length === 0) {
+    throw new Error('Match ratings were updated elsewhere. Please reload and try again.');
+  }
+
+  return { created, updated };
+}
+
+export async function getMatchRatings(matchId: string): Promise<PlayerMatchRating[]> {
+  const rows = (await sql`
+    select *
+    from match_ratings
+    where match_id = ${matchId}
+    order by player_id asc
+  `) as RatingRow[];
+
+  return rows.map(mapRatingRow);
+}
+
+export async function debugListMatchRatings(matchId: string) {
+  const matchRatings = await getMatchRatings(matchId);
+  return { matchRatings, playerCentricRatings: matchRatings };
+}
+
+export async function getPlayerMatchRating(matchId: string, playerId: string): Promise<PlayerMatchRating | null> {
+  const rows = (await sql`
+    select *
+    from match_ratings
+    where match_id = ${matchId}
+      and player_id = ${playerId}
+    limit 1
+  `) as RatingRow[];
+
+  return rows[0] ? mapRatingRow(rows[0]) : null;
+}
+
+export async function deletePlayerMatchRating(matchId: string, playerId: string): Promise<boolean> {
+  const match = await getMatchById(matchId);
+  if (!match) {
+    throw new Error(`Match ${matchId} not found`);
+  }
+
+  const now = new Date().toISOString();
+  const results = await sql.transaction((tx) => [
+    tx`
+      delete from match_ratings
+      where match_id = ${matchId}
+        and lower(player_id) = lower(${playerId})
+      returning player_id
+    `,
+    tx`
+      update matches
+      set
+        rating_version = rating_version + 1,
+        updated_at = ${now}
+      where match_id = ${matchId}
+        and rating_version = ${match.ratingVersion ?? 0}
+      returning match_id
+    `
+  ]);
+
+  const deleted = results[0] as Array<{ player_id: string }>;
+  const updated = results[1] as Array<{ match_id: string }>;
+  if (updated.length === 0) {
+    throw new Error('Match ratings were updated elsewhere. Please reload and try again.');
+  }
+
+  return deleted.length > 0;
+}
+
+export async function resetPlayerMatchHistory(playerId: string): Promise<number> {
+  const existingRows = (await sql`
+    select match_id
+    from match_ratings
+    where player_id = ${playerId}
+  `) as Array<{ match_id: string }>;
+  const matchIds = Array.from(new Set(existingRows.map((row) => row.match_id)));
+
+  if (matchIds.length === 0) {
+    return 0;
+  }
+
+  const now = new Date().toISOString();
+  await sql.transaction((tx) => [
+    tx`
+      delete from match_ratings
+      where player_id = ${playerId}
+    `,
+    tx`
+      update matches
+      set
+        rating_version = rating_version + 1,
+        updated_at = ${now}
+      where match_id = any(${matchIds}::text[])
+    `
+  ]);
+
+  return matchIds.length;
+}
+
+export async function getMatchWithRatings(matchId: string): Promise<{ match: Match; ratings: PlayerMatchRating[] } | null> {
+  const match = await getMatchById(matchId);
+  if (!match) return null;
+
+  const ratings = await getMatchRatings(matchId);
+  return { match, ratings };
+}
+
+export function createPlayerMatchItem(
   match: Match,
   rating: StoredPlayerMatchRating,
   createdAt: string
@@ -187,626 +484,4 @@ function createPlayerMatchItem(
     IsBigWin: !!match.isBigWin,
     IsBigLoss: !!match.isBigLoss
   };
-}
-
-async function updateMatchRatingCount(matchId: string, ratingCount: number): Promise<void> {
-  const response = await getDocumentClient().send(
-    new GetCommand({
-      TableName: getTableName(),
-      Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' }
-    })
-  );
-
-  if (!response.Item) {
-    return;
-  }
-
-  await getDocumentClient().send(
-    new UpdateCommand({
-      TableName: getTableName(),
-      Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
-      UpdateExpression: 'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt',
-      ExpressionAttributeValues: {
-        ':ratingCount': ratingCount,
-        ':updatedAt': formatMatchTimestamp()
-      }
-    })
-  );
-}
-
-/**
- * Calculate match result from scores
- */
-export function calculateMatchResult(myScore: number, opponentScore: number): 'WIN' | 'DRAW' | 'LOSE' {
-  if (myScore > opponentScore) return 'WIN';
-  if (myScore === opponentScore) return 'DRAW';
-  return 'LOSE';
-}
-
-/**
- * Create a new match
- */
-export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
-  try {
-    const matchId = generateMatchId();
-    const now = formatMatchTimestamp();
-    const result = calculateMatchResult(payload.myScore, payload.opponentScore);
-    const goalDiff = payload.myScore - payload.opponentScore;
-    const isBigWin = goalDiff >= 3;
-    const isBigLoss = goalDiff <= -3;
-
-    const storedMatch: StoredMatch = {
-      PK: `MATCH#${matchId}`,
-      SK: 'METADATA',
-      MatchDate: payload.matchDate,
-      MatchDateTime: payload.matchDateTime,
-      OpponentName: payload.opponentName,
-      MyScore: payload.myScore,
-      OpponentScore: payload.opponentScore,
-      Result: result,
-      IsBigWin: isBigWin,
-      IsBigLoss: isBigLoss,
-      Note: payload.note,
-      RatingCount: 0,
-      RatingVersion: 0,
-      CreatedAt: now,
-      UpdatedAt: now
-    };
-
-    await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new PutCommand({
-            TableName: getTableName(),
-            Item: storedMatch
-          })
-        ),
-      { label: 'createMatch' }
-    );
-
-    return {
-      id: matchId,
-      matchDate: payload.matchDate,
-      matchDateTime: payload.matchDateTime,
-      opponentName: payload.opponentName,
-      myScore: payload.myScore,
-      opponentScore: payload.opponentScore,
-      result,
-      isBigWin,
-      isBigLoss,
-      note: payload.note,
-      ratingCount: 0,
-      ratingVersion: 0,
-      createdAt: now,
-      updatedAt: now
-    };
-  } catch (error) {
-    console.error('Error creating match:', error);
-    throw new Error(`Failed to create match: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * Get match by ID
- */
-export async function getMatchById(matchId: string): Promise<Match | null> {
-  try {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new GetCommand({
-            TableName: getTableName(),
-            Key: {
-              PK: `MATCH#${matchId}`,
-              SK: 'METADATA'
-            }
-          })
-        ),
-      { label: 'getMatchById' }
-    );
-
-    if (!response.Item) return null;
-
-    const item = response.Item as StoredMatch;
-    return mapStoredMatch(item);
-  } catch (error) {
-    console.error('Error getting match:', error);
-    throw error;
-  }
-}
-
-/**
- * List all matches (ordered by date descending)
- */
-export async function listMatches(): Promise<Match[]> {
-  try {
-    // TODO(schema): add a match-list GSI keyed by item type and match timestamp.
-    // Until then, scan only metadata fields and cap the API result to the newest 100 matches.
-    const items: StoredMatch[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined;
-
-    do {
-      const response = await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new ScanCommand({
-              TableName: getTableName(),
-              FilterExpression: 'begins_with(PK, :matchPrefix) AND SK = :metadata',
-              ExpressionAttributeValues: {
-                ':matchPrefix': 'MATCH#',
-                ':metadata': 'METADATA'
-              },
-              ProjectionExpression:
-                'PK, SK, #matchDate, #matchDateTime, #matchTime, #opponentName, #myScore, #opponentScore, #result, #isBigWin, #isBigLoss, #note, #ratingCount, #ratingVersion, #createdAt, #updatedAt',
-              ExpressionAttributeNames: {
-                '#matchDate': 'MatchDate',
-                '#matchDateTime': 'MatchDateTime',
-                '#matchTime': 'MatchTime',
-                '#opponentName': 'OpponentName',
-                '#myScore': 'MyScore',
-                '#opponentScore': 'OpponentScore',
-                '#result': 'Result',
-                '#isBigWin': 'IsBigWin',
-                '#isBigLoss': 'IsBigLoss',
-                '#note': 'Note',
-                '#ratingCount': 'RatingCount',
-                '#ratingVersion': 'RatingVersion',
-                '#createdAt': 'CreatedAt',
-                '#updatedAt': 'UpdatedAt'
-              },
-              ExclusiveStartKey: lastEvaluatedKey
-            })
-          ),
-        { label: 'listMatches.scan' }
-      );
-      items.push(...((response.Items ?? []) as StoredMatch[]));
-      lastEvaluatedKey = response.LastEvaluatedKey;
-    } while (lastEvaluatedKey);
-    
-    const matches = sortMatchHistoryNewestFirst(items.map(mapStoredMatch)).slice(0, 100);
-
-    return matches;
-  } catch (error) {
-    console.error('Error listing matches:', error);
-    throw error;
-  }
-}
-
-/**
- * Update match
- */
-export async function updateMatch(matchId: string, payload: Partial<CreateMatchPayload>): Promise<Match | null> {
-  try {
-    // First get the existing match
-    const existing = await getMatchById(matchId);
-    if (!existing) return null;
-
-    const now = formatMatchTimestamp();
-    const myScore = payload.myScore ?? existing.myScore;
-    const opponentScore = payload.opponentScore ?? existing.opponentScore;
-    const result = calculateMatchResult(myScore, opponentScore);
-    const goalDiff = myScore - opponentScore;
-    const isBigWin = goalDiff >= 3;
-    const isBigLoss = goalDiff <= -3;
-
-    const storedMatch: StoredMatch = {
-      PK: `MATCH#${matchId}`,
-      SK: 'METADATA',
-      MatchDate: payload.matchDate ?? payload.matchDateTime?.slice(0, 10) ?? existing.matchDate,
-      MatchDateTime:
-        payload.matchDateTime ??
-        (payload.matchDate ? createMatchDateTime(payload.matchDate, existing.matchTime ?? '07:00') : existing.matchDateTime),
-      MatchTime: existing.matchTime,
-      OpponentName: payload.opponentName ?? existing.opponentName,
-      MyScore: myScore,
-      OpponentScore: opponentScore,
-      Result: result,
-      IsBigWin: isBigWin,
-      IsBigLoss: isBigLoss,
-      Note: payload.note ?? existing.note,
-      RatingCount: existing.ratingCount,
-      RatingVersion: existing.ratingVersion,
-      CreatedAt: existing.createdAt,
-      UpdatedAt: now
-    };
-
-    await getDocumentClient().send(
-      new PutCommand({
-        TableName: getTableName(),
-        Item: storedMatch,
-        ConditionExpression:
-          'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
-        ExpressionAttributeValues: {
-          ':expectedVersion': existing.ratingVersion ?? 0
-        }
-      })
-    );
-
-    const updatedMatch: Match = {
-      id: matchId,
-      matchDate: storedMatch.MatchDate ?? '',
-      matchDateTime: storedMatch.MatchDateTime,
-      matchTime: storedMatch.MatchTime,
-      opponentName: storedMatch.OpponentName,
-      myScore: storedMatch.MyScore,
-      opponentScore: storedMatch.OpponentScore,
-      result: storedMatch.Result,
-      isBigWin: !!storedMatch.IsBigWin,
-      isBigLoss: !!storedMatch.IsBigLoss,
-      note: storedMatch.Note,
-      ratingCount: storedMatch.RatingCount,
-      ratingVersion: storedMatch.RatingVersion,
-      createdAt: storedMatch.CreatedAt,
-      updatedAt: storedMatch.UpdatedAt
-    };
-
-    const ratings = await queryStoredMatchRatings(matchId);
-    if (ratings.length > 0) {
-      await writeBatchedItems(
-        getTableName(),
-        ratings.map((rating) => createPlayerMatchItem(updatedMatch, rating, rating.CreatedAt))
-      );
-    }
-
-    return updatedMatch;
-  } catch (error) {
-    console.error('Error updating match:', error);
-    throw error;
-  }
-}
-
-/**
- * Delete match (and all its ratings)
- */
-export async function deleteMatch(matchId: string): Promise<boolean> {
-  try {
-    const ratings = await queryStoredMatchRatings(matchId);
-    const keys: DynamoKey[] = [
-      { PK: `MATCH#${matchId}`, SK: 'METADATA' },
-      ...ratings.flatMap((rating) => [
-        { PK: `MATCH#${matchId}`, SK: `RATING#${rating.PlayerId}` },
-        { PK: `PLAYER#${rating.PlayerId}`, SK: `MATCH#${matchId}` }
-      ])
-    ];
-
-    await deleteBatchedKeys(getTableName(), keys);
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting match:', error);
-    throw error;
-  }
-}
-
-/**
- * Save player ratings for a match (bulk operation)
- */
-export async function saveMatchRatings(matchId: string, payload: SaveMatchRatingsPayload): Promise<{ created: number; updated: number }> {
-  try {
-    // Verify match exists
-    const match = await getMatchById(matchId);
-    if (!match) {
-      throw new Error(`Match ${matchId} not found`);
-    }
-
-    console.info('[matchService] saveMatchRatings START', { 
-      matchId, 
-      matchDate: match.matchDate,
-      ratingCount: payload.ratings.length,
-      message: 'Saving ratings with unique per-match keys to prevent overwrites'
-    });
-
-    // Validate duplicate playerIds in payload
-    const ids = payload.ratings.map((r) => r.playerId.toLowerCase());
-    const uniqueIds = new Set(ids);
-    if (uniqueIds.size !== ids.length) {
-      throw new Error('Duplicate playerId found in ratings payload');
-    }
-    if (payload.ratings.length > 49) {
-      throw new Error('A maximum of 49 ratings can be saved atomically per request');
-    }
-
-    const existingRatings = await getMatchRatings(matchId);
-    const existingCreatedAtByPlayer = new Map(
-      existingRatings.map((rating) => [rating.playerId.toLowerCase(), rating.createdAt] as const)
-    );
-
-    let created = 0;
-    let updated = 0;
-    const now = formatMatchTimestamp();
-    const tableName = getTableName();
-    const transactItems: NonNullable<ConstructorParameters<typeof TransactWriteCommand>[0]['TransactItems']> = [];
-
-    for (const ratingData of payload.ratings) {
-      const storedRating: StoredPlayerMatchRating = {
-        PK: `MATCH#${matchId}`,
-        SK: `RATING#${ratingData.playerId}`,
-        PlayerId: ratingData.playerId,
-        Rating: roundToOneDecimal(ratingData.rating),
-        Position: ratingData.position,
-        YellowCards: ratingData.yellowCards ?? 0,
-        RedCards: ratingData.redCards ?? 0,
-        Fouls: ratingData.fouls ?? 0,
-        Goals: ratingData.goals,
-        Assists: ratingData.assists,
-        Note: ratingData.note,
-        CreatedAt: existingCreatedAtByPlayer.get(ratingData.playerId.toLowerCase()) ?? now,
-        UpdatedAt: now
-      };
-      const playerMatchItem = createPlayerMatchItem(match, storedRating, storedRating.CreatedAt);
-      transactItems.push(
-        { Put: { TableName: tableName, Item: storedRating } },
-        { Put: { TableName: tableName, Item: playerMatchItem } }
-      );
-
-      if (existingCreatedAtByPlayer.has(ratingData.playerId.toLowerCase())) {
-        updated++;
-      } else {
-        created++;
-      }
-    }
-
-    transactItems.push({
-      Update: {
-        TableName: tableName,
-        Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
-        UpdateExpression:
-          'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt, RatingVersion = if_not_exists(RatingVersion, :zero) + :one',
-        ConditionExpression:
-          'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
-        ExpressionAttributeValues: {
-          ':ratingCount': new Set([
-            ...existingRatings.map((rating) => rating.playerId.toLowerCase()),
-            ...payload.ratings.map((rating) => rating.playerId.toLowerCase())
-          ]).size,
-          ':updatedAt': now,
-          ':zero': 0,
-          ':one': 1,
-          ':expectedVersion': match.ratingVersion ?? 0
-        }
-      }
-    });
-
-    await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new TransactWriteCommand({ TransactItems: transactItems })
-        ),
-      { label: 'saveMatchRatings.transaction' }
-    );
-
-    console.info('[matchService] saveMatchRatings COMPLETE', { 
-      matchId, 
-      created, 
-      updated,
-      total: created + updated,
-      detail: `Each rating stored with unique SK using matchId (MATCH#${matchId}) to prevent same-day overwrite bug`
-    });
-    return { created, updated };
-  } catch (error) {
-    console.error('Error saving match ratings:', error);
-    throw new Error(`Failed to save match ratings: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * Get all ratings for a match
- */
-export async function getMatchRatings(matchId: string): Promise<PlayerMatchRating[]> {
-  try {
-    const items = await queryStoredMatchRatings(matchId);
-    return items.map((item) => ({
-      id: `${matchId}#${item.PlayerId}`,
-      matchId,
-      playerId: item.PlayerId,
-      rating: item.Rating,
-      position: item.Position,
-      yellowCards: typeof item.YellowCards === 'number' ? item.YellowCards : 0,
-      redCards: typeof item.RedCards === 'number' ? item.RedCards : 0,
-      fouls: typeof item.Fouls === 'number' ? item.Fouls : 0,
-      goals: item.Goals,
-      assists: item.Assists,
-      note: item.Note,
-      createdAt: item.CreatedAt,
-      updatedAt: item.UpdatedAt
-    }));
-  } catch (error) {
-    console.error('Error getting match ratings:', error);
-    throw error;
-  }
-}
-
-/** * Debug helper: List all rating records for a specific match
- * Useful for verifying fix: each match should have unique player-centric entries
- */
-export async function debugListMatchRatings(matchId: string) {
-  try {
-    // List match-centric ratings (primary)
-    const matchRatings = await getMatchRatings(matchId);
-    
-    // List player-centric ratings for all players in this match
-    const playerCentricRatings: any[] = [];
-    for (const rating of matchRatings) {
-      const response = await getDocumentClient().send(
-        new GetCommand({
-          TableName: getTableName(),
-          Key: {
-            PK: `PLAYER#${rating.playerId}`,
-            SK: `MATCH#${matchId}`
-          }
-        })
-      );
-      if (response.Item) {
-        playerCentricRatings.push(response.Item);
-      }
-    }
-
-    console.info('[debug] Match ratings verification', {
-      matchId,
-      matchCentricCount: matchRatings.length,
-      playerCentricCount: playerCentricRatings.length,
-      detail: 'If counts match, player-centric entries are unique per match (fix is working)'
-    });
-
-    return { matchRatings, playerCentricRatings };
-  } catch (error) {
-    console.error('Error in debugListMatchRatings:', error);
-    throw error;
-  }
-}
-
-/** * Get specific player rating for a match
- */
-export async function getPlayerMatchRating(matchId: string, playerId: string): Promise<PlayerMatchRating | null> {
-  try {
-    const response = await getDocumentClient().send(
-      new GetCommand({
-        TableName: getTableName(),
-        Key: {
-          PK: `MATCH#${matchId}`,
-          SK: `RATING#${playerId}`
-        }
-      })
-    );
-
-    if (!response.Item) return null;
-
-    const item = response.Item as StoredPlayerMatchRating;
-    return {
-      id: `${matchId}#${playerId}`,
-      matchId,
-      playerId,
-      rating: item.Rating,
-      position: item.Position,
-      yellowCards: typeof item.YellowCards === 'number' ? item.YellowCards : 0,
-      redCards: typeof item.RedCards === 'number' ? item.RedCards : 0,
-      fouls: typeof item.Fouls === 'number' ? item.Fouls : 0,
-      goals: item.Goals,
-      assists: item.Assists,
-      note: item.Note,
-      createdAt: item.CreatedAt,
-      updatedAt: item.UpdatedAt
-    };
-  } catch (error) {
-    console.error('Error getting player match rating:', error);
-    throw error;
-  }
-}
-
-/**
- * Delete a player rating from a match
- */
-export async function deletePlayerMatchRating(matchId: string, playerId: string): Promise<boolean> {
-  try {
-    const match = await getMatchById(matchId);
-    if (!match) {
-      throw new Error(`Match ${matchId} not found`);
-    }
-    const ratings = await queryStoredMatchRatings(matchId);
-    const remainingCount = ratings.filter(
-      (rating) => rating.PlayerId.toLowerCase() !== playerId.toLowerCase()
-    ).length;
-    const tableName = getTableName();
-
-    await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new TransactWriteCommand({
-            TransactItems: [
-              { Delete: { TableName: tableName, Key: { PK: `MATCH#${matchId}`, SK: `RATING#${playerId}` } } },
-              { Delete: { TableName: tableName, Key: { PK: `PLAYER#${playerId}`, SK: `MATCH#${matchId}` } } },
-              {
-                Update: {
-                  TableName: tableName,
-                  Key: { PK: `MATCH#${matchId}`, SK: 'METADATA' },
-                  UpdateExpression:
-                    'SET RatingCount = :ratingCount, UpdatedAt = :updatedAt, RatingVersion = if_not_exists(RatingVersion, :zero) + :one',
-                  ConditionExpression:
-                    'attribute_exists(PK) AND (attribute_not_exists(RatingVersion) OR RatingVersion = :expectedVersion)',
-                  ExpressionAttributeValues: {
-                    ':ratingCount': remainingCount,
-                    ':updatedAt': formatMatchTimestamp(),
-                    ':zero': 0,
-                    ':one': 1,
-                    ':expectedVersion': match.ratingVersion ?? 0
-                  }
-                }
-              }
-            ]
-          })
-        ),
-      { label: 'deletePlayerMatchRating.transaction' }
-    );
-    return true;
-  } catch (error) {
-    console.error('Error deleting player match rating:', error);
-    throw error;
-  }
-}
-
-export async function resetPlayerMatchHistory(playerId: string): Promise<number> {
-  const playerMatchItems: Array<{ PK: string; SK: string; MatchId?: string }> = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-            ExpressionAttributeValues: {
-              ':pk': `PLAYER#${playerId}`,
-              ':matchPrefix': 'MATCH#'
-            },
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'resetPlayerMatchHistory.query' }
-    );
-
-    playerMatchItems.push(
-      ...((response.Items ?? []) as Array<{ PK: string; SK: string; MatchId?: string }>)
-    );
-    exclusiveStartKey = response.LastEvaluatedKey;
-  } while (exclusiveStartKey);
-
-  const matchIds = Array.from(
-    new Set(
-      playerMatchItems
-        .map((item) => item.MatchId ?? item.SK.replace(/^MATCH#/, ''))
-        .filter(Boolean)
-    )
-  );
-
-  await deleteBatchedKeys(
-    getTableName(),
-    matchIds.flatMap((matchId) => [
-      { PK: `PLAYER#${playerId}`, SK: `MATCH#${matchId}` },
-      { PK: `MATCH#${matchId}`, SK: `RATING#${playerId}` }
-    ])
-  );
-
-  for (const matchId of matchIds) {
-    const remainingRatings = await queryStoredMatchRatings(matchId);
-    await updateMatchRatingCount(matchId, remainingRatings.length);
-  }
-
-  return matchIds.length;
-}
-
-/**
- * Get match with all ratings
- */
-export async function getMatchWithRatings(matchId: string): Promise<{ match: Match; ratings: PlayerMatchRating[] } | null> {
-  try {
-    const match = await getMatchById(matchId);
-    if (!match) return null;
-
-    const ratings = await getMatchRatings(matchId);
-    return { match, ratings };
-  } catch (error) {
-    console.error('Error getting match with ratings:', error);
-    throw error;
-  }
 }

@@ -1,185 +1,179 @@
-import { BatchWriteCommand, GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { getDocumentClient, getTableName } from './dynamodb';
-import { chunkArray, retryWithBackoff } from './dynamodb-helpers';
+import { sql } from './db';
 import { sortRecentMatchesNewestFirst } from './match-history';
-import { isDetailedPositionForGroup, isPositionGroup } from './positions';
-import { getPlayerNameReservationKey, normalizePlayerName } from './player-name';
-import type { PlayerMetadataItem, PlayerSummary, RecentMatch, StoredMatchItem } from './types';
+import { getPositionGroup, isDetailedPositionForGroup, isPositionGroup } from './positions';
+import { normalizePlayerName } from './player-name';
+import type { PlayerSummary, RecentMatch } from './types';
 
-function toPlayerIdFromPk(pk: string): string {
-  return pk.replace(/^PLAYER#/, '');
+type PlayerRow = {
+  player_id: string;
+  name: string;
+  card_season: string;
+  position: string;
+};
+
+type PlayerHistoryRow = {
+  player_id: string;
+  match_id: string;
+  match_date: string | Date | null;
+  match_time: string | null;
+  match_datetime: string | Date | null;
+  result: 'Win' | 'Draw' | 'Loss';
+  is_big_win: boolean | null;
+  is_big_loss: boolean | null;
+  rating: string | number;
+  rated_position: string | null;
+  yellow_cards: number | null;
+  red_cards: number | null;
+  fouls: number | null;
+  goals: number | null;
+  assists: number | null;
+  note: string | null;
+  created_at: string | Date | null;
+  updated_at: string | Date | null;
+};
+
+export type DeletePlayersResult = {
+  requestedCount: number;
+  deletedPlayerIds: string[];
+  deletedItemCount: number;
+};
+
+function toIsoLike(value: string | Date | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function mapMetadataItem(item: PlayerMetadataItem): PlayerSummary {
+function toDateOnly(value: string | Date | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function mapPlayerRow(row: PlayerRow): PlayerSummary {
   return {
-    playerId: toPlayerIdFromPk(item.PK),
-    name: item.Name,
-    cardSeason: item.CardSeason ?? (item as any).Season ?? '', // Support both new and legacy field names
-    position: item.Position
+    playerId: row.player_id,
+    name: row.name,
+    cardSeason: row.card_season,
+    position: row.position
+  };
+}
+
+function mapRecentMatchRow(row: PlayerHistoryRow): RecentMatch {
+  const detailedPosition = row.rated_position;
+  const positionGroup = getPositionGroup(detailedPosition);
+  const validPositionGroup = isPositionGroup(positionGroup) ? positionGroup : undefined;
+  const validDetailedPosition =
+    validPositionGroup && isDetailedPositionForGroup(validPositionGroup, detailedPosition)
+      ? detailedPosition
+      : undefined;
+
+  return {
+    sk: `MATCH#${row.match_id}`,
+    matchId: row.match_id,
+    matchDateTime: toIsoLike(row.match_datetime),
+    matchDate: toDateOnly(row.match_date),
+    matchTime: row.match_time ?? undefined,
+    createdAt: toIsoLike(row.created_at),
+    updatedAt: toIsoLike(row.updated_at),
+    score: Number(row.rating),
+    result: row.result,
+    positionGroup: validPositionGroup,
+    detailedPosition: validDetailedPosition,
+    yellowCards: row.yellow_cards ?? 0,
+    redCards: row.red_cards ?? 0,
+    fouls: row.fouls ?? 0,
+    goals: row.goals ?? 0,
+    assists: row.assists ?? 0,
+    note: row.note ?? undefined,
+    isBigWin: !!row.is_big_win,
+    isBigLoss: !!row.is_big_loss
   };
 }
 
 export async function listPlayers(): Promise<PlayerSummary[]> {
-  try {
-    const listIndexName = process.env.DYNAMODB_LIST_INDEX_NAME?.trim();
+  const rows = (await sql`
+    select player_id, name, card_season, position
+    from players
+    where is_active = true
+    order by
+      case
+        when position = 'GK' then 1
+        when position in ('CB', 'LB', 'LWB', 'RB', 'RWB') then 2
+        when position in ('CM', 'CDM', 'CAM', 'LM', 'RM') then 3
+        when position in ('ST', 'CF', 'LW', 'RW') then 4
+        else 5
+      end,
+      name asc
+  `) as PlayerRow[];
 
-    if (listIndexName) {
-      try {
-        const indexedItems: PlayerMetadataItem[] = [];
-        let exclusiveStartKey: Record<string, unknown> | undefined;
-
-        do {
-          const indexed = await retryWithBackoff(
-            () =>
-              getDocumentClient().send(
-                new QueryCommand({
-                  TableName: getTableName(),
-                  IndexName: listIndexName,
-                  KeyConditionExpression: 'SK = :metadata',
-                  ExpressionAttributeValues: {
-                    ':metadata': 'METADATA'
-                  },
-                  ExclusiveStartKey: exclusiveStartKey
-                })
-              ),
-            { label: 'listPlayers.queryIndex' }
-          );
-
-          indexedItems.push(...((indexed.Items ?? []) as PlayerMetadataItem[]));
-          exclusiveStartKey = indexed.LastEvaluatedKey;
-        } while (exclusiveStartKey);
-
-        return indexedItems
-          .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
-          .map(mapMetadataItem)
-          .filter((player) => player.playerId.trim().length > 0 && player.name.trim().length > 0);
-      } catch (error) {
-        console.warn('[playerService] listPlayers index query failed, falling back to scan', {
-          error: error instanceof Error ? error.message : String(error),
-          indexName: listIndexName
-        });
-      }
-    }
-
-    const items: PlayerMetadataItem[] = [];
-    let exclusiveStartKey: Record<string, unknown> | undefined;
-
-    do {
-      const response = await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new ScanCommand({
-              TableName: getTableName(),
-              FilterExpression: 'SK = :metadata',
-              ExpressionAttributeValues: {
-                ':metadata': 'METADATA'
-              },
-              ExclusiveStartKey: exclusiveStartKey
-            })
-          ),
-        { label: 'listPlayers.scan' }
-      );
-
-      items.push(...((response.Items ?? []) as PlayerMetadataItem[]));
-      exclusiveStartKey = response.LastEvaluatedKey;
-    } while (exclusiveStartKey);
-
-    return items
-      .filter((item) => typeof item.PK === 'string' && item.PK.startsWith('PLAYER#'))
-      .map(mapMetadataItem)
-      .filter((player) => player.playerId.trim().length > 0 && player.name.trim().length > 0);
-  } catch (error) {
-    console.error('[playerService] Failed to list players', error);
-    throw error;
-  }
+  return rows.map(mapPlayerRow);
 }
 
 export async function getPlayerMetadata(playerId: string): Promise<PlayerSummary | null> {
-  try {
-    const response = await getDocumentClient().send(
-      new GetCommand({
-        TableName: getTableName(),
-        Key: {
-          PK: `PLAYER#${playerId}`,
-          SK: 'METADATA'
-        }
-      })
-    );
+  const rows = (await sql`
+    select player_id, name, card_season, position
+    from players
+    where player_id = ${playerId}
+      and is_active = true
+    limit 1
+  `) as PlayerRow[];
 
-    if (!response.Item) return null;
-
-    return mapMetadataItem(response.Item as PlayerMetadataItem);
-  } catch (error) {
-    console.error('[playerService] Failed to get player metadata', { playerId, error });
-    throw error;
-  }
+  return rows[0] ? mapPlayerRow(rows[0]) : null;
 }
 
 export async function getRecentMatches(playerId: string, limit?: number): Promise<RecentMatch[]> {
-  const items: Record<string, unknown>[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
+  const rows = (await sql`
+    select
+      player_id,
+      match_id,
+      match_date,
+      match_time::text as match_time,
+      match_datetime,
+      result,
+      is_big_win,
+      is_big_loss,
+      rating,
+      rated_position,
+      yellow_cards,
+      red_cards,
+      fouls,
+      goals,
+      assists,
+      note,
+      created_at,
+      updated_at
+    from v_player_match_history
+    where player_id = ${playerId}
+    order by match_date desc, match_time desc nulls last, created_at desc
+  `) as PlayerHistoryRow[];
 
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :matchPrefix)',
-            ExpressionAttributeValues: {
-              ':pk': `PLAYER#${playerId}`,
-              ':matchPrefix': 'MATCH#'
-            },
-            ScanIndexForward: false,
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'getRecentMatches' }
-    );
-
-    items.push(...((response.Items ?? []) as Record<string, unknown>[]));
-    exclusiveStartKey = response.LastEvaluatedKey;
-  } while (exclusiveStartKey);
-
-  const matches = items.map((item): RecentMatch => {
-    const match = item as unknown as StoredMatchItem;
-    const positionGroup = isPositionGroup(match.PositionGroup) ? match.PositionGroup : undefined;
-    const detailedPosition =
-      positionGroup && isDetailedPositionForGroup(positionGroup, match.DetailedPosition)
-        ? match.DetailedPosition
-        : undefined;
-
-    return {
-      sk: match.SK,
-      matchId: match.MatchId ?? match.SK.replace(/^MATCH#/, ''),
-      matchDateTime: match.MatchDateTime,
-      matchDate: match.MatchDate,
-      matchTime: match.MatchTime,
-      createdAt: match.CreatedAt,
-      updatedAt: match.UpdatedAt,
-      score: match.Score,
-      result: match.Result,
-      positionGroup,
-      detailedPosition,
-      yellowCards: typeof match.YellowCards === 'number' ? match.YellowCards : 0,
-      redCards: typeof match.RedCards === 'number' ? match.RedCards : 0,
-      fouls: typeof match.Fouls === 'number' ? match.Fouls : 0,
-      goals: typeof match.Goals === 'number' ? match.Goals : 0,
-      assists: typeof match.Assists === 'number' ? match.Assists : 0,
-      note: typeof match.Note === 'string' ? match.Note : undefined,
-      isBigWin: typeof match.IsBigWin === 'boolean' ? match.IsBigWin : false,
-      isBigLoss: typeof match.IsBigLoss === 'boolean' ? match.IsBigLoss : false
-    };
-  });
-
-  const sortedMatches = sortRecentMatchesNewestFirst(matches).filter(
-    (match) => Number.isFinite(match.score)
+  const matches = sortRecentMatchesNewestFirst(rows.map(mapRecentMatchRow)).filter((match) =>
+    Number.isFinite(match.score)
   );
-  return typeof limit === 'number' ? sortedMatches.slice(0, limit) : sortedMatches;
+
+  return typeof limit === 'number' ? matches.slice(0, limit) : matches;
+}
+
+export async function findDuplicatePlayerByName(
+  playerName: string,
+  excludePlayerId?: string
+): Promise<string | null> {
+  const normalizedName = normalizePlayerName(playerName);
+  const rows = (await sql`
+    select player_id
+    from players
+    where normalized_name = ${normalizedName}
+      and (${excludePlayerId ?? null}::text is null or player_id <> ${excludePlayerId ?? null})
+    limit 1
+  `) as Array<{ player_id: string }>;
+
+  return rows[0]?.player_id ?? null;
 }
 
 export async function deletePlayersAndRelatedData(playerIds: string[]): Promise<DeletePlayersResult> {
-  const uniquePlayerIds = uniqueTrimmedPlayerIds(playerIds);
+  const uniquePlayerIds = Array.from(
+    new Set(playerIds.map((playerId) => playerId.trim()).filter(Boolean))
+  );
 
   if (uniquePlayerIds.length === 0) {
     return {
@@ -189,207 +183,23 @@ export async function deletePlayersAndRelatedData(playerIds: string[]): Promise<
     };
   }
 
-  const allKeys: DynamoKey[] = [];
+  const counts = (await sql`
+    select count(*)::int as count
+    from match_ratings
+    where player_id = any(${uniquePlayerIds}::text[])
+  `) as Array<{ count: number }>;
 
-  for (const playerId of uniquePlayerIds) {
-    allKeys.push(...(await queryAllPlayerKeys(playerId)));
-  }
-  allKeys.push(...(await scanAllMatchRatingKeys(uniquePlayerIds)));
-
-  const deletedItemCount = await deleteKeysInBatches(allKeys);
+  const deletedPlayers = (await sql`
+    delete from players
+    where player_id = any(${uniquePlayerIds}::text[])
+    returning player_id
+  `) as Array<{ player_id: string }>;
 
   return {
     requestedCount: uniquePlayerIds.length,
-    deletedPlayerIds: uniquePlayerIds,
-    deletedItemCount
+    deletedPlayerIds: deletedPlayers.map((row) => row.player_id),
+    deletedItemCount: (counts[0]?.count ?? 0) + deletedPlayers.length
   };
 }
 
-/**
- * Normalize player name for duplicate checking (trim spaces, lowercase)
- */
 export { normalizePlayerName };
-
-/**
- * Check if a player with the same name already exists (case-insensitive, trimmed)
- * Returns the existing player's ID if found, null otherwise
- */
-export async function findDuplicatePlayerByName(
-  playerName: string,
-  excludePlayerId?: string
-): Promise<string | null> {
-  try {
-    const allPlayers = await listPlayers();
-    const normalizedNewName = normalizePlayerName(playerName);
-
-    for (const player of allPlayers) {
-      // Skip the player being edited (if excludePlayerId is provided)
-      if (excludePlayerId && player.playerId === excludePlayerId) {
-        continue;
-      }
-
-      const normalizedExistingName = normalizePlayerName(player.name);
-      if (normalizedExistingName === normalizedNewName) {
-        return player.playerId;
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error checking for duplicate player names:', error);
-    throw error;
-  }
-}
-
-type DynamoKey = {
-  PK: string;
-  SK: string;
-};
-
-export type DeletePlayersResult = {
-  requestedCount: number;
-  deletedPlayerIds: string[];
-  deletedItemCount: number;
-};
-
-function uniqueTrimmedPlayerIds(playerIds: string[]): string[] {
-  const seen = new Set<string>();
-  const uniqueIds: string[] = [];
-
-  for (const rawId of playerIds) {
-    const playerId = rawId.trim();
-    if (!playerId || seen.has(playerId)) {
-      continue;
-    }
-
-    seen.add(playerId);
-    uniqueIds.push(playerId);
-  }
-
-  return uniqueIds;
-}
-
-async function queryAllPlayerKeys(playerId: string): Promise<DynamoKey[]> {
-  const keys: DynamoKey[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new QueryCommand({
-            TableName: getTableName(),
-            KeyConditionExpression: 'PK = :pk',
-            ExpressionAttributeValues: {
-              ':pk': `PLAYER#${playerId}`
-            },
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'player.deleteQueryPlayerItems' }
-    );
-
-    for (const item of response.Items ?? []) {
-      if (typeof item.PK === 'string' && typeof item.SK === 'string') {
-        keys.push({ PK: item.PK, SK: item.SK });
-      }
-      if (item.SK === 'METADATA' && typeof item.Name === 'string' && item.Name.trim()) {
-        keys.push(getPlayerNameReservationKey(item.Name));
-      }
-    }
-
-    exclusiveStartKey = response.LastEvaluatedKey;
-  } while (exclusiveStartKey);
-
-  return keys;
-}
-
-async function scanAllMatchRatingKeys(playerIds: string[]): Promise<DynamoKey[]> {
-  const keys: DynamoKey[] = [];
-  const targetPlayerIds = new Set(playerIds.map((playerId) => playerId.toLowerCase()));
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-
-  do {
-    const response = await retryWithBackoff(
-      () =>
-        getDocumentClient().send(
-          new ScanCommand({
-            TableName: getTableName(),
-            FilterExpression: 'begins_with(PK, :matchPrefix) AND begins_with(SK, :ratingPrefix)',
-            ExpressionAttributeValues: {
-              ':matchPrefix': 'MATCH#',
-              ':ratingPrefix': 'RATING#'
-            },
-            ProjectionExpression: 'PK, SK',
-            ExclusiveStartKey: exclusiveStartKey
-          })
-        ),
-      { label: 'player.deleteScanMatchRatings' }
-    );
-
-    for (const item of response.Items ?? []) {
-      const playerId = typeof item.SK === 'string' ? item.SK.replace(/^RATING#/, '') : '';
-      if (
-        typeof item.PK === 'string' &&
-        typeof item.SK === 'string' &&
-        targetPlayerIds.has(playerId.toLowerCase())
-      ) {
-        keys.push({ PK: item.PK, SK: item.SK });
-      }
-    }
-
-    exclusiveStartKey = response.LastEvaluatedKey;
-  } while (exclusiveStartKey);
-
-  return keys;
-}
-
-async function deleteKeysInBatches(keys: DynamoKey[]): Promise<number> {
-  const uniqueKeys = Array.from(
-    new Map(keys.map((key) => [`${key.PK}\u0000${key.SK}`, key])).values()
-  );
-  const tableName = getTableName();
-  let deletedCount = 0;
-
-  for (const chunk of chunkArray(uniqueKeys, 25)) {
-    let pending = chunk.map((key) => ({
-      DeleteRequest: {
-        Key: key
-      }
-    }));
-    let attempts = 0;
-
-    while (pending.length > 0) {
-      const response = await retryWithBackoff(
-        () =>
-          getDocumentClient().send(
-            new BatchWriteCommand({
-              RequestItems: {
-                [tableName]: pending
-              }
-            })
-          ),
-        { label: 'player.deleteBatchWrite' }
-      );
-
-      const unprocessed = response.UnprocessedItems?.[tableName] ?? [];
-      deletedCount += pending.length - unprocessed.length;
-
-      if (unprocessed.length === 0) {
-        break;
-      }
-
-      attempts++;
-      if (attempts > 4) {
-        throw new Error('DynamoDB is still busy. Some delete requests were not processed.');
-      }
-
-      pending = unprocessed
-        .map((entry) => entry.DeleteRequest)
-        .filter((entry): entry is { Key: DynamoKey } => Boolean(entry?.Key))
-        .map((entry) => ({ DeleteRequest: entry }));
-    }
-  }
-
-  return deletedCount;
-}
