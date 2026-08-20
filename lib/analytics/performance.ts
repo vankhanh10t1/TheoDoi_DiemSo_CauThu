@@ -1,4 +1,4 @@
-import type { AnalysisBreakdownItem, AnalysisWindow, MatchResult, PerformanceAnalysis, PlayerAssessment, PredictionBacktest, RecentMatch } from '../types';
+import type { AnalysisBreakdownItem, AnalysisWindow, MatchResult, PerformanceAnalysis, PlayerAssessment, PositionGroup, PredictionBacktest, RecentMatch, WeightProfile } from '../types';
 import {
   calculateAdjustedScore,
   calculateAverageScore,
@@ -9,14 +9,19 @@ import {
   calculateMomentum,
   calculateTrend,
   calculateVariance,
-  calculateWMA
+  calculateWMA,
+  calculateWeightedForm
 } from './calculations';
 import { calculateDisciplineScore, calculateAggressionIndex, calculateDisciplineTrend } from './discipline';
 import { getConfidenceLevel, predictPlayerScore } from '../prediction';
 import { calculateRiskScore } from '../risk';
 import { generateRecommendation } from '../recommendation';
 import { sortRecentMatchesNewestFirst } from '../match-history';
-import { DEFAULT_ANALYSIS_WINDOW, MIN_BACKTEST_HISTORY, normalizeAnalysisWindow } from './config';
+import { DEFAULT_ANALYSIS_WINDOW, MIN_BACKTEST_HISTORY, normalizeAnalysisWindow, PERFORMANCE_THRESHOLDS } from './config';
+import { calculateEventStats } from './events';
+import { DEFAULT_WEIGHT_PROFILE, getParticipationWeight, PARTICIPATION_CONFIG, POSITION_PROFILES, resolvePositionGroup } from './performance-config';
+
+export interface PerformanceAnalysisOptions { window?: number; weightProfile?: WeightProfile; positionGroup?: PositionGroup; }
 
 function roundToOneDecimal(value: number): number {
   return Number(value.toFixed(1));
@@ -25,7 +30,7 @@ function roundToOneDecimal(value: number): number {
 function toAssessment(score: number): PlayerAssessment {
   const roundedScore = roundToOneDecimal(score);
 
-  if (roundedScore > 8) {
+  if (roundedScore > PERFORMANCE_THRESHOLDS.ratingExcellent) {
     return {
       averageScore: roundedScore,
       status: 'Star Player',
@@ -34,7 +39,7 @@ function toAssessment(score: number): PlayerAssessment {
     };
   }
 
-  if (roundedScore >= 6) {
+  if (roundedScore >= PERFORMANCE_THRESHOLDS.ratingAverage) {
     return {
       averageScore: roundedScore,
       status: 'Stable',
@@ -43,7 +48,7 @@ function toAssessment(score: number): PlayerAssessment {
     };
   }
 
-  if (roundedScore >= 4.5) {
+  if (roundedScore >= PERFORMANCE_THRESHOLDS.ratingPoor) {
     return {
       averageScore: roundedScore,
       status: 'Under Review',
@@ -115,13 +120,15 @@ function createBreakdown(input: {
     { key: 'variance', label: 'Độ dao động', value: input.variance.toFixed(2), meaning: input.variance > 4 ? 'Dao động cao, kết quả khó ổn định.' : input.variance >= 1 ? 'Có dao động cần theo dõi.' : 'Các rating khá ổn định.', impact: input.variance > 4 ? 'NEGATIVE' : input.variance >= 1 ? 'NEUTRAL' : 'POSITIVE' },
     { key: 'momentum', label: 'Đà phong độ', value: input.momentum.toFixed(2), meaning: input.momentum > .35 ? 'Đà gần đây tích cực.' : input.momentum < -.35 ? 'Đà gần đây suy giảm.' : 'Chưa có thay đổi rõ rệt.', impact: impact(input.momentum, .35, -.35), contribution: Number((input.momentum * .04).toFixed(2)) },
     { key: 'discipline', label: 'Kỷ luật', value: `${input.discipline.toFixed(0)}/100`, meaning: input.discipline < 60 ? 'Thẻ và lỗi đang ảnh hưởng đánh giá.' : 'Mức kỷ luật trong ngưỡng chấp nhận.', impact: input.discipline < 60 ? 'NEGATIVE' : input.discipline >= 80 ? 'POSITIVE' : 'NEUTRAL' },
-    { key: 'risk', label: 'Điểm rủi ro', value: `${input.risk.toFixed(1)}/100`, meaning: input.risk >= 70 ? 'Rủi ro cao, cần theo dõi thêm.' : input.risk >= 35 ? 'Có một số tín hiệu cần chú ý.' : 'Chưa có tín hiệu rủi ro đáng kể.', impact: input.risk >= 70 ? 'NEGATIVE' : input.risk >= 35 ? 'NEUTRAL' : 'POSITIVE' },
+    { key: 'risk', label: 'Điểm rủi ro', value: `${input.risk.toFixed(1)}/100`, meaning: input.risk >= PERFORMANCE_THRESHOLDS.riskHigh ? 'Rủi ro cao, cần theo dõi thêm.' : input.risk >= PERFORMANCE_THRESHOLDS.riskMedium ? 'Có một số tín hiệu cần chú ý.' : 'Chưa có tín hiệu rủi ro đáng kể.', impact: input.risk >= PERFORMANCE_THRESHOLDS.riskHigh ? 'NEGATIVE' : input.risk >= PERFORMANCE_THRESHOLDS.riskMedium ? 'NEUTRAL' : 'POSITIVE' },
     { key: 'sample', label: 'Cỡ mẫu', value: `${input.count} trận`, meaning: 'Số trận thực tế được dùng để tính.', impact: input.count >= 5 ? 'POSITIVE' : 'NEUTRAL' }
   ];
 }
 
-export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: number = DEFAULT_ANALYSIS_WINDOW): PerformanceAnalysis {
-  const analysisWindow = normalizeAnalysisWindow(requestedWindow);
+export function analyzeRecentMatches(matches: RecentMatch[], requested: number | PerformanceAnalysisOptions = DEFAULT_ANALYSIS_WINDOW): PerformanceAnalysis {
+  const options = typeof requested === 'number' ? { window: requested } : requested;
+  const analysisWindow = normalizeAnalysisWindow(options.window);
+  const weightProfile = options.weightProfile ?? DEFAULT_WEIGHT_PROFILE;
   const orderedMatches = sortRecentMatchesNewestFirst(matches);
   const recentMatches = orderedMatches.slice(0, analysisWindow);
   const scores = recentMatches.map((match) => match.score);
@@ -131,16 +138,23 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
   const recentResults = getRecentResults(recentMatches);
   const averageScore = calculateAverageScore(scores);
   const adjustedAverageScore = calculateAverageScore(adjustedScores);
-  const wmaScore = calculateWMA(adjustedScores);
+  const wmaScore = calculateWeightedForm(recentMatches, adjustedScores, weightProfile);
   const trend = calculateTrend(adjustedScores);
   const variance = calculateVariance(adjustedScores);
   const momentum = calculateMomentum(adjustedScores);
   const lossStreak = calculateLossStreak(recentResults);
-  const bigWinCountLast5 = recentMatches.filter((match) => match.result === 'Win' && match.isBigWin).length;
-  const bigLossCountLast5 = recentMatches.filter((match) => match.result === 'Loss' && match.isBigLoss).length;
+  const bigWinCountInWindow = recentMatches.filter((match) => match.result === 'Win' && match.isBigWin).length;
+  const bigLossCountInWindow = recentMatches.filter((match) => match.result === 'Loss' && match.isBigLoss).length;
   const hasBigLossUnderFive = recentMatches.some(
     (match) => match.result === 'Loss' && match.isBigLoss && match.score < 5
   );
+  const participationWeights = recentMatches.map(getParticipationWeight);
+  const effectiveSampleSize = Number(participationWeights.reduce((sum, value) => sum + value, 0).toFixed(2));
+  const participationConfidence = recentMatches.length ? Number((effectiveSampleSize / recentMatches.length).toFixed(2)) : 0;
+  const totalMinutes = recentMatches.reduce((sum, match) => sum +
+    (typeof match.minutesPlayed === 'number' ? Math.max(0, match.minutesPlayed) : PARTICIPATION_CONFIG.fallbackMinutes), 0);
+  const positionGroup = resolvePositionGroup(recentMatches, options.positionGroup);
+  const positionProfile = POSITION_PROFILES[positionGroup];
   const prediction = predictPlayerScore({
     wmaScore,
     recentScore: scores[0] ?? averageScore,
@@ -149,7 +163,8 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     momentum: momentum.momentum,
     lossStreak,
     averageScore,
-    matchCount: recentMatches.length
+    matchCount: recentMatches.length,
+    participationConfidence
   });
   let riskAnalysis = calculateRiskScore({
     trendStatus: trend.trendStatus,
@@ -157,8 +172,8 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     lossStreak,
     predictedScore: prediction.predictedScore,
     adjustedWma: wmaScore,
-    bigWinCountLast5,
-    bigLossCountLast5,
+    bigWinCountInWindow,
+    bigLossCountInWindow,
     hasBigLossUnderFive
   });
   const fraudReasons: string[] = [];
@@ -170,6 +185,10 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     redCards: recentMatches.reduce((s, m) => s + (m.redCards ?? 0), 0),
     matchCount: recentMatches.length
   });
+  prediction.predictedScore = Number(Math.max(1, Math.min(10, prediction.predictedScore +
+    (Math.max(0, 1 - variance.variance / 10) - 0.5) * positionProfile.stability +
+    momentum.momentum * positionProfile.momentum * 0.1)).toFixed(2));
+  prediction.confidence = Number(Math.min(prediction.confidence, participationConfidence).toFixed(2));
   const disciplineTrend = calculateDisciplineTrend(recentMatches);
 
   const redRate = recentMatches.length
@@ -177,7 +196,7 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     : 0;
 
   let hasFraudRisk =
-    prediction.predictedScore < 4.5 &&
+    prediction.predictedScore < PERFORMANCE_THRESHOLDS.ratingPoor &&
     trend.trendStatus === 'DOWN' &&
     variance.stabilityLevel === 'VOLATILE' &&
     lossStreak >= 3;
@@ -204,9 +223,9 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
   }
 
   const hybridFraudAlert =
-    wmaScore < 4.5 &&
+    wmaScore < PERFORMANCE_THRESHOLDS.ratingPoor &&
     trend.trendStatus === 'DOWN' &&
-    bigLossCountLast5 >= 2 &&
+    bigLossCountInWindow >= 2 &&
     variance.stabilityLevel === 'VOLATILE';
 
   if (hybridFraudAlert) {
@@ -216,15 +235,21 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     fraudReasons.push('Có ít nhất 2 trận thua đậm');
     fraudReasons.push('Phong độ dao động cao');
 
-    if (riskAnalysis.riskScore < 70) {
+    if (riskAnalysis.riskScore < PERFORMANCE_THRESHOLDS.riskHigh) {
       riskAnalysis = {
         ...riskAnalysis,
-        riskScore: 70,
+        riskScore: PERFORMANCE_THRESHOLDS.riskHigh,
         riskLevel: 'HIGH'
       };
     }
   }
 
+  const insufficientReasons = [
+    ...(recentMatches.length < 3 ? ['Số trận quá ít.'] : []),
+    ...(totalMinutes < PARTICIPATION_CONFIG.minimumRecommendationMinutes ? [`Tổng thời gian thi đấu mới ${totalMinutes} phút.`] : []),
+    ...(effectiveSampleSize < PARTICIPATION_CONFIG.minimumEffectiveMatches ? ['Cỡ mẫu hiệu dụng thấp do nhiều trận thi đấu ít phút.'] : []),
+    ...(prediction.confidence < PERFORMANCE_THRESHOLDS.confidenceMedium ? ['Độ tin cậy dưới ngưỡng khuyến nghị.'] : [])
+  ];
   const recommendation = generateRecommendation({
     wmaScore,
     trendStatus: trend.trendStatus,
@@ -236,17 +261,22 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     momentumStatus: momentum.momentumStatus,
     disciplineScore: discipline.disciplineScore,
     aggressionIndex: aggression.aggressionIndex,
-    disciplineTrend
+    disciplineTrend,
+    insufficientReasons
   });
 
   const matchImpacts = recentMatches.map((match) =>
     calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss)
   );
   const matchImpactAvg = matchImpacts.length > 0 ? calculateAverageScore(matchImpacts) : 0;
-  const bigWinRate = calculateBigWinRate(bigWinCountLast5, recentMatches.length);
-  const bigLossRate = calculateBigLossRate(bigLossCountLast5, recentMatches.length);
+  const bigWinRate = calculateBigWinRate(bigWinCountInWindow, recentMatches.length);
+  const bigLossRate = calculateBigLossRate(bigLossCountInWindow, recentMatches.length);
   const breakdown = createBreakdown({ wma: wmaScore, average: averageScore, trend: trend.trendValue, variance: variance.variance, momentum: momentum.momentum, discipline: discipline.disciplineScore, risk: riskAnalysis.riskScore, count: recentMatches.length });
+  breakdown.unshift({ key: 'profile', label: 'Profile trọng số', value: weightProfile === 'DECAY' ? 'Decay' : 'WMA', meaning: `Cửa sổ ${analysisWindow} trận; rating ít phút được giảm trọng số.`, impact: 'NEUTRAL' });
   const backtest = calculatePredictionBacktest(orderedMatches, analysisWindow);
+  const lowMinutesWarnings = recentMatches.filter((match) => typeof match.minutesPlayed === 'number' && match.minutesPlayed < PARTICIPATION_CONFIG.lowMinutesThreshold)
+    .map((match) => `Rating này có trọng số thấp hơn vì cầu thủ chỉ thi đấu ${match.minutesPlayed} phút.`);
+  const eventStats = calculateEventStats(recentMatches);
 
   return {
     averageScore,
@@ -261,6 +291,7 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     predictedScore: prediction.predictedScore,
     confidence: prediction.confidence,
     confidenceLevel: getConfidenceLevel(prediction.confidence),
+    confidenceWarning: insufficientReasons.length ? insufficientReasons.join(' ') : undefined,
     lossStreak,
     riskScore: riskAnalysis.riskScore,
     riskLevel: riskAnalysis.riskLevel,
@@ -272,15 +303,24 @@ export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: nu
     aggressionIndex: aggression.aggressionIndex,
     disciplineTrend,
     adjustedAverageScore,
-    bigWinCountLast5,
-    bigLossCountLast5,
+    bigWinCountInWindow,
+    bigLossCountInWindow,
     bigWinRate,
     bigLossRate,
     matchImpactAvg,
     analysisWindow,
     analyzedMatchCount: recentMatches.length,
     breakdown,
-    backtest
+    backtest,
+    weightProfile,
+    positionGroup,
+    totalMinutes,
+    effectiveSampleSize,
+    participationConfidence,
+    lowMinutesWarnings,
+    eventStats,
+    recommendationStatus: insufficientReasons.length ? 'INSUFFICIENT' : 'READY',
+    recommendationWatchouts: insufficientReasons.length ? insufficientReasons : ['Tiếp tục theo dõi biến động, kỷ luật và thời lượng thi đấu.']
   };
 }
 

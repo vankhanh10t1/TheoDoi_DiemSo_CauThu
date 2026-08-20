@@ -1,6 +1,7 @@
 import type { RecommendationAction } from '../types';
 import type { RiskAnalysis } from '../risk';
 import { isHighVariance } from '../risk';
+import { PERFORMANCE_THRESHOLDS } from '../analytics/config';
 
 export interface RecommendationInput {
   wmaScore: number;
@@ -14,6 +15,7 @@ export interface RecommendationInput {
   disciplineScore?: number;
   aggressionIndex?: number;
   disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
+  insufficientReasons?: string[];
 }
 
 export interface RecommendationResult {
@@ -23,6 +25,16 @@ export interface RecommendationResult {
 }
 
 export function generateRecommendation(input: RecommendationInput): RecommendationResult {
+  if (input.insufficientReasons?.length) {
+    return { recommendation: 'MONITOR', reason: `Chưa đủ cơ sở để khuyến nghị: ${input.insufficientReasons.join(' ')}`, priority: 2 };
+  }
+  if (input.confidence < PERFORMANCE_THRESHOLDS.confidenceMedium) {
+    return {
+      recommendation: 'MONITOR',
+      reason: 'Kết quả chỉ mang tính tham khảo do cỡ mẫu nhỏ; cần theo dõi thêm trước khi đưa ra quyết định',
+      priority: 2
+    };
+  }
   if (input.fraudRisk) {
     return {
       recommendation: 'REPLACE',
@@ -31,7 +43,7 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
     };
   }
 
-  if (input.riskAnalysis.riskLevel === 'HIGH' || input.wmaScore < 4.5) {
+  if (input.riskAnalysis.riskLevel === 'HIGH' || input.wmaScore < PERFORMANCE_THRESHOLDS.ratingPoor) {
     return {
       recommendation: 'SELL',
       reason: 'Phong độ hiện tại thấp hoặc rủi ro cao, nên thanh lý',
@@ -80,7 +92,7 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
   if (
     input.riskAnalysis.riskScore >= 30 ||
     input.trendStatus !== 'UP' ||
-    input.confidence < 0.6
+    input.confidence < PERFORMANCE_THRESHOLDS.confidenceKeep
   ) {
     return {
       recommendation: 'MONITOR',

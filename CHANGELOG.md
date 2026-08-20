@@ -1,5 +1,21 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - Player Evaluation Algorithm Phase 2
+
+- Công việc đã làm: thêm profile WMA/Decay; giảm trọng số và confidence theo phút thi đấu/vai trò đá chính; bổ sung raw + per 90 cho bàn thắng, kiến tạo, thẻ, lỗi và discipline; thêm profile vị trí GK/DF/MF/FW với fallback; truyền đồng nhất filter mùa giải/giải đấu/loại trận qua analytics; tách Prediction/Risk/Recommendation Breakdown; thêm trạng thái `Chưa đủ cơ sở để khuyến nghị`.
+- Bug gặp phải: pipeline cũ gắn chặt với WMA và số trận; dữ liệu legacy thiếu phút/vị trí/tag; per 90 có nguy cơ tạo số vô nghĩa khi mẫu quá nhỏ; recommendation mạnh có thể xuất hiện khi nhiều rating đến từ thời lượng thi đấu rất thấp.
+- Cách xử lý: gom cấu hình vào `lib/analytics/performance-config.ts`, giữ fallback 90 phút cho dữ liệu cũ, đặt sàn trọng số thay vì loại rating, chỉ bật per 90 từ 270 phút, dùng cỡ mẫu hiệu dụng và tổng phút làm confidence gate, trả lý do cụ thể khi chưa đủ cơ sở.
+- File/khu vực liên quan: `lib/analytics/**`, `lib/prediction/**`, `lib/recommendation/**`, `lib/types.ts`, player status/form extremes/recommendations API, dashboard/player detail/form extremes/recommendation UI, test và README.
+- Ghi chú: không bổ sung ML phức tạp hoặc backtest nâng cao; raw count luôn được giữ để đối chiếu.
+
+## 20/08/2026 - Player Evaluation Algorithm Phase 1
+
+- Công việc đã làm: gom threshold/weight analytics, prediction và risk vào config chung; thêm confidence gate theo cỡ mẫu; đồng bộ cửa sổ 5/10/20 trận cho player status, form extremes và recommendation; đổi biến đếm thắng/thua đậm sang `InWindow`; dùng nhãn cảnh báo trung lập trên UI; bổ sung test boundary.
+- Bug gặp phải: form extremes và recommendation luôn dùng cửa sổ mặc định 5 trận; biến `bigWinCountLast5`/`bigLossCountLast5` mang tên sai khi phân tích 10/20 trận; recommendation mạnh vẫn có thể xuất hiện với mẫu 3–4 trận.
+- Cách xử lý: truyền window xuyên suốt UI/API/service, dùng số trận thực tế, giới hạn confidence theo cỡ mẫu và ưu tiên `MONITOR` khi confidence thấp; giữ key `fraudRisk`/`fraudReasons` nội bộ để tương thích dữ liệu cũ nhưng loại ngôn ngữ kết luận hành vi khỏi UI.
+- File/khu vực liên quan: `lib/analytics`, `lib/prediction`, `lib/risk`, `lib/recommendation`, API player status/form extremes/recommendations, các component tương ứng và test analytics/risk/recommendation.
+- Ghi chú: công thức lõi được giữ nguyên; Phase 1 không bổ sung ML hay chuẩn hóa vị trí nâng cao.
+
 ## 20/08/2026 - Tag mùa giải, giải đấu và loại trận
 
 - Công việc đã làm: thêm tag tùy chọn `season`, `competition`, `matchType` cho tạo/sửa trận; hiển thị và lọc lịch sử theo tag; lọc KPI, rating, WMA và biểu đồ dashboard theo từng nhóm dữ liệu.
@@ -71,3 +87,10 @@
 - Cách xử lý: sắp xếp bằng helper thời gian hiện tại trước khi dựng chuỗi, tính WMA cuộn theo đúng thứ tự đầu vào của analytics, và chỉ vẽ prediction khi giá trị hợp lệ.
 - File/khu vực liên quan: `components/trend-dashboard.tsx`, `components/tracker-app.tsx`, `app/layout.tsx`, `app/globals.css`, `README.md`.
 - Ghi chú: chart dùng SVG thuần React, không thêm dependency; có empty state và tooltip native.
+# 2026-08-20 - Phase 3 backtest and advanced normalization review
+
+- Công việc: thêm walk-forward backtest cho bốn model trên cùng sample, cửa sổ 5/10/20, filter và metric theo position/season/competition/matchType; thêm fixture ẩn danh, regression tests, script và báo cáo Markdown/JSON.
+- Bug gặp phải: snapshot ban đầu chưa phản ánh position adjustment và decay hiện có của Phase 2.
+- Cách xử lý: lấy output thực tế đã được kiểm tra leakage làm regression snapshot; không chỉnh weights/threshold từ fixture nhỏ.
+- File/khu vực: `lib/analytics/backtest.ts`, `scripts/analytics-backtest.ts`, `tests/phase3Backtest.test.ts`, `tests/fixtures/player-backtest.ts`, `reports/`, `package.json`, `README.md`.
+- Ghi chú: hoãn opponent-strength và role baseline chi tiết vì dữ liệu hiện tại chưa đủ tin cậy.

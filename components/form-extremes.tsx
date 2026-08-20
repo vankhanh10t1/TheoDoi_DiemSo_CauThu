@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchWithDebug } from '../lib/client-api';
 import { useAppContext } from './app-context';
+import type { AnalysisWindow, WeightProfile } from '../lib/types';
 
 interface RecentMatch {
   sk: string;
@@ -23,6 +24,8 @@ interface PlayerFormData {
   stabilityLevel: string;
   momentumStatus: string;
   recentMatches: RecentMatch[];
+  analyzedMatchCount: number;
+  confidenceWarning?: string;
 }
 
 interface FormExtremesResponse {
@@ -31,6 +34,7 @@ interface FormExtremesResponse {
   allForms: PlayerFormData[];
   totalPlayers: number;
   evaluatedPlayers: number;
+  analysisWindow: AnalysisWindow;
 }
 
 type LoadingState = 'idle' | 'loading' | 'error' | 'success';
@@ -40,6 +44,9 @@ export function FormExtremesCard() {
   const [data, setData] = useState<FormExtremesResponse | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>(5);
+  const [weightProfile, setWeightProfile] = useState<WeightProfile>('WMA');
+  const [filters, setFilters] = useState({ season: '', competition: '', matchType: '' });
 
   useEffect(() => {
     const loadFormExtremes = async () => {
@@ -47,7 +54,9 @@ export function FormExtremesCard() {
       setError(null);
 
       try {
-        const response = await fetchWithDebug('/api/form-extremes', undefined, { caller: 'FormExtremesCard.loadFormExtremes' });
+        const query = new URLSearchParams({ window: String(analysisWindow), weightProfile });
+        Object.entries(filters).forEach(([key, value]) => { if (value.trim()) query.set(key, value.trim()); });
+        const response = await fetchWithDebug(`/api/form-extremes?${query}`, undefined, { caller: 'FormExtremesCard.loadFormExtremes' });
         const payload = (await response.json()) as FormExtremesResponse & { message?: string };
 
         if (!response.ok) {
@@ -63,7 +72,7 @@ export function FormExtremesCard() {
     };
 
     void loadFormExtremes();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, analysisWindow, weightProfile, filters.season, filters.competition, filters.matchType]);
 
   if (loadingState === 'loading') {
     return (
@@ -104,8 +113,10 @@ export function FormExtremesCard() {
           <p className="panel-kicker">Form Analysis</p>
           <h2>Phong độ cao nhất & thấp nhất</h2>
         </div>
-        <span className="player-pill">{data.evaluatedPlayers} cầu thủ</span>
+        <label>Cửa sổ phân tích <select value={analysisWindow} onChange={(event) => setAnalysisWindow(Number(event.target.value) as AnalysisWindow)}><option value={5}>5 trận gần nhất</option><option value={10}>10 trận gần nhất</option><option value={20}>20 trận gần nhất</option></select></label>
+        <label>Profile <select value={weightProfile} onChange={(event) => setWeightProfile(event.target.value as WeightProfile)}><option value="WMA">WMA</option><option value="DECAY">Decay</option></select></label>
       </div>
+      <div className="match-history-filters"><label>Mùa giải<input value={filters.season} onChange={e=>setFilters({...filters,season:e.target.value})}/></label><label>Giải đấu<input value={filters.competition} onChange={e=>setFilters({...filters,competition:e.target.value})}/></label><label>Loại trận<select value={filters.matchType} onChange={e=>setFilters({...filters,matchType:e.target.value})}><option value="">Tất cả</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label></div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         {/* Best Form Card */}
@@ -190,7 +201,7 @@ export function FormExtremesCard() {
       </div>
 
       <p style={{ fontSize: '12px', color: '#999', marginTop: '16px', textAlign: 'center' }}>
-        Dựa trên WMA của 5 trận gần nhất ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
+        Dựa trên {weightProfile === 'DECAY' ? 'Decay' : 'WMA'} của {data.analysisWindow} trận gần nhất; dùng số trận thực tế nếu lịch sử ngắn hơn ({data.evaluatedPlayers}/{data.totalPlayers} cầu thủ)
       </p>
     </article>
   );

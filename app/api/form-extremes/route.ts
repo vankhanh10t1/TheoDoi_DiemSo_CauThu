@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { listPlayers, getRecentMatches } from '../../../lib/playerService';
 import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import type { RecentMatch } from '../../../lib/types';
 import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
+import { normalizeAnalysisWindow } from '../../../lib/analytics/config';
+import { normalizeMatchTag } from '../../../lib/match-tags';
+import { normalizeWeightProfile } from '../../../lib/analytics/performance-config';
+import { getPositionGroup } from '../../../lib/positions';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +26,10 @@ interface PlayerFormData {
   stabilityLevel: string;
   momentumStatus: string;
   riskLevel: string;
+  analysisWindow: number;
+  analyzedMatchCount: number;
+  confidenceLevel: string;
+  confidenceWarning?: string;
   recentMatches: RecentMatch[];
 }
 
@@ -31,10 +39,14 @@ interface FormExtremesResponse {
   allForms: PlayerFormData[];
   totalPlayers: number;
   evaluatedPlayers: number;
+  analysisWindow: number;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const analysisWindow = normalizeAnalysisWindow(Number(request.nextUrl.searchParams.get('window')));
+    const weightProfile = normalizeWeightProfile(request.nextUrl.searchParams.get('weightProfile'));
+    const filters = { season: normalizeMatchTag(request.nextUrl.searchParams.get('season')), competition: normalizeMatchTag(request.nextUrl.searchParams.get('competition')), matchType: normalizeMatchTag(request.nextUrl.searchParams.get('matchType')) };
     const players = await listPlayers();
 
     if (players.length === 0) {
@@ -44,7 +56,8 @@ export async function GET() {
         worstForm: null,
         allForms: [],
         totalPlayers: 0,
-        evaluatedPlayers: 0
+        evaluatedPlayers: 0,
+        analysisWindow
       },
       { status: 200 }
     );
@@ -55,10 +68,10 @@ export async function GET() {
     const playerForms = (
       await Promise.all(
         players.map(async (player): Promise<PlayerFormData | null> => {
-        const recentMatches = sortRecentMatchesNewestFirst(await getRecentMatches(player.playerId));
+        const recentMatches = sortRecentMatchesNewestFirst(await getRecentMatches(player.playerId, undefined, filters));
 
         if (recentMatches.length >= MIN_MATCHES_FOR_EVALUATION) {
-          const analysis = analyzeRecentMatches(recentMatches);
+          const analysis = analyzeRecentMatches(recentMatches, { window: analysisWindow, weightProfile, positionGroup: getPositionGroup(player.position) });
 
           return {
             playerId: player.playerId,
@@ -75,6 +88,10 @@ export async function GET() {
             stabilityLevel: analysis.stabilityLevel,
             momentumStatus: analysis.momentumStatus,
             riskLevel: analysis.riskLevel,
+            analysisWindow: analysis.analysisWindow,
+            analyzedMatchCount: analysis.analyzedMatchCount,
+            confidenceLevel: analysis.confidenceLevel,
+            confidenceWarning: analysis.confidenceWarning,
             recentMatches
           };
         }
@@ -102,7 +119,8 @@ export async function GET() {
         worstForm,
         allForms: playerForms,
         totalPlayers: players.length,
-        evaluatedPlayers: playerForms.length
+        evaluatedPlayers: playerForms.length,
+        analysisWindow
       },
       { status: 200 }
     );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AnalysisWindow, PlayerStatusResponse, RatingPayload } from '../lib/types';
+import type { AnalysisWindow, PlayerStatusResponse, RatingPayload, WeightProfile } from '../lib/types';
 import { useAppContext } from './app-context';
 import { fetchWithDebug } from '../lib/client-api';
 import { formatMatchDateTimeValue, sortRecentMatchesNewestFirst } from '../lib/match-history';
@@ -50,6 +50,8 @@ export function PlayerDetail() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>(5);
+  const [weightProfile, setWeightProfile] = useState<WeightProfile>('WMA');
+  const [filters, setFilters] = useState({ season: '', competition: '', matchType: '' });
   const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -69,9 +71,9 @@ export function PlayerDetail() {
       setStatusError(null);
 
       try {
-        const res = await fetchWithDebug(
-          `/api/player-status?id=${encodeURIComponent(selectedPlayerId || '')}&window=${analysisWindow}`
-        , undefined, { caller: 'PlayerDetail.loadStatus' });
+        const query = new URLSearchParams({ id: selectedPlayerId || '', window: String(analysisWindow), weightProfile });
+        Object.entries(filters).forEach(([key, value]) => { if (value.trim()) query.set(key, value.trim()); });
+        const res = await fetchWithDebug(`/api/player-status?${query}`, undefined, { caller: 'PlayerDetail.loadStatus' });
         const errorPayload = (await res.json()) as { message?: string };
 
         if (!res.ok) {
@@ -88,7 +90,7 @@ export function PlayerDetail() {
     }
 
     loadStatus();
-  }, [selectedPlayerId, refreshTrigger, analysisWindow]);
+  }, [selectedPlayerId, refreshTrigger, analysisWindow, weightProfile, filters.season, filters.competition, filters.matchType]);
 
   useEffect(() => {
     setRatingHistoryPage(1);
@@ -161,9 +163,16 @@ export function PlayerDetail() {
                 <select value={analysisWindow} onChange={(event) => setAnalysisWindow(Number(event.target.value) as AnalysisWindow)}>
                   <option value={5}>5 trận</option>
                   <option value={10}>10 trận</option>
+                  <option value={20}>20 trận</option>
+                </select>
+              </label>
+              <label>Profile
+                <select value={weightProfile} onChange={(event) => setWeightProfile(event.target.value as WeightProfile)}>
+                  <option value="WMA">WMA</option><option value="DECAY">Decay</option>
                 </select>
               </label>
             </div>
+            <div className="match-history-filters"><label>Mùa giải<input value={filters.season} onChange={e=>setFilters({...filters,season:e.target.value})}/></label><label>Giải đấu<input value={filters.competition} onChange={e=>setFilters({...filters,competition:e.target.value})}/></label><label>Loại trận<select value={filters.matchType} onChange={e=>setFilters({...filters,matchType:e.target.value})}><option value="">Tất cả</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label></div>
             {statusData ? (
               <div>
                 <strong>{statusData.name}</strong>
@@ -176,7 +185,7 @@ export function PlayerDetail() {
                     <div className="score-badge">
                       <div>Đang phân tích {statusData.analyzedMatchCount}/{statusData.analysisWindow} trận đã chọn</div>
                       <div>Điểm trung bình: {statusData.averageScore.toFixed(1)}</div>
-                      <div style={{ marginTop: '4px' }}>WMA: {statusData.wmaScore.toFixed(1)}</div>
+                      <div style={{ marginTop: '4px' }}>{statusData.weightProfile === 'DECAY' ? 'Decay' : 'WMA'}: {statusData.wmaScore.toFixed(1)}</div>
                       <div style={{ marginTop: '4px' }}>Xu hướng: {getTrendLabel(statusData.trendStatus)}</div>
                     </div>
                   ) : (
@@ -201,13 +210,14 @@ export function PlayerDetail() {
                         <div><span className="metric-label">Điểm trung bình</span><strong>{statusData.averageScore.toFixed(1)}</strong></div>
                         <div><span className="metric-label">Điểm điều chỉnh</span><strong>{statusData.adjustedAverageScore.toFixed(1)}</strong></div>
                         <div><span className="metric-label">Ảnh hưởng trận</span><strong>{statusData.matchImpactAvg.toFixed(2)}</strong></div>
-                        <div><span className="metric-label">Thắng đậm</span><strong>{statusData.bigWinCountLast5} ({(statusData.bigWinRate * 100).toFixed(0)}%)</strong></div>
-                        <div><span className="metric-label">Thua đậm</span><strong>{statusData.bigLossCountLast5} ({(statusData.bigLossRate * 100).toFixed(0)}%)</strong></div>
+                        <div><span className="metric-label">Thắng đậm</span><strong>{statusData.bigWinCountInWindow} ({(statusData.bigWinRate * 100).toFixed(0)}%)</strong></div>
+                        <div><span className="metric-label">Thua đậm</span><strong>{statusData.bigLossCountInWindow} ({(statusData.bigLossRate * 100).toFixed(0)}%)</strong></div>
                       </div>
                     ) : null}
 
                     <section className="analysis-section" aria-labelledby="breakdown-heading">
-                      <h4 id="breakdown-heading">Vì sao có đánh giá này?</h4>
+                      <h4 id="breakdown-heading">Prediction Breakdown</h4>
+                      <p>Đầu vào: {statusData.analyzedMatchCount} trận, {statusData.totalMinutes} phút · Profile {statusData.weightProfile} · Vị trí {statusData.positionGroup}.</p>
                       <div className="breakdown-grid">
                         {statusData.breakdown.map((item) => (
                           <article key={item.key} className={`breakdown-item ${item.impact.toLowerCase()}`}>
@@ -217,6 +227,21 @@ export function PlayerDetail() {
                           </article>
                         ))}
                       </div>
+                      {statusData.lowMinutesWarnings.map((warning, index) => <p className="inline-message" key={`${warning}-${index}`}>{warning}</p>)}
+                    </section>
+                    <section className="analysis-section">
+                      <h4>Risk Breakdown</h4>
+                      <div className="status-grid"><div><span className="metric-label">Variance</span><strong>{statusData.variance.toFixed(2)}</strong></div><div><span className="metric-label">Discipline</span><strong>{statusData.disciplineScore?.toFixed(0) ?? '—'}/100</strong></div><div><span className="metric-label">Momentum</span><strong>{statusData.momentum.toFixed(2)}</strong></div><div><span className="metric-label">Confidence</span><strong>{Math.round(statusData.confidence * 100)}%</strong></div><div><span className="metric-label">Cỡ mẫu hiệu dụng</span><strong>{statusData.effectiveSampleSize}</strong></div></div>
+                      <p>{statusData.riskLevel === 'HIGH' ? 'Hệ thống cảnh báo vì có nhiều tín hiệu rủi ro.' : 'Chưa có đủ tín hiệu đồng thời để đưa ra cảnh báo mạnh.'}</p>
+                    </section>
+                    <section className="analysis-section">
+                      <h4>Recommendation Breakdown</h4>
+                      <p><strong>{statusData.recommendationStatus === 'INSUFFICIENT' ? 'Chưa đủ cơ sở để khuyến nghị' : getRecommendationLabel(statusData.recommendation)}</strong></p>
+                      <p>{statusData.recommendationReason}</p>
+                      <p>Độ tin cậy: {Math.round(statusData.confidence * 100)}%. Cần theo dõi: {statusData.recommendationWatchouts.join(' ')}</p>
+                      <h5>Thống kê sự kiện</h5>
+                      <p>Bàn {statusData.eventStats.goals.raw}{statusData.eventStats.goals.per90 === null ? '' : ` (${statusData.eventStats.goals.per90}/90)`} · Kiến tạo {statusData.eventStats.assists.raw}{statusData.eventStats.assists.per90 === null ? '' : ` (${statusData.eventStats.assists.per90}/90)`} · Thẻ vàng {statusData.eventStats.yellowCards.raw} · Thẻ đỏ {statusData.eventStats.redCards.raw} · Lỗi {statusData.eventStats.fouls.raw}</p>
+                      {statusData.eventStats.sampleWarning ? <p className="inline-message">{statusData.eventStats.sampleWarning} Số gốc vẫn được giữ để tham khảo.</p> : null}
                     </section>
 
                     <section className="analysis-section" aria-labelledby="backtest-heading">
@@ -295,9 +320,12 @@ export function PlayerDetail() {
                     Trang sau
                   </button>
                 </div>
+                {'confidenceWarning' in statusData && statusData.confidenceWarning ? (
+                  <p className="inline-message" style={{ marginTop: '12px' }}>{statusData.confidenceWarning}</p>
+                ) : null}
                 {'fraudRisk' in statusData && statusData.fraudRisk ? (
                   <p className="inline-message error" style={{ marginTop: '12px' }}>
-                    Cảnh báo phong độ bất thường: {statusData.fraudReasons.join(', ')}. Dữ liệu này không phải kết luận về hành vi gian lận.
+                    Cảnh báo phong độ bất thường: {statusData.fraudReasons.join(', ')}. Cần theo dõi thêm trước khi đưa ra kết luận.
                   </p>
                 ) : null}
                 {'wmaScore' in statusData ? <details className="analysis-inputs">

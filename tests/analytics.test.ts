@@ -8,6 +8,7 @@ import {
   calculateAdjustedScore
 } from '../lib/analytics';
 import { analyzeRecentMatches } from '../lib/analytics/performance';
+import { classifyAverageScore } from '../lib/analytics/performance';
 
 describe('analytics', () => {
   it('calculates weighted moving average with normalized weights', () => {
@@ -41,9 +42,29 @@ describe('analytics', () => {
     ]);
 
     expect(analysis.fraudRisk).toBe(true);
-    expect(analysis.recommendation).toBe('REPLACE');
+    expect(analysis.recommendation).toBe('MONITOR');
     expect(analysis.riskLevel).toBe('HIGH');
     expect(analysis.wmaScore).toBeLessThan(4.5);
+  });
+
+  it('classifies rating and variance at their shared boundaries', () => {
+    expect(classifyAverageScore(4.44).status).toBe('Needs Monitoring');
+    expect(classifyAverageScore(4.5).status).toBe('Under Review');
+    expect(classifyAverageScore(6).status).toBe('Stable');
+    expect(classifyAverageScore(8).status).toBe('Stable');
+    expect(classifyAverageScore(8.1).status).toBe('Star Player');
+    expect(calculateVariance([5, 7])).toEqual({ variance: 1, stabilityLevel: 'UNSTABLE' });
+    expect(calculateVariance([4, 8])).toEqual({ variance: 4, stabilityLevel: 'UNSTABLE' });
+    expect(calculateVariance([3.9, 8.1]).stabilityLevel).toBe('VOLATILE');
+  });
+
+  it('supports 5, 10 and 20-match windows and reports the actual sample', () => {
+    const matches = Array.from({ length: 15 }, (_, index) => ({ sk: `MATCH#${index}`, score: 7, result: 'Win' as const }));
+    expect(analyzeRecentMatches(matches, 5).analyzedMatchCount).toBe(5);
+    expect(analyzeRecentMatches(matches, 10).analyzedMatchCount).toBe(10);
+    const twenty = analyzeRecentMatches(matches, 20);
+    expect(twenty.analysisWindow).toBe(20);
+    expect(twenty.analyzedMatchCount).toBe(15);
   });
 
   it('uses MatchDate ordering before calculating current form', () => {

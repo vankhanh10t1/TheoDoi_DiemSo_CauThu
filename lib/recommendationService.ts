@@ -1,7 +1,8 @@
 import { analyzeRecentMatches } from './analytics/performance';
 import { recommendationRank } from './recommendation';
 import { sortRecentMatchesNewestFirst } from './match-history';
-import type { MatchResult, RecentMatch, RecommendationAction } from './types';
+import type { AnalysisWindow, MatchResult, RecentMatch, RecommendationAction, WeightProfile } from './types';
+import { getPositionGroup } from './positions';
 import { MIN_MATCHES_FOR_EVALUATION } from './evaluation-policy';
 
 type RecommendationTableItem = {
@@ -22,6 +23,8 @@ type RecommendationTableItem = {
   YellowCards?: unknown;
   RedCards?: unknown;
   Fouls?: unknown;
+  Goals?: unknown; Assists?: unknown; IsStarter?: unknown; MinutesPlayed?: unknown; PositionGroup?: unknown;
+  Competition?: unknown; MatchType?: unknown;
 };
 
 interface RecommendationSourceRecord {
@@ -58,6 +61,12 @@ export interface TransferRecommendation {
   fraudRisk: boolean;
   fraudReasons: string[];
   lossStreak: number;
+  analysisWindow: AnalysisWindow;
+  analyzedMatchCount: number;
+  confidenceWarning: string | undefined;
+  recommendationStatus: 'READY' | 'INSUFFICIENT';
+  weightProfile: WeightProfile;
+  totalMinutes: number;
 }
 
 function isMatchResult(value: unknown): value is MatchResult {
@@ -77,7 +86,9 @@ function isValidScore(value: unknown): value is number {
 }
 
 export function buildRecommendationsFromTableItems(
-  items: RecommendationTableItem[]
+  items: RecommendationTableItem[],
+  analysisWindow: AnalysisWindow = 5,
+  weightProfile: WeightProfile = 'WMA'
 ): TransferRecommendation[] {
   const records = new Map<string, RecommendationSourceRecord>();
 
@@ -127,6 +138,14 @@ export function buildRecommendationsFromTableItems(
       yellowCards: isValidScore(item.YellowCards) ? item.YellowCards : 0,
       redCards: isValidScore(item.RedCards) ? item.RedCards : 0,
       fouls: isValidScore(item.Fouls) ? item.Fouls : 0
+      ,goals: isValidScore(item.Goals) ? item.Goals : 0,
+      assists: isValidScore(item.Assists) ? item.Assists : 0,
+      isStarter: typeof item.IsStarter === 'boolean' ? item.IsStarter : true,
+      minutesPlayed: isValidScore(item.MinutesPlayed) ? item.MinutesPlayed : undefined,
+      positionGroup: getPositionGroup(item.PositionGroup),
+      season: toStringValue(item.Season) || undefined,
+      competition: toStringValue(item.Competition) || undefined,
+      matchType: toStringValue(item.MatchType) || undefined
     });
     records.set(playerId, existingRecord);
   }
@@ -146,7 +165,7 @@ export function buildRecommendationsFromTableItems(
         return null;
       }
 
-      const analysis = analyzeRecentMatches(recentMatches);
+      const analysis = analyzeRecentMatches(recentMatches, { window: analysisWindow, weightProfile, positionGroup: getPositionGroup(record.position) });
 
       return {
         playerId: record.playerId,
@@ -180,7 +199,13 @@ export function buildRecommendationsFromTableItems(
         riskLevel: analysis.riskLevel,
         fraudRisk: analysis.fraudRisk,
         fraudReasons: analysis.fraudReasons,
-        lossStreak: analysis.lossStreak
+        lossStreak: analysis.lossStreak,
+        analysisWindow: analysis.analysisWindow,
+        analyzedMatchCount: analysis.analyzedMatchCount,
+        confidenceWarning: analysis.confidenceWarning,
+        recommendationStatus: analysis.recommendationStatus,
+        weightProfile: analysis.weightProfile,
+        totalMinutes: analysis.totalMinutes
       } satisfies TransferRecommendation;
     })
     .filter((recommendation): recommendation is TransferRecommendation => recommendation !== null)

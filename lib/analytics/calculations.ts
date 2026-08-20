@@ -1,7 +1,6 @@
-import type { MatchResult, MomentumStatus, StabilityLevel, TrendStatus } from '../types';
-import { PERFORMANCE_THRESHOLDS } from './config';
-
-const WMA_WEIGHTS = [0.5, 0.3, 0.2];
+import type { MatchResult, MomentumStatus, RecentMatch, StabilityLevel, TrendStatus, WeightProfile } from '../types';
+import { PERFORMANCE_THRESHOLDS, PERFORMANCE_WEIGHTS } from './config';
+import { getParticipationWeight, WEIGHT_PROFILES } from './performance-config';
 
 function roundToTwoDecimals(value: number): number {
   return Number(value.toFixed(2));
@@ -35,7 +34,7 @@ export function calculateWMA(scores: number[]): number {
   }
 
   const weights = cleanedScores.map((_, index) =>
-    WMA_WEIGHTS[index] ?? WMA_WEIGHTS[WMA_WEIGHTS.length - 1] * 0.6 ** (index - 2)
+    PERFORMANCE_WEIGHTS.wmaRecent[index] ?? PERFORMANCE_WEIGHTS.wmaRecent[PERFORMANCE_WEIGHTS.wmaRecent.length - 1] * PERFORMANCE_WEIGHTS.wmaDecay ** (index - 2)
   );
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
 
@@ -137,6 +136,18 @@ export function calculateLossStreak(results: MatchResult[]): number {
 
 export function clampScore(value: number): number {
   return roundToTwoDecimals(clamp(value, 1, 10));
+}
+
+export function calculateWeightedForm(matches: RecentMatch[], scores: number[], profile: WeightProfile): number {
+  if (!scores.length) return 0;
+  const recencyWeights = scores.map((_, index) => profile === 'DECAY'
+    ? WEIGHT_PROFILES.DECAY.decayRate ** index
+    : (WEIGHT_PROFILES.WMA.recentWeights[index]
+      ?? WEIGHT_PROFILES.WMA.recentWeights[2] * WEIGHT_PROFILES.WMA.tailDecay ** (index - 2)));
+  const weights = recencyWeights.map((weight, index) => weight * getParticipationWeight(matches[index]));
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return calculateAverageScore(scores);
+  return roundToTwoDecimals(scores.reduce((sum, score, index) => sum + score * weights[index], 0) / total);
 }
 
 export function normalizeMarginFlags(result: MatchResult, isBigWin?: boolean, isBigLoss?: boolean) {

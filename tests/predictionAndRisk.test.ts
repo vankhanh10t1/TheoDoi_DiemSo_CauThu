@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createHeuristicPredictionModel } from '../lib/prediction';
-import { calculateRiskScore } from '../lib/risk';
+import { createHeuristicPredictionModel, getConfidenceLevel } from '../lib/prediction';
+import { calculateRiskScore, classifyRiskLevel } from '../lib/risk';
 import { generateRecommendation } from '../lib/recommendation';
 
 describe('prediction and risk engines', () => {
@@ -55,8 +55,8 @@ describe('prediction and risk engines', () => {
       lossStreak: 4,
       predictedScore: 3.9,
       adjustedWma: 3.8,
-      bigWinCountLast5: 0,
-      bigLossCountLast5: 2,
+      bigWinCountInWindow: 0,
+      bigLossCountInWindow: 2,
       hasBigLossUnderFive: true
     });
 
@@ -72,6 +72,21 @@ describe('prediction and risk engines', () => {
     });
 
     expect(risk.riskLevel).toBe('HIGH');
-    expect(recommendation.recommendation).toBe('REPLACE');
+    expect(recommendation.recommendation).toBe('MONITOR');
+    expect(recommendation.reason).toContain('cỡ mẫu nhỏ');
+  });
+
+  it('classifies risk exactly at the shared 35 and 70 boundaries', () => {
+    expect(classifyRiskLevel(34.99)).toBe('LOW');
+    expect(classifyRiskLevel(35)).toBe('MEDIUM');
+    expect(classifyRiskLevel(69.99)).toBe('MEDIUM');
+    expect(classifyRiskLevel(70)).toBe('HIGH');
+  });
+
+  it('classifies confidence exactly at the shared 0.5 and 0.8 boundaries', () => {
+    expect(getConfidenceLevel(0.49)).toBe('LOW');
+    expect(getConfidenceLevel(0.5)).toBe('MEDIUM');
+    expect(getConfidenceLevel(0.79)).toBe('MEDIUM');
+    expect(getConfidenceLevel(0.8)).toBe('HIGH');
   });
 });

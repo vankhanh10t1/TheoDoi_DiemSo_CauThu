@@ -11,3 +11,11 @@ export {
   calculateAdjustedScore,
   normalizeMarginFlags
 } from './calculations';
+
+export {
+  aggregateBacktestMetrics,
+  BACKTEST_MODELS,
+  BACKTEST_WINDOWS,
+  renderBacktestMarkdown,
+  runWalkForwardBacktest
+} from './backtest';

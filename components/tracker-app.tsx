@@ -89,7 +89,7 @@ export function TrackerApp() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
-  const [analyticsFilters, setAnalyticsFilters] = useState({ season: '', competition: '', matchType: '' });
+  const [analyticsFilters, setAnalyticsFilters] = useState({ season: '', competition: '', matchType: '', weightProfile: 'WMA' });
   const [allPlayersFormData, setAllPlayersFormData] = useState<AllPlayersFormRow[]>([]);
   const [formDataLoading, setFormDataLoading] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
@@ -214,7 +214,7 @@ export function TrackerApp() {
     return () => {
       controller.abort();
     };
-  }, [selectedPlayerId, analyticsFilters.season, analyticsFilters.competition, analyticsFilters.matchType]);
+  }, [selectedPlayerId, analyticsFilters.season, analyticsFilters.competition, analyticsFilters.matchType, analyticsFilters.weightProfile]);
 
   async function refreshPlayerStatus(playerId: string) {
     try {
@@ -290,9 +290,9 @@ export function TrackerApp() {
       <section className="hero-card">
         <div>
           <p className="eyebrow">FCON Performance Tracker</p>
-          <h2>Theo dõi phong độ của các cầu thủ thuộc đội bóng trong 5 trận gần nhất</h2>
+          <h2>Theo dõi phong độ cầu thủ theo cửa sổ 5, 10 hoặc 20 trận gần nhất</h2>
           <p className="hero-copy">
-            Bán độ không bao giờ có chỗ đứng trong môn thể thao vua.
+            Đánh giá minh bạch từ dữ liệu phong độ, với cảnh báo trung lập và cỡ mẫu rõ ràng.
           </p>
         </div>
         <div className="hero-metrics">
@@ -490,7 +490,7 @@ export function TrackerApp() {
             </label>
           </div>
 
-          <div className="panel match-history-filters"><label>Mùa giải<input maxLength={80} value={analyticsFilters.season} onChange={e=>setAnalyticsFilters({...analyticsFilters,season:e.target.value})} placeholder="2026-S1"/></label><label>Giải đấu<input maxLength={80} value={analyticsFilters.competition} onChange={e=>setAnalyticsFilters({...analyticsFilters,competition:e.target.value})} placeholder="FVPL"/></label><label>Loại trận<select value={analyticsFilters.matchType} onChange={e=>setAnalyticsFilters({...analyticsFilters,matchType:e.target.value})}><option value="">Tất cả</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label><button type="button" className="secondary-button" onClick={()=>setAnalyticsFilters({season:'',competition:'',matchType:''})}>Đặt lại</button></div>
+          <div className="panel match-history-filters"><label>Mùa giải<input maxLength={80} value={analyticsFilters.season} onChange={e=>setAnalyticsFilters({...analyticsFilters,season:e.target.value})} placeholder="2026-S1"/></label><label>Giải đấu<input maxLength={80} value={analyticsFilters.competition} onChange={e=>setAnalyticsFilters({...analyticsFilters,competition:e.target.value})} placeholder="FVPL"/></label><label>Loại trận<select value={analyticsFilters.matchType} onChange={e=>setAnalyticsFilters({...analyticsFilters,matchType:e.target.value})}><option value="">Tất cả</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label><label>Profile<select value={analyticsFilters.weightProfile} onChange={e=>setAnalyticsFilters({...analyticsFilters,weightProfile:e.target.value})}><option value="WMA">WMA</option><option value="DECAY">Decay</option></select></label><button type="button" className="secondary-button" onClick={()=>setAnalyticsFilters({season:'',competition:'',matchType:'',weightProfile:'WMA'})}>Đặt lại</button></div>
           <div className={`status-card ${statusTone}`}>
             <div className="status-topline">
               <strong>{selectedPlayer?.name ?? 'Chưa chọn cầu thủ'}</strong>
@@ -554,7 +554,7 @@ export function TrackerApp() {
                   </div>
                   <div>
                     <span className="metric-label">Khuyến nghị</span>
-                    <strong>{getRecommendationLabel(statusData.recommendation)}</strong>
+                    <strong>{statusData.recommendationStatus === 'INSUFFICIENT' ? 'CHƯA ĐỦ CƠ SỞ' : getRecommendationLabel(statusData.recommendation)}</strong>
                   </div>
                   <div className={statusData.fraudRisk ? 'status-fraud-cell alert' : 'status-fraud-cell'}>
                     <span className="metric-label">Cảnh báo bất thường</span>
@@ -566,6 +566,9 @@ export function TrackerApp() {
                   </div>
                 </div>
 
+                {statusData.confidenceWarning ? (
+                  <p className="inline-message" style={{ marginTop: '12px' }}>{statusData.confidenceWarning}</p>
+                ) : null}
                 {statusData.fraudRisk ? (
                   <p className="inline-message error status-fraud-alert" style={{ marginTop: '12px' }}>
                     Phong độ bất thường: {statusData.fraudReasons.join(', ')}

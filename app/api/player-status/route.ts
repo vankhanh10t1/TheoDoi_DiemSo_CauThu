@@ -5,12 +5,15 @@ import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
 import { normalizeAnalysisWindow } from '../../../lib/analytics/config';
 import { normalizeMatchTag } from '../../../lib/match-tags';
+import { normalizeWeightProfile } from '../../../lib/analytics/performance-config';
+import { getPositionGroup } from '../../../lib/positions';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const playerId = request.nextUrl.searchParams.get('id')?.trim();
   const analysisWindow = normalizeAnalysisWindow(Number(request.nextUrl.searchParams.get('window')));
+  const weightProfile = normalizeWeightProfile(request.nextUrl.searchParams.get('weightProfile'));
 
   if (!playerId) {
     return NextResponse.json({ message: 'Missing player id' }, { status: 400 });
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const analysis = analyzeRecentMatches(allMatches, analysisWindow);
+  const analysis = analyzeRecentMatches(allMatches, { window: analysisWindow, weightProfile, positionGroup: getPositionGroup(player.position) });
   const assessment = analysis.currentFormScore > 8
     ? { status: 'Star Player', action: 'Giữ chặt đội hình chính', color: 'green' as const }
     : analysis.currentFormScore >= 6
@@ -55,14 +58,14 @@ export async function GET(request: NextRequest) {
       currentFormScore: analysis.currentFormScore,
       adjustedAverageScore: analysis.adjustedAverageScore,
       wmaScore: analysis.wmaScore,
-      bigWinCountLast5: analysis.bigWinCountLast5,
-      bigLossCountLast5: analysis.bigLossCountLast5,
+      bigWinCountInWindow: analysis.bigWinCountInWindow,
+      bigLossCountInWindow: analysis.bigLossCountInWindow,
       bigWinRate: analysis.bigWinRate,
       bigLossRate: analysis.bigLossRate,
       matchImpactAvg: analysis.matchImpactAvg,
       matchCount: allMatches.length,
       status: assessment.status,
-      action: assessment.action,
+      action: analysis.recommendationStatus === 'INSUFFICIENT' ? 'Chưa đủ cơ sở để khuyến nghị' : assessment.action,
       color: assessment.color,
       trendValue: analysis.trendValue,
       trendStatus: analysis.trendStatus,
@@ -73,6 +76,7 @@ export async function GET(request: NextRequest) {
       predictedScore: analysis.predictedScore,
       confidence: analysis.confidence,
       confidenceLevel: analysis.confidenceLevel,
+      confidenceWarning: analysis.confidenceWarning,
       lossStreak: analysis.lossStreak,
       riskScore: analysis.riskScore,
       riskLevel: analysis.riskLevel,
@@ -87,6 +91,15 @@ export async function GET(request: NextRequest) {
       analyzedMatchCount: analysis.analyzedMatchCount,
       breakdown: analysis.breakdown,
       backtest: analysis.backtest,
+      weightProfile: analysis.weightProfile,
+      positionGroup: analysis.positionGroup,
+      totalMinutes: analysis.totalMinutes,
+      effectiveSampleSize: analysis.effectiveSampleSize,
+      participationConfidence: analysis.participationConfidence,
+      lowMinutesWarnings: analysis.lowMinutesWarnings,
+      eventStats: analysis.eventStats,
+      recommendationStatus: analysis.recommendationStatus,
+      recommendationWatchouts: analysis.recommendationWatchouts,
       recentMatches: allMatches
     },
     { status: 200 }

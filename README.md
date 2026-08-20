@@ -100,7 +100,7 @@ lib/evaluationEngine.ts
 lib/recommendationService.ts
 ```
 
-App chỉ đánh giá/khuyến nghị khi cầu thủ có ít nhất 3 trận. Người dùng có thể chọn cửa sổ 5 hoặc 10 trận; WMA, trend, variance, momentum, risk và recommendation đều được tính lại theo số trận thực tế có trong cửa sổ. Mặc định vẫn là 5 trận.
+App chỉ đánh giá/khuyến nghị khi cầu thủ có ít nhất 3 trận. Người dùng có thể chọn thống nhất cửa sổ 5, 10 hoặc 20 trận ở trạng thái cầu thủ, form extremes và recommendation; WMA, trend, variance, momentum, risk và recommendation đều được tính lại theo số trận thực tế có trong cửa sổ. Mặc định vẫn là 5 trận. Mẫu dưới 5 trận có confidence thấp, hiển thị cảnh báo cỡ mẫu và chỉ đưa ra khuyến nghị theo dõi thay vì kết luận mạnh.
 
 Kết quả trả kèm breakdown cho WMA, rating trung bình, trend, variance, momentum, discipline, risk và cỡ mẫu. Giao diện hiển thị giá trị, ý nghĩa, chiều tác động và contribution khi có trọng số. Tín hiệu nhạy cảm được trình bày trung lập là “Cảnh báo bất thường”/“Cần theo dõi thêm”; đây không phải kết luận về hành vi của cầu thủ.
 
@@ -216,7 +216,9 @@ lib/evaluationEngine.ts
 lib/recommendationService.ts
 ```
 
-The app only evaluates/recommends players with at least 3 matches. Users can select a 5- or 10-match analysis window (default: 5); WMA, trend, variance, momentum, risk, and recommendations are recalculated for the actual sample. Responses include an explainability breakdown and a leakage-safe walk-forward backtest with MAE and sample averages. Sensitive signals use neutral monitoring language and must not be interpreted as proof of misconduct.
+The app only evaluates/recommends players with at least 3 matches. Users can select a 5-, 10-, or 20-match analysis window (default: 5); WMA, trend, variance, momentum, risk, and recommendations are recalculated for the actual sample. Responses include an explainability breakdown and a leakage-safe walk-forward backtest with MAE and sample averages. Sensitive signals use neutral monitoring language and must not be interpreted as proof of misconduct.
+
+Phase 2 adds selectable `WMA` and `Decay` profiles. Ratings from short appearances remain visible but receive lower weight and confidence; legacy records without minutes safely fall back to 90 minutes. Raw event totals are retained, while per-90 values require at least 270 minutes. Basic GK/DF/MF/FW profiles vary stability, discipline, rating, and momentum emphasis. Player status, form extremes, recommendations, dashboard analytics, and match history share optional `season`, `competition`, and `matchType` filters. Weak samples return `Chưa đủ cơ sở để khuyến nghị` instead of a strong lineup decision.
 
 ### Vercel Deployment
 
@@ -243,3 +245,7 @@ Dashboard cầu thủ có biểu đồ SVG responsive cho rating, WMA và dự �
 ### Match history API update (20/08/2026)
 
 `GET /api/matches` uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `season`, `competition`, `matchType`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. `POST` and `PATCH` accept the three optional match tags with an 80-character limit.
+
+### Phase 3 backtest (20/08/2026)
+
+Run `npm run analytics:backtest` to compare `current-heuristic`, `last-rating`, `rolling-average`, and `wma-only` on identical leakage-safe samples for windows 5/10/20. The command only reads the anonymous fixture; it does not connect to or mutate the production database. It writes grouped MAE, mean error, sample size, skipped-target details, and the tuning assessment to `reports/backtest-player-evaluation.md` and JSON.

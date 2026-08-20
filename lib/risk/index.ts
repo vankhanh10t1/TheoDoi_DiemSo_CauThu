@@ -1,5 +1,5 @@
 import type { RiskLevel, StabilityLevel, TrendStatus } from '../types';
-import { PERFORMANCE_THRESHOLDS } from '../analytics/config';
+import { PERFORMANCE_THRESHOLDS, PERFORMANCE_WEIGHTS } from '../analytics/config';
 
 export interface RiskInput {
   trendStatus: TrendStatus;
@@ -7,8 +7,8 @@ export interface RiskInput {
   lossStreak: number;
   predictedScore: number;
   adjustedWma: number;
-  bigWinCountLast5: number;
-  bigLossCountLast5: number;
+  bigWinCountInWindow: number;
+  bigLossCountInWindow: number;
   hasBigLossUnderFive: boolean;
 }
 
@@ -17,12 +17,12 @@ export interface RiskAnalysis {
   riskLevel: RiskLevel;
 }
 
-function clampRiskLevel(riskScore: number): RiskLevel {
-  if (riskScore >= PERFORMANCE_THRESHOLDS.highRisk) {
+export function classifyRiskLevel(riskScore: number): RiskLevel {
+  if (riskScore >= PERFORMANCE_THRESHOLDS.riskHigh) {
     return 'HIGH';
   }
 
-  if (riskScore >= PERFORMANCE_THRESHOLDS.mediumRisk) {
+  if (riskScore >= PERFORMANCE_THRESHOLDS.riskMedium) {
     return 'MEDIUM';
   }
 
@@ -37,16 +37,16 @@ export function calculateRiskScore(input: RiskInput): RiskAnalysis {
   const trendRisk = input.trendStatus === 'DOWN' ? 1 : 0;
   const varianceRisk = input.stabilityLevel === 'VOLATILE' ? 1 : input.stabilityLevel === 'UNSTABLE' ? 0.6 : 0;
   const streakRisk = Math.min(1, Math.max(0, input.lossStreak / 3));
-  const predictionRisk = input.predictedScore < 4.5 ? 1 : input.predictedScore < 6 ? 0.5 : 0;
+  const predictionRisk = input.predictedScore < PERFORMANCE_THRESHOLDS.ratingPoor ? 1 : input.predictedScore < PERFORMANCE_THRESHOLDS.ratingAverage ? 0.5 : 0;
 
-  const weightedRisk = trendRisk * 0.3 + varianceRisk * 0.25 + streakRisk * 0.25 + predictionRisk * 0.2;
+  const weightedRisk = trendRisk * PERFORMANCE_WEIGHTS.riskTrend + varianceRisk * PERFORMANCE_WEIGHTS.riskVariance + streakRisk * PERFORMANCE_WEIGHTS.riskStreak + predictionRisk * PERFORMANCE_WEIGHTS.riskPrediction;
   let riskScore = weightedRisk * 100;
 
-  if (input.bigLossCountLast5 >= 2) {
+  if (input.bigLossCountInWindow >= 2) {
     riskScore += 15;
   }
 
-  if (input.bigWinCountLast5 >= 2 && input.adjustedWma >= 7) {
+  if (input.bigWinCountInWindow >= 2 && input.adjustedWma >= 7) {
     riskScore -= 10;
   }
 
@@ -58,7 +58,7 @@ export function calculateRiskScore(input: RiskInput): RiskAnalysis {
 
   return {
     riskScore: Number(riskScore.toFixed(1)),
-    riskLevel: clampRiskLevel(riskScore)
+    riskLevel: classifyRiskLevel(riskScore)
   };
 }
 

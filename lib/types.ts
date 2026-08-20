@@ -7,6 +7,7 @@ export type PredictionConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type RecommendationAction = 'KEEP' | 'MONITOR' | 'BENCH' | 'SELL' | 'REPLACE';
 export type AnalysisWindow = 5 | 10 | 20;
+export type WeightProfile = 'WMA' | 'DECAY';
 export type ContributionImpact = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
 
 export interface AnalysisBreakdownItem {
@@ -108,7 +109,7 @@ export interface PlayerStatusEvaluatedResponse {
   currentFormScore: number;
   wmaScore: number;
   matchCount: number;
-  status: 'Star Player' | 'Stable' | 'Under Review' | 'Needs Monitoring' | 'Fraud';
+  status: 'Star Player' | 'Stable' | 'Under Review' | 'Needs Monitoring';
   action: string;
   color: 'green' | 'white' | 'orange' | 'red';
   trendValue: number;
@@ -120,6 +121,7 @@ export interface PlayerStatusEvaluatedResponse {
   predictedScore: number;
   confidence: number;
   confidenceLevel: PredictionConfidenceLevel;
+  confidenceWarning?: string;
   lossStreak: number;
   riskScore: number;
   riskLevel: RiskLevel;
@@ -127,9 +129,12 @@ export interface PlayerStatusEvaluatedResponse {
   fraudReasons: string[];
   recommendation: RecommendationAction;
   recommendationReason: string;
+  disciplineScore?: number;
+  aggressionIndex?: number;
+  disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
   adjustedAverageScore: number;
-  bigWinCountLast5: number;
-  bigLossCountLast5: number;
+  bigWinCountInWindow: number;
+  bigLossCountInWindow: number;
   bigWinRate: number;
   bigLossRate: number;
   matchImpactAvg: number;
@@ -138,6 +143,15 @@ export interface PlayerStatusEvaluatedResponse {
   analyzedMatchCount: number;
   breakdown: AnalysisBreakdownItem[];
   backtest: PredictionBacktest;
+  weightProfile: WeightProfile;
+  positionGroup: PositionGroup | 'DEFAULT';
+  totalMinutes: number;
+  effectiveSampleSize: number;
+  participationConfidence: number;
+  lowMinutesWarnings: string[];
+  eventStats: EventStatsSummary;
+  recommendationStatus: 'READY' | 'INSUFFICIENT';
+  recommendationWatchouts: string[];
 }
 
 export type PlayerStatusResponse =
@@ -164,6 +178,7 @@ export interface PerformanceAnalysis {
   predictedScore: number;
   confidence: number;
   confidenceLevel: PredictionConfidenceLevel;
+  confidenceWarning?: string;
   lossStreak: number;
   riskScore: number;
   riskLevel: RiskLevel;
@@ -175,8 +190,8 @@ export interface PerformanceAnalysis {
   aggressionIndex?: number;
   disciplineTrend?: 'IMPROVING' | 'STABLE' | 'DETERIORATING';
   adjustedAverageScore: number;
-  bigWinCountLast5: number;
-  bigLossCountLast5: number;
+  bigWinCountInWindow: number;
+  bigLossCountInWindow: number;
   bigWinRate: number;
   bigLossRate: number;
   matchImpactAvg: number;
@@ -184,6 +199,28 @@ export interface PerformanceAnalysis {
   analyzedMatchCount: number;
   breakdown: AnalysisBreakdownItem[];
   backtest: PredictionBacktest;
+  weightProfile: WeightProfile;
+  positionGroup: PositionGroup | 'DEFAULT';
+  totalMinutes: number;
+  effectiveSampleSize: number;
+  participationConfidence: number;
+  lowMinutesWarnings: string[];
+  eventStats: EventStatsSummary;
+  recommendationStatus: 'READY' | 'INSUFFICIENT';
+  recommendationWatchouts: string[];
+}
+
+export interface EventStatValue { raw: number; per90: number | null; }
+export interface EventStatsSummary {
+  totalMinutes: number;
+  per90Available: boolean;
+  sampleWarning?: string;
+  goals: EventStatValue;
+  assists: EventStatValue;
+  yellowCards: EventStatValue;
+  redCards: EventStatValue;
+  fouls: EventStatValue;
+  disciplineEvents: EventStatValue;
 }
 
 export interface RatingPayload {

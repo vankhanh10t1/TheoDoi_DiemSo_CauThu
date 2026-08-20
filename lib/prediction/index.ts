@@ -1,5 +1,6 @@
 import type { PerformanceAnalysis } from '../types';
 import { clampScore } from '../analytics';
+import { getSampleConfidence, PERFORMANCE_THRESHOLDS, PERFORMANCE_WEIGHTS } from '../analytics/config';
 
 export interface PredictionInput {
   wmaScore: number;
@@ -10,6 +11,7 @@ export interface PredictionInput {
   lossStreak: number;
   averageScore: number;
   matchCount?: number;
+  participationConfidence?: number;
 }
 
 export interface PredictionResult {
@@ -30,11 +32,11 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 export function getConfidenceLevel(confidence: number): PerformanceAnalysis['confidenceLevel'] {
-  if (confidence > 0.8) {
+  if (confidence >= PERFORMANCE_THRESHOLDS.confidenceHigh) {
     return 'HIGH';
   }
 
-  if (confidence >= 0.5) {
+  if (confidence >= PERFORMANCE_THRESHOLDS.confidenceMedium) {
     return 'MEDIUM';
   }
 
@@ -45,29 +47,30 @@ export function createHeuristicPredictionModel(): PredictionModel {
   return {
     predict(input: PredictionInput): PredictionResult {
       const boundedTrendAdjustment = clamp(
-        input.trendValue * 0.08 + input.momentum * 0.04,
+        input.trendValue * PERFORMANCE_WEIGHTS.trendAdjustment + input.momentum * PERFORMANCE_WEIGHTS.momentumAdjustment,
         -0.35,
         0.35
       );
       const predictedScore = clampScore(
-        input.wmaScore * 0.65 +
-          input.averageScore * 0.25 +
-          input.recentScore * 0.1 +
+        input.wmaScore * PERFORMANCE_WEIGHTS.predictionWma +
+          input.averageScore * PERFORMANCE_WEIGHTS.predictionAverage +
+          input.recentScore * PERFORMANCE_WEIGHTS.predictionRecent +
           boundedTrendAdjustment
       );
 
-      const sampleConfidence =
-        typeof input.matchCount === 'number' ? Math.min(0.12, input.matchCount * 0.025) : 0.08;
       const variancePenalty =
         input.variance < 1 ? 0.12 : input.variance <= 4 ? -0.08 : -0.25;
-      const confidence = clampConfidence(
+      const signalConfidence = clampConfidence(
         0.5 +
-          sampleConfidence +
           variancePenalty +
           (input.lossStreak === 0 ? 0.08 : input.lossStreak === 1 ? 0.02 : -0.08) +
           (Math.abs(input.trendValue) <= 1 ? 0.06 : 0) +
           (Math.abs(input.wmaScore - input.averageScore) <= 0.7 ? 0.06 : -0.04)
       );
+      let confidence = typeof input.matchCount === 'number'
+        ? Math.min(signalConfidence, getSampleConfidence(input.matchCount))
+        : signalConfidence;
+      if (typeof input.participationConfidence === 'number') confidence = Math.min(confidence, clampConfidence(input.participationConfidence));
 
       return { predictedScore, confidence };
     }

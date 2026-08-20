@@ -1,4 +1,5 @@
 import type { PlayerAssessment, RecentMatch } from './types';
+import type { PerformanceAnalysisOptions } from './analytics/performance';
 import {
   analyzeRecentMatches as analyzeRecentMatchesCore,
   classifyAverageScore as classifyAverageScoreCore,
@@ -17,6 +18,6 @@ export function evaluateRecentMatches(matches: RecentMatch[]): PlayerAssessment 
   return evaluateRecentMatchesCore(matches);
 }
 
-export function analyzeRecentMatches(matches: RecentMatch[], analysisWindow?: number) {
-  return analyzeRecentMatchesCore(matches, analysisWindow);
+export function analyzeRecentMatches(matches: RecentMatch[], options?: number | PerformanceAnalysisOptions) {
+  return analyzeRecentMatchesCore(matches, options);
 }

@@ -69,7 +69,7 @@ describe('recommendationService', () => {
       cardSeason: '22EA',
       position: 'ST',
       matchCount: 3,
-      recommendation: 'KEEP',
+      recommendation: 'MONITOR',
       status: 'Star Player',
       trend: 'UP',
       wmaScore: 8.46,

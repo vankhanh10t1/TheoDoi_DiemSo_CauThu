@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "analytics:backtest": "ts-node scripts/analytics-backtest.ts",
     "db:migrate": "ts-node scripts/db-migrate.ts",
     "db:status": "ts-node scripts/db-migrate.ts --status",
     "db:inspect": "ts-node scripts/db-inspect.ts",
