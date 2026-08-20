@@ -30,6 +30,10 @@ type PlayerHistoryRow = {
   note: string | null;
   created_at: string | Date | null;
   updated_at: string | Date | null;
+  formation: string | null;
+  is_starter: boolean | null;
+  minutes_played: number | null;
+  substitution_minute: number | null;
 };
 
 export type DeletePlayersResult = {
@@ -85,6 +89,11 @@ function mapRecentMatchRow(row: PlayerHistoryRow): RecentMatch {
     goals: row.goals ?? 0,
     assists: row.assists ?? 0,
     note: row.note ?? undefined,
+    formation: row.formation ?? undefined,
+    matchPosition: validDetailedPosition,
+    isStarter: row.is_starter ?? true,
+    minutesPlayed: row.minutes_played ?? undefined,
+    substitutionMinute: row.substitution_minute ?? undefined,
     isBigWin: !!row.is_big_win,
     isBigLoss: !!row.is_big_loss
   };
@@ -140,6 +149,7 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       goals,
       assists,
       note,
+      formation, is_starter, minutes_played, substitution_minute,
       created_at,
       updated_at
     from v_player_match_history
@@ -161,7 +171,7 @@ export async function getPlayersWithMatches(playerIds: string[]): Promise<Array<
     sql`
       select player_id, match_id, match_date, match_time::text as match_time, match_datetime,
         result, is_big_win, is_big_loss, rating, rated_position, yellow_cards, red_cards,
-        fouls, goals, assists, note, created_at, updated_at
+        fouls, goals, assists, note, created_at, updated_at, formation, is_starter, minutes_played, substitution_minute
       from v_player_match_history
       where player_id = any(${uniqueIds}::text[])
       order by match_date desc, match_time desc nulls last, created_at desc

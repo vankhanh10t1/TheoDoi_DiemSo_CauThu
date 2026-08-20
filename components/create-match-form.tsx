@@ -16,6 +16,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
+    formation: '4-3-3',
     note: ''
   });
 
@@ -79,6 +80,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
           opponentName: formData.opponentName,
           myScore: formData.myScore,
           opponentScore: formData.opponentScore,
+          formation: formData.formation,
           note: formData.note
         })
       }, { caller: 'CreateMatchForm.handleSubmit' });
@@ -100,6 +102,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         opponentName: '',
         myScore: 0,
         opponentScore: 0,
+        formation: '4-3-3',
         note: ''
       });
 
@@ -212,6 +215,9 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
             {result === 'LOSE' && `❌ Kết quả: ${formData.myScore} - ${formData.opponentScore} (THUA)`}
           </div>
         )}
+
+        {/* Note */}
+        <div className="field"><label htmlFor="formation">Sơ đồ đội hình</label><select id="formation" value={formData.formation} onChange={(e)=>setFormData({...formData,formation:e.target.value})}><option>4-3-3</option><option>4-2-3-1</option><option>4-4-2</option><option>3-5-2</option><option value="custom">Tùy chỉnh</option></select></div>
 
         {/* Note */}
         <div className="field">

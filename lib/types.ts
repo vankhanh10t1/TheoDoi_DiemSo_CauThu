@@ -81,6 +81,11 @@ export interface RecentMatch {
   isBigWin?: boolean;
   isBigLoss?: boolean;
   opponentName?: string;
+  formation?: string;
+  matchPosition?: DetailedPosition;
+  isStarter?: boolean;
+  minutesPlayed?: number;
+  substitutionMinute?: number;
   prediction?: number;
 }
 
@@ -209,6 +214,7 @@ export interface Match {
   isBigWin?: boolean;
   isBigLoss?: boolean;
   note?: string;
+  formation?: string;
   ratingCount?: number;
   averageRating?: number;
   ratingVersion?: number;
@@ -225,6 +231,10 @@ export interface PlayerMatchRating {
   playerId: string;
   rating: number; // 1-10
   position?: DetailedPosition;
+  matchPosition?: DetailedPosition;
+  isStarter?: boolean;
+  minutesPlayed?: number;
+  substitutionMinute?: number;
   yellowCards?: number;
   redCards?: number;
   fouls?: number;
@@ -245,6 +255,7 @@ export interface CreateMatchPayload {
   myScore: number;
   opponentScore: number;
   note?: string;
+  formation?: string;
 }
 
 /**
@@ -255,6 +266,10 @@ export interface SaveMatchRatingsPayload {
     playerId: string;
     rating: number;
     position?: DetailedPosition;
+    matchPosition?: DetailedPosition;
+    isStarter: boolean;
+    minutesPlayed: number;
+    substitutionMinute?: number;
     yellowCards?: number;
     redCards?: number;
     fouls?: number;

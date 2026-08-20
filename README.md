@@ -1,5 +1,9 @@
 # FCON Performance Tracker
 
+## Đội hình xuất phát và hiệu quả vị trí
+
+Mỗi trận hỗ trợ lưu sơ đồ (`formation`); mỗi rating lưu vị trí theo trận, trạng thái đá chính/dự bị, số phút thi đấu và phút thay người. Tab **Hiệu quả đội hình** tổng hợp 5/10/20 trận gần nhất theo vị trí và sơ đồ, đồng thời cảnh báo khi có dưới 3 mẫu. Chạy `npm run db:migrate` để áp dụng migration `003_starting_lineup.sql` trước khi dùng tính năng.
+
 ## Tiếng Việt
 
 Web app cá nhân để theo dõi phong độ cầu thủ bóng đá: quản lý đội hình, tạo trận, nhập rating, xem lịch sử phong độ và đưa ra khuyến nghị dựa trên dữ liệu trận đấu.

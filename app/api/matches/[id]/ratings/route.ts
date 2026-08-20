@@ -3,6 +3,7 @@ import { saveMatchRatings, getMatchRatings, getMatchById, deletePlayerMatchRatin
 import { getPlayerMetadata, listPlayers } from '../../../../../lib/playerService';
 import { hasAtMostOneDecimalPlace, parseDecimalRating } from '../../../../../lib/rating-validation';
 import type { SaveMatchRatingsPayload } from '../../../../../lib/types';
+import { isDetailedPosition } from '../../../../../lib/positions';
 
 /**
  * POST /api/matches/:id/ratings - Save multiple player ratings for a match
@@ -101,6 +102,24 @@ export async function POST(
       }
 
       rating.rating = Math.round(parsedRating * 10) / 10;
+
+      const matchPosition = rating.matchPosition ?? rating.position;
+      if (!isDetailedPosition(matchPosition)) {
+        return NextResponse.json({ error: `Vị trí thi đấu của ${rating.playerId} không hợp lệ.`, code: 'INVALID_MATCH_POSITION' }, { status: 400 });
+      }
+      rating.position = matchPosition;
+      // Backward-compatible defaults for older API clients; the lineup form sends both fields.
+      if (rating.isStarter === undefined) rating.isStarter = true;
+      if (rating.minutesPlayed === undefined) rating.minutesPlayed = rating.isStarter ? 90 : 0;
+      if (typeof rating.isStarter !== 'boolean') {
+        return NextResponse.json({ error: `Cần chọn đá chính hoặc dự bị cho ${rating.playerId}.`, code: 'INVALID_STARTER_STATUS' }, { status: 400 });
+      }
+      if (!Number.isInteger(rating.minutesPlayed) || rating.minutesPlayed < 0 || rating.minutesPlayed > 120) {
+        return NextResponse.json({ error: `Số phút thi đấu của ${rating.playerId} phải từ 0 đến 120.`, code: 'INVALID_MINUTES' }, { status: 400 });
+      }
+      if (rating.substitutionMinute !== undefined && rating.substitutionMinute !== null && (!Number.isInteger(rating.substitutionMinute) || rating.substitutionMinute < 0 || rating.substitutionMinute > 120)) {
+        return NextResponse.json({ error: `Phút thay người của ${rating.playerId} phải từ 0 đến 120 hoặc để trống.`, code: 'INVALID_SUBSTITUTION_MINUTE' }, { status: 400 });
+      }
 
       if (!playerIds.has(rating.playerId.toLowerCase())) {
         return NextResponse.json(

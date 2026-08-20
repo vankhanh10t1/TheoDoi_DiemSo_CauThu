@@ -56,7 +56,7 @@ export async function PATCH(
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Body phải là một object JSON', code: 'INVALID_REQUEST' }, { status: 400 });
     }
-    const allowed = new Set(['matchDate', 'matchDateTime', 'opponentName', 'myScore', 'opponentScore', 'note']);
+    const allowed = new Set(['matchDate', 'matchDateTime', 'opponentName', 'myScore', 'opponentScore', 'note', 'formation']);
     if (Object.keys(body).some((key) => !allowed.has(key)) || Object.keys(body).length === 0) {
       return NextResponse.json({ error: 'Body không có trường cập nhật hợp lệ', code: 'INVALID_REQUEST' }, { status: 400 });
     }
@@ -65,6 +65,9 @@ export async function PATCH(
     }
     if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > 1000)) {
       return NextResponse.json({ error: 'Ghi chú phải là chuỗi tối đa 1000 ký tự', code: 'INVALID_NOTE' }, { status: 400 });
+    }
+    if (body.formation !== undefined && (typeof body.formation !== 'string' || body.formation.length > 30)) {
+      return NextResponse.json({ error: 'Sơ đồ phải là chuỗi tối đa 30 ký tự', code: 'INVALID_FORMATION' }, { status: 400 });
     }
 
     // Validate scores if provided

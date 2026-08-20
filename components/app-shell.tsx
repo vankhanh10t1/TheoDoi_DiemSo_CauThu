@@ -7,6 +7,7 @@ import { TransferRecommendation } from './transfer-recommendation';
 import { PlayerDetail } from './player-detail';
 import { MatchHistory } from './match-history';
 import { PlayerComparison } from './player-comparison';
+import { LineupAnalytics } from './lineup-analytics';
 import { useAppContext, type AppTab } from './app-context';
 
 export function AppShell() {
@@ -23,6 +24,10 @@ export function AppShell() {
           >
             📊 Rating
           </NavButton>
+          <NavButton
+            active={currentTab === 'lineup-analytics'}
+            onClick={() => setCurrentTab('lineup-analytics')}
+          >Hiệu quả đội hình</NavButton>
           <NavButton
             active={currentTab === 'comparison'}
             onClick={() => setCurrentTab('comparison')}
@@ -56,6 +61,7 @@ export function AppShell() {
         {currentTab === 'squad' && <SquadManagement />}
         {currentTab === 'recommendations' && <TransferRecommendation />}
         {currentTab === 'comparison' && <PlayerComparison />}
+        {currentTab === 'lineup-analytics' && <LineupAnalytics />}
         {currentTab === 'player-detail' && <PlayerDetail />}
       </main>
     </div>

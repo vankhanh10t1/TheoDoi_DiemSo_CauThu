@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       myScore: body.myScore,
       opponentScore: body.opponentScore,
       note: body.note
+      ,formation: typeof body.formation === 'string' ? body.formation.trim() || undefined : undefined
     };
 
     const match = await createMatch(payload);

@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - Đội hình xuất phát và hiệu quả vị trí
+
+- Công việc đã làm: thêm sơ đồ trận, vị trí theo trận, đá chính/dự bị, phút thi đấu/phút thay người; mở rộng form, API upsert, lịch sử cầu thủ và analytics 5/10/20 trận theo vị trí/sơ đồ.
+- Bug gặp phải: dữ liệu cũ không có lineup và khóa rating hiện tại phải tiếp tục chống trùng.
+- Cách xử lý: migration dùng cột nullable/default an toàn, fallback đá chính cho bản ghi cũ, giữ khóa chính `(match_id, player_id)`, validate 0–120 phút ở API và cảnh báo mẫu dưới 3.
+- File/khu vực liên quan: `database/migrations/003_starting_lineup.sql`, `lib/types.ts`, `lib/matchService.ts`, `lib/playerService.ts`, `lib/analytics/lineup.ts`, `app/api/matches/**`, `app/api/analytics/lineup`, `components/**`.
+- Ghi chú: chưa triển khai kéo-thả sân bóng; dành cho phase sau.
+
 ## 20/08/2026 - So sánh cầu thủ
 
 - Công việc đã làm: thêm tab so sánh 2–4 cầu thủ cùng nhóm vị trí, bộ lọc 5/10/20 trận hoặc khoảng ngày, radar SVG, bảng metric có highlight, mở chi tiết và endpoint batch `POST /api/analytics/players/compare`.

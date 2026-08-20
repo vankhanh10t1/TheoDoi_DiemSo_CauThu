@@ -96,6 +96,7 @@ export function TrackerApp() {
     opponentName: '',
     myScore: 0,
     opponentScore: 0,
+    formation: '4-3-3',
     note: ''
   });
   const [creatingMatch, setCreatingMatch] = useState(false);
@@ -247,6 +248,7 @@ export function TrackerApp() {
           opponentName: createForm.opponentName,
           myScore: createForm.myScore,
           opponentScore: createForm.opponentScore,
+          formation: createForm.formation,
           note: createForm.note
         })
       }, { caller: 'TrackerApp.handleCreateMatch' });
@@ -305,6 +307,7 @@ export function TrackerApp() {
                 <div><strong>Trận:</strong> {currentMatch.opponentName || 'N/A'} — {currentMatch.myScore}-{currentMatch.opponentScore}</div>
                 <div><strong>Ngày:</strong> {formatMatchDateValue(currentMatch)}</div>
                 <div><strong>Kết quả:</strong> {currentMatch.result}</div>
+                <div><strong>Sơ đồ:</strong> {currentMatch.formation || 'Chưa nhập'}</div>
               </div>
 
               <button
@@ -338,6 +341,13 @@ export function TrackerApp() {
                   />
                 </label>
               </div>
+
+              <label className="field">
+                <span>Sơ đồ đội hình</span>
+                <select value={createForm.formation} onChange={(e) => setCreateForm({ ...createForm, formation: e.target.value })}>
+                  <option value="4-3-3">4-3-3</option><option value="4-2-3-1">4-2-3-1</option><option value="4-4-2">4-4-2</option><option value="3-5-2">3-5-2</option><option value="custom">Tùy chỉnh</option>
+                </select>
+              </label>
 
               <div className="field-grid">
                 <label className="field">

@@ -19,6 +19,7 @@ type MatchRow = {
   is_big_win: boolean;
   is_big_loss: boolean;
   note: string | null;
+  formation: string | null;
   rating_count?: number;
   average_rating?: string | number | null;
   rating_version: number;
@@ -37,6 +38,9 @@ type RatingRow = {
   goals: number | null;
   assists: number | null;
   note: string | null;
+  is_starter: boolean | null;
+  minutes_played: number | null;
+  substitution_minute: number | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -84,6 +88,7 @@ function mapMatchRow(row: MatchRow): Match {
     isBigWin: !!row.is_big_win,
     isBigLoss: !!row.is_big_loss,
     note: row.note ?? undefined,
+    formation: row.formation ?? undefined,
     ratingCount: row.rating_count,
     averageRating: row.average_rating == null ? undefined : Number(row.average_rating),
     ratingVersion: row.rating_version,
@@ -99,6 +104,10 @@ function mapRatingRow(row: RatingRow): PlayerMatchRating {
     playerId: row.player_id,
     rating: Number(row.rating),
     position: (row.position ?? undefined) as PlayerMatchRating['position'],
+    matchPosition: (row.position ?? undefined) as PlayerMatchRating['matchPosition'],
+    isStarter: row.is_starter ?? true,
+    minutesPlayed: row.minutes_played ?? undefined,
+    substitutionMinute: row.substitution_minute ?? undefined,
     yellowCards: row.yellow_cards ?? 0,
     redCards: row.red_cards ?? 0,
     fouls: row.fouls ?? 0,
@@ -144,6 +153,7 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
         is_big_win,
         is_big_loss,
         note,
+        formation,
         rating_version,
         created_at,
         updated_at
@@ -160,6 +170,7 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
         ${isBigWin},
         ${isBigLoss},
         ${payload.note ?? null},
+        ${payload.formation ?? null},
         0,
         ${now},
         ${now}
@@ -265,6 +276,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
   const matchTime = toDbMatchTime(matchDateTime) ?? existing.matchTime ?? null;
   const opponentName = Object.prototype.hasOwnProperty.call(payload, 'opponentName') ? payload.opponentName?.trim() || null : existing.opponentName ?? null;
   const note = Object.prototype.hasOwnProperty.call(payload, 'note') ? payload.note?.trim() || null : existing.note ?? null;
+  const formation = Object.prototype.hasOwnProperty.call(payload, 'formation') ? payload.formation?.trim() || null : existing.formation ?? null;
 
   const rows = (await sql`
     update matches
@@ -279,6 +291,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
       is_big_win = ${isBigWin},
       is_big_loss = ${isBigLoss},
       note = ${note},
+      formation = ${formation},
       updated_at = ${now}
     where match_id = ${matchId}
       and rating_version = ${existing.ratingVersion ?? 0}
@@ -342,6 +355,9 @@ export async function saveMatchRatings(
           player_id,
           rating,
           position,
+          is_starter,
+          minutes_played,
+          substitution_minute,
           yellow_cards,
           red_cards,
           fouls,
@@ -356,6 +372,9 @@ export async function saveMatchRatings(
           ${ratingData.playerId},
           ${rating},
           ${ratingData.position ?? null},
+          ${ratingData.isStarter},
+          ${ratingData.minutesPlayed},
+          ${ratingData.substitutionMinute ?? null},
           ${ratingData.yellowCards ?? 0},
           ${ratingData.redCards ?? 0},
           ${ratingData.fouls ?? 0},
@@ -369,6 +388,9 @@ export async function saveMatchRatings(
         do update set
           rating = excluded.rating,
           position = excluded.position,
+          is_starter = excluded.is_starter,
+          minutes_played = excluded.minutes_played,
+          substitution_minute = excluded.substitution_minute,
           yellow_cards = excluded.yellow_cards,
           red_cards = excluded.red_cards,
           fouls = excluded.fouls,
