@@ -224,6 +224,10 @@ npm run build
 - Keep DynamoDB for a while after migration for backup/comparison.
 - The app currently has no authentication/authorization; add protection before making it broadly public.
 
+### Dashboard xu hướng (20/08/2026)
+
+Dashboard cầu thủ có biểu đồ SVG responsive cho rating, WMA và dự đoán hiện tại; KPI kết quả, bàn thắng và kiến tạo cập nhật theo 5, 10, 20 trận hoặc khoảng ngày tùy chọn. Biểu đồ dùng analytics sẵn có nên không bổ sung chart dependency. Toàn bộ giao diện dùng Roboto qua `next/font/google`.
+
 ### Match history API update (20/08/2026)
 
 `GET /api/matches` now uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. The UI supports filtering, match edit/delete, and rating updates without a full-page reload.

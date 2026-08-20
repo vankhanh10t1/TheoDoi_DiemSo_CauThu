@@ -28,7 +28,7 @@ body {
 }
 
 body {
-  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  font-family: var(--font-roboto), Roboto, 'Segoe UI', sans-serif;
   color: var(--text);
   background:
     radial-gradient(circle at top left, rgba(15, 125, 82, 0.08), transparent 28%),
@@ -1469,3 +1469,35 @@ h2 {
     flex: 1;
   }
 }
+/* Dashboard xu hướng */
+.trend-dashboard { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+.trend-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.trend-heading-row h3 { margin: 0; font-size: 1.25rem; }
+.trend-range { display: flex; gap: 6px; flex-wrap: wrap; }
+.trend-range button { border: 1px solid var(--border); background: var(--surface-strong); color: var(--muted); border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+.trend-range button.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.trend-dates { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.trend-dates label { display: grid; gap: 5px; color: var(--muted); font-size: .82rem; }
+.trend-dates input { border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+.trend-kpis { display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 10px; margin: 18px 0; }
+.trend-kpis div { padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.7); }
+.trend-kpis span { display: block; color: var(--muted); font-size: .78rem; margin-bottom: 5px; }
+.trend-kpis strong { font-size: 1.18rem; }
+.trend-empty { padding: 36px 16px; text-align: center; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); }
+.trend-chart-wrap { overflow-x: auto; padding-bottom: 4px; }
+.trend-chart { display: block; width: 100%; min-width: 520px; height: auto; }
+.trend-chart text { fill: var(--muted); font-size: 11px; }
+.grid-line { stroke: rgba(15,125,82,.12); stroke-width: 1; }
+.chart-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.rating-line { stroke: #0f7d52; }
+.wma-line { stroke: #d19b00; }
+.prediction-line { stroke: #7067cf; stroke-dasharray: 8 7; stroke-width: 2; }
+.rating-dot { fill: #fff; stroke: #0f7d52; stroke-width: 3; }
+.trend-legend { display: flex; gap: 18px; justify-content: flex-end; color: var(--muted); font-size: .8rem; }
+.trend-legend span::before { content: ''; display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; background: #0f7d52; }
+.trend-legend .wma::before { background: #d19b00; }
+.trend-legend .prediction::before { background: repeating-linear-gradient(90deg,#7067cf 0 7px,transparent 7px 11px); }
+.trend-axis-labels { min-width: 520px; display: flex; justify-content: space-between; padding: 0 14px 0 36px; color: var(--muted); font-size: .68rem; }
+
+@media (max-width: 760px) { .trend-kpis { grid-template-columns: repeat(3, minmax(90px, 1fr)); } }
+@media (max-width: 480px) { .trend-kpis { grid-template-columns: repeat(2, minmax(90px, 1fr)); } .trend-range button { flex: 1 1 auto; } }

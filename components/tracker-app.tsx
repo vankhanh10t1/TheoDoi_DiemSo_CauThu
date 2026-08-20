@@ -13,6 +13,7 @@ import {
   sortRecentMatchesNewestFirst
 } from '../lib/match-history';
 import { createSubmitMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
+import { TrendDashboard } from './trend-dashboard';
 
 const RATING_HISTORY_ITEMS_PER_PAGE = 5;
 
@@ -593,6 +594,7 @@ export function TrackerApp() {
               </div>
             ) : null}
           </div>
+          {statusData && 'recentMatches' in statusData ? <TrendDashboard matches={statusData.recentMatches} prediction={'predictedScore' in statusData ? statusData.predictedScore : undefined} /> : null}
         </article>
       </section>
 

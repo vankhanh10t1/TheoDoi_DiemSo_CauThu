@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
+import { Roboto } from 'next/font/google';
 import './globals.css';
+
+const roboto = Roboto({ subsets: ['latin', 'vietnamese'], variable: '--font-roboto', display: 'swap' });
 
 export const metadata = {
   title: 'FCON Performance Tracker',
@@ -9,7 +12,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="vi">
-      <body>{children}</body>
+      <body className={roboto.variable}>{children}</body>
     </html>
   );
 }
