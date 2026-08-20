@@ -56,4 +56,20 @@ describe('analytics', () => {
     expect(analysis.currentFormScore).toBe(6.76);
     expect(analysis.trendStatus).toBe('UP');
   });
+
+  it('updates the full analysis and explainability for a 10-match window', () => {
+    const matches = Array.from({ length: 10 }, (_, index) => ({
+      sk: `MATCH#${10 - index}`,
+      matchDate: `2026-01-${String(10 - index).padStart(2, '0')}`,
+      score: index < 5 ? 9 : 3,
+      result: (index < 5 ? 'Win' : 'Loss') as 'Win' | 'Loss'
+    }));
+    const five = analyzeRecentMatches(matches, 5);
+    const ten = analyzeRecentMatches(matches, 10);
+    expect(five.analyzedMatchCount).toBe(5);
+    expect(ten.analyzedMatchCount).toBe(10);
+    expect(ten.wmaScore).not.toBe(five.wmaScore);
+    expect(ten.breakdown.length).toBeGreaterThan(0);
+    expect(ten.backtest.sampleSize).toBe(7);
+  });
 });

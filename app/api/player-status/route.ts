@@ -3,11 +3,13 @@ import { analyzeRecentMatches } from '../../../lib/evaluationEngine';
 import { getPlayerMetadata, getRecentMatches } from '../../../lib/playerService';
 import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
+import { normalizeAnalysisWindow } from '../../../lib/analytics/config';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const playerId = request.nextUrl.searchParams.get('id')?.trim();
+  const analysisWindow = normalizeAnalysisWindow(Number(request.nextUrl.searchParams.get('window')));
 
   if (!playerId) {
     return NextResponse.json({ message: 'Missing player id' }, { status: 400 });
@@ -19,7 +21,6 @@ export async function GET(request: NextRequest) {
   }
 
   const allMatches = sortRecentMatchesNewestFirst(await getRecentMatches(playerId));
-  const matchesForAnalysis = allMatches.slice(0, 5);
 
   if (allMatches.length < MIN_MATCHES_FOR_EVALUATION) {
     return NextResponse.json(
@@ -35,14 +36,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const analysis = analyzeRecentMatches(matchesForAnalysis);
+  const analysis = analyzeRecentMatches(allMatches, analysisWindow);
   const assessment = analysis.currentFormScore > 8
     ? { status: 'Star Player', action: 'Giữ chặt đội hình chính', color: 'green' as const }
     : analysis.currentFormScore >= 6
       ? { status: 'Stable', action: 'Tiếp tục tin dùng', color: 'white' as const }
       : analysis.currentFormScore >= 4.5
         ? { status: 'Under Review', action: 'Đẩy lên ghế dự bị', color: 'orange' as const }
-        : { status: 'Fraud', action: 'Thanh lý ngay lập tức', color: 'red' as const };
+        : { status: 'Needs Monitoring', action: 'Cần theo dõi thêm', color: 'red' as const };
 
   return NextResponse.json(
     {
@@ -80,6 +81,10 @@ export async function GET(request: NextRequest) {
       disciplineScore: analysis.disciplineScore,
       aggressionIndex: analysis.aggressionIndex,
       disciplineTrend: analysis.disciplineTrend,
+      analysisWindow: analysis.analysisWindow,
+      analyzedMatchCount: analysis.analyzedMatchCount,
+      breakdown: analysis.breakdown,
+      backtest: analysis.backtest,
       recentMatches: allMatches
     },
     { status: 200 }

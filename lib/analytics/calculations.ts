@@ -1,4 +1,5 @@
 import type { MatchResult, MomentumStatus, StabilityLevel, TrendStatus } from '../types';
+import { PERFORMANCE_THRESHOLDS } from './config';
 
 const WMA_WEIGHTS = [0.5, 0.3, 0.2];
 
@@ -27,13 +28,15 @@ export function calculateAverageScore(scores: number[]): number {
 }
 
 export function calculateWMA(scores: number[]): number {
-  const cleanedScores = sanitizeScores(scores).slice(0, 3);
+  const cleanedScores = sanitizeScores(scores);
 
   if (cleanedScores.length === 0) {
     return 0;
   }
 
-  const weights = WMA_WEIGHTS.slice(0, cleanedScores.length);
+  const weights = cleanedScores.map((_, index) =>
+    WMA_WEIGHTS[index] ?? WMA_WEIGHTS[WMA_WEIGHTS.length - 1] * 0.6 ** (index - 2)
+  );
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
 
   const weightedSum = cleanedScores.reduce(
@@ -45,7 +48,7 @@ export function calculateWMA(scores: number[]): number {
 }
 
 export function calculateTrend(scores: number[]): { trendValue: number; trendStatus: TrendStatus } {
-  const cleanedScores = sanitizeScores(scores).slice(0, 3);
+  const cleanedScores = sanitizeScores(scores);
 
   if (cleanedScores.length < 2) {
     return { trendValue: 0, trendStatus: 'STABLE' };
@@ -53,11 +56,11 @@ export function calculateTrend(scores: number[]): { trendValue: number; trendSta
 
   const trendValue = roundToTwoDecimals(cleanedScores[0] - cleanedScores[cleanedScores.length - 1]);
 
-  if (trendValue > 1) {
+  if (trendValue > PERFORMANCE_THRESHOLDS.trend) {
     return { trendValue, trendStatus: 'UP' };
   }
 
-  if (trendValue < -1) {
+  if (trendValue < -PERFORMANCE_THRESHOLDS.trend) {
     return { trendValue, trendStatus: 'DOWN' };
   }
 
@@ -75,11 +78,11 @@ export function calculateVariance(scores: number[]): { variance: number; stabili
   const variance = cleanedScores.reduce((sum, score) => sum + (score - average) ** 2, 0) / cleanedScores.length;
   const roundedVariance = roundToTwoDecimals(variance);
 
-  if (roundedVariance < 1) {
+  if (roundedVariance < PERFORMANCE_THRESHOLDS.stableVariance) {
     return { variance: roundedVariance, stabilityLevel: 'STABLE' };
   }
 
-  if (roundedVariance <= 4) {
+  if (roundedVariance <= PERFORMANCE_THRESHOLDS.volatileVariance) {
     return { variance: roundedVariance, stabilityLevel: 'UNSTABLE' };
   }
 
@@ -87,7 +90,7 @@ export function calculateVariance(scores: number[]): { variance: number; stabili
 }
 
 export function calculateMomentum(scores: number[]): { momentum: number; momentumStatus: MomentumStatus } {
-  const cleanedScores = sanitizeScores(scores).slice(0, 5);
+  const cleanedScores = sanitizeScores(scores);
 
   if (cleanedScores.length < 2) {
     return { momentum: 0, momentumStatus: 'NORMAL' };
@@ -107,11 +110,11 @@ export function calculateMomentum(scores: number[]): { momentum: number; momentu
   );
   const momentum = roundToTwoDecimals(denominator === 0 ? 0 : numerator / denominator);
 
-  if (momentum > 0.35) {
+  if (momentum > PERFORMANCE_THRESHOLDS.hotMomentum) {
     return { momentum, momentumStatus: 'HOT' };
   }
 
-  if (momentum < -0.35) {
+  if (momentum < -PERFORMANCE_THRESHOLDS.hotMomentum) {
     return { momentum, momentumStatus: 'COLD' };
   }
 

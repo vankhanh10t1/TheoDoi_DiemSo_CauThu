@@ -100,7 +100,11 @@ lib/evaluationEngine.ts
 lib/recommendationService.ts
 ```
 
-App chỉ đánh giá/khuyến nghị khi cầu thủ có ít nhất 3 trận. Các chỉ số gồm WMA, current form, trend, variance, momentum, risk, discipline và recommendation `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
+App chỉ đánh giá/khuyến nghị khi cầu thủ có ít nhất 3 trận. Người dùng có thể chọn cửa sổ 5 hoặc 10 trận; WMA, trend, variance, momentum, risk và recommendation đều được tính lại theo số trận thực tế có trong cửa sổ. Mặc định vẫn là 5 trận.
+
+Kết quả trả kèm breakdown cho WMA, rating trung bình, trend, variance, momentum, discipline, risk và cỡ mẫu. Giao diện hiển thị giá trị, ý nghĩa, chiều tác động và contribution khi có trọng số. Tín hiệu nhạy cảm được trình bày trung lập là “Cảnh báo bất thường”/“Cần theo dõi thêm”; đây không phải kết luận về hành vi của cầu thủ.
+
+Backtest dùng phương pháp walk-forward: mỗi rating thực tế chỉ được so với dự đoán tạo từ các trận xảy ra trước nó. Các metric gồm MAE, số mẫu, prediction trung bình và rating thực tế trung bình; cần tối thiểu 4 trận để có mẫu đầu tiên.
 
 ### Deploy Vercel
 
@@ -217,7 +221,7 @@ lib/evaluationEngine.ts
 lib/recommendationService.ts
 ```
 
-The app only evaluates/recommends players with at least 3 matches. Metrics include WMA, current form, trend, variance, momentum, risk, discipline, and recommendations: `KEEP`, `MONITOR`, `BENCH`, `SELL`, `REPLACE`.
+The app only evaluates/recommends players with at least 3 matches. Users can select a 5- or 10-match analysis window (default: 5); WMA, trend, variance, momentum, risk, and recommendations are recalculated for the actual sample. Responses include an explainability breakdown and a leakage-safe walk-forward backtest with MAE and sample averages. Sensitive signals use neutral monitoring language and must not be interpreted as proof of misconduct.
 
 ### Vercel Deployment
 

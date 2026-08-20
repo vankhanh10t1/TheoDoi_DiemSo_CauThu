@@ -160,7 +160,7 @@ export function buildRecommendationsFromTableItems(
               ? 'Stable'
               : analysis.currentFormScore >= 4.5
                 ? 'Under Review'
-                : 'Fraud',
+                : 'Needs Monitoring',
         averageScore: analysis.averageScore,
         wmaScore: analysis.wmaScore,
         matchCount: recentMatches.length,

@@ -24,7 +24,7 @@ describe('evaluationEngine', () => {
     });
   });
 
-  it('classifies under review and fraud by thresholds', () => {
+  it('classifies under review and neutral monitoring status by thresholds', () => {
     expect(classifyAverageScore(4.5)).toEqual({
       averageScore: 4.5,
       status: 'Under Review',
@@ -34,8 +34,8 @@ describe('evaluationEngine', () => {
 
     expect(classifyAverageScore(4.44)).toEqual({
       averageScore: 4.4,
-      status: 'Fraud',
-      action: 'Thanh lý ngay lập tức',
+      status: 'Needs Monitoring',
+      action: 'Cần theo dõi thêm',
       color: 'red'
     });
   });
@@ -51,10 +51,10 @@ describe('evaluationEngine', () => {
     ]);
 
     expect(result).toEqual({
-      averageScore: 8.5,
-      status: 'Star Player',
-      action: 'Giữ chặt đội hình chính',
-      color: 'green'
+      averageScore: 8,
+      status: 'Stable',
+      action: 'Tiếp tục tin dùng',
+      color: 'white'
     });
   });
 });

@@ -26,7 +26,7 @@ export function generateRecommendation(input: RecommendationInput): Recommendati
   if (input.fraudRisk) {
     return {
       recommendation: 'REPLACE',
-      reason: 'Cảnh báo gian lận/rủi ro cao, cần thay thế ngay',
+      reason: 'Có nhiều tín hiệu phong độ bất thường và rủi ro cao, cần theo dõi thêm',
       priority: 5
     };
   }

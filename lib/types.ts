@@ -6,6 +6,33 @@ export type MomentumStatus = 'HOT' | 'NORMAL' | 'COLD';
 export type PredictionConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type RecommendationAction = 'KEEP' | 'MONITOR' | 'BENCH' | 'SELL' | 'REPLACE';
+export type AnalysisWindow = 5 | 10;
+export type ContributionImpact = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+
+export interface AnalysisBreakdownItem {
+  key: string;
+  label: string;
+  value: string;
+  meaning: string;
+  impact: ContributionImpact;
+  contribution?: number;
+}
+
+export interface PredictionBacktestItem {
+  matchKey: string;
+  matchDate?: string;
+  predicted: number;
+  actual: number;
+  error: number;
+}
+
+export interface PredictionBacktest {
+  sampleSize: number;
+  mae: number | null;
+  averagePrediction: number | null;
+  averageActual: number | null;
+  recent: PredictionBacktestItem[];
+}
 export type DetailedPosition =
   | 'GK'
   | 'CB'
@@ -85,6 +112,8 @@ export interface RecentMatch {
   repeatedOffenses?: number;
   isBigWin?: boolean;
   isBigLoss?: boolean;
+  opponentName?: string;
+  prediction?: number;
 }
 
 export interface PlayerStatusTrackingResponse {
@@ -103,7 +132,7 @@ export interface PlayerStatusEvaluatedResponse {
   currentFormScore: number;
   wmaScore: number;
   matchCount: number;
-  status: 'Star Player' | 'Stable' | 'Under Review' | 'Fraud';
+  status: 'Star Player' | 'Stable' | 'Under Review' | 'Needs Monitoring' | 'Fraud';
   action: string;
   color: 'green' | 'white' | 'orange' | 'red';
   trendValue: number;
@@ -129,6 +158,10 @@ export interface PlayerStatusEvaluatedResponse {
   bigLossRate: number;
   matchImpactAvg: number;
   recentMatches: RecentMatch[];
+  analysisWindow: AnalysisWindow;
+  analyzedMatchCount: number;
+  breakdown: AnalysisBreakdownItem[];
+  backtest: PredictionBacktest;
 }
 
 export type PlayerStatusResponse =
@@ -171,6 +204,10 @@ export interface PerformanceAnalysis {
   bigWinRate: number;
   bigLossRate: number;
   matchImpactAvg: number;
+  analysisWindow: AnalysisWindow;
+  analyzedMatchCount: number;
+  breakdown: AnalysisBreakdownItem[];
+  backtest: PredictionBacktest;
 }
 
 export interface RatingPayload {

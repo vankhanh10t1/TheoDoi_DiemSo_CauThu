@@ -17,6 +17,6 @@ export function evaluateRecentMatches(matches: RecentMatch[]): PlayerAssessment 
   return evaluateRecentMatchesCore(matches);
 }
 
-export function analyzeRecentMatches(matches: RecentMatch[]) {
-  return analyzeRecentMatchesCore(matches);
+export function analyzeRecentMatches(matches: RecentMatch[], analysisWindow?: number) {
+  return analyzeRecentMatchesCore(matches, analysisWindow);
 }

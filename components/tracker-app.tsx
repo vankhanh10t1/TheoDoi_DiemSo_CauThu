@@ -525,7 +525,7 @@ export function TrackerApp() {
                     <strong>{getRecommendationLabel(statusData.recommendation)}</strong>
                   </div>
                   <div className={statusData.fraudRisk ? 'status-fraud-cell alert' : 'status-fraud-cell'}>
-                    <span className="metric-label">Cảnh báo gian lận</span>
+                    <span className="metric-label">Cảnh báo bất thường</span>
                     <strong>{statusData.fraudRisk ? 'CÓ' : 'KHÔNG'}</strong>
                   </div>
                   <div>
@@ -536,7 +536,7 @@ export function TrackerApp() {
 
                 {statusData.fraudRisk ? (
                   <p className="inline-message error status-fraud-alert" style={{ marginTop: '12px' }}>
-                    Fraud alert: {statusData.fraudReasons.join(', ')}
+                    Phong độ bất thường: {statusData.fraudReasons.join(', ')}
                   </p>
                 ) : null}
 

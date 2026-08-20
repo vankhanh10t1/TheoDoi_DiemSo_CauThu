@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - Minh bạch hóa và hiệu chỉnh đánh giá phong độ
+
+- Công việc đã làm: bổ sung cửa sổ phân tích 5/10 trận; truyền lựa chọn từ UI qua API vào toàn bộ pipeline WMA, trend, variance, momentum, risk và recommendation; thêm breakdown theo từng yếu tố, bảng dữ liệu đầu vào có thể thu gọn và backtest walk-forward với MAE, số mẫu, prediction/rating trung bình.
+- Bug gặp phải: API cắt cứng 5 trận trước analytics trong khi WMA chỉ dùng 3 điểm; test cũ phụ thuộc cách tính này và nhãn `Fraud`; dữ liệu lịch sử không lưu prediction theo từng trận.
+- Cách xử lý: gom cấu hình cửa sổ vào `lib/analytics/config.ts`, mở rộng WMA theo toàn bộ cửa sổ với trọng số giảm dần, giữ các key `fraudRisk`/`fraudReasons` nội bộ để không phá dữ liệu cũ nhưng thay toàn bộ nhãn hiển thị bằng ngôn ngữ trung lập; dựng prediction lịch sử theo walk-forward từ dữ liệu có trước mỗi trận.
+- File/khu vực liên quan: `lib/analytics/**`, `lib/prediction/**`, `lib/risk/**`, `lib/recommendation/**`, `lib/types.ts`, `lib/evaluationEngine.ts`, `app/api/player-status/route.ts`, `components/player-detail.tsx`, `components/tracker-app.tsx`, `app/globals.css`, `tests/**`, `README.md`, `CHANGELOG.md`.
+- Ghi chú: backtest cần ít nhất 4 trận để tạo mẫu đầu tiên; UI luôn ghi rõ số trận thực tế được phân tích khi cầu thủ có ít dữ liệu hơn cửa sổ đã chọn; `npm test` pass 39/39 và `npm run build` thành công.
+
 ## 20/08/2026 - Nâng cấp luồng rating
 
 - Công việc đã làm: chia form rating thành 3 bước; bỏ rating mặc định 5; thêm tìm kiếm/chọn tất cả, cảnh báo giới hạn 49, bảng xác nhận, trạng thái loading/error/success, autosave/khôi phục/xóa draft và copy đội hình từ trận gần nhất mà không copy chỉ số.

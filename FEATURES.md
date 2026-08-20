@@ -17,7 +17,7 @@
 - Chọn vị trí đá (Position Group + Detailed Position)
 - Chọn đá chính hoặc dự bị
 - Tuỳ chọn: nhập thẻ vàng, thẻ đỏ, phạm lỗi
-- Tự động tính WMA, trend, prediction, risk, fraud alert
+- Tự động tính WMA, trend, prediction, risk và cảnh báo phong độ bất thường
 
 **Note:** Endpoint cũ `POST /api/rating` deprecated (trả về 410 Gone)
 
@@ -34,17 +34,17 @@
 
 ### 3. Transfer Recommendation (`🎯 Đề Xuất`)
 
-Dựa trên WMA, trend, variance, prediction, risk, discipline và fraud alert, hệ thống phân loại cầu thủ:
+Dựa trên WMA, trend, variance, prediction, risk, discipline và cảnh báo bất thường, hệ thống phân loại cầu thủ:
 
 | Mã | Ưu Tiên | Ý Nghĩa | Điều Kiện |
 | :-- | :-- | :-- | :-- |
-| 🚨 **REPLACE** | 5 | Thay thế khẩn cấp | Fraud alert bật OR (disciplineScore < 50 && aggressionIndex >= 8) |
+| 🚨 **REPLACE** | 5 | Cần theo dõi thêm | Cảnh báo bất thường bật OR (disciplineScore < 50 && aggressionIndex >= 8) |
 | 🔴 **SELL** | 4 | Thanh lý | riskScore >= 70 OR predictedScore < 4.5 |
 | ⚠️ **BENCH** | 3 | Dự bị | riskScore >= 35 OR VOLATILE OR DOWN trend OR COLD momentum |
 | 🟡 **MONITOR** | 2 | Theo dõi | riskScore >= 30 OR confidence < 0.6 |
 | ✅ **KEEP** | 1 | Giữ | riskScore < 30 AND UP trend AND confidence >= 0.6 |
 
-**Fraud Alert (REPLACE):** Bật khi **đồng thời** có 5 điều kiện:
+**Cảnh báo phong độ bất thường (REPLACE):** Bật khi **đồng thời** có 5 điều kiện:
 1. `predictedScore < 4.5`
 2. `trendStatus = DOWN`
 3. `stabilityLevel = VOLATILE`
@@ -60,7 +60,7 @@ Dựa trên WMA, trend, variance, prediction, risk, discipline và fraud alert, 
 - Xem metrics phong độ: **WMA**, trend, variance, momentum, prediction, confidence, risk score
 - Xem trạng thái hiện tại với badges: trend (📈/⬇️/→), risk level (🟢/🟠/🔴), momentum (HOT/NORMAL/COLD)
 - Xem discipline score và aggression index
-- Fraud alert status (if triggered)
+- Trạng thái cảnh báo phong độ bất thường (nếu có)
 - Reset lịch sử điểm số
 
 ## Kiến Trúc Hệ Thống
@@ -219,7 +219,7 @@ Dựa trên **WMA** (Weighted Moving Average) + trend + variance + prediction + 
 | **Discipline** | `100 - (redRate + yellowRate + foulRate)` | Discipline score |
 
 **Tích Hợp vào Recommendation:**
-- Fraud alert (5 điều kiện) → **REPLACE** (priority 5)
+- Cảnh báo phong độ bất thường (5 điều kiện) → **REPLACE** (priority 5)
 - Risk HIGH + predicted low → **SELL** (priority 4)
 - Risk MED OR VOLATILE OR DOWN → **BENCH** (priority 3)
 - Risk >= 30 → **MONITOR** (priority 2)
@@ -261,7 +261,7 @@ Kiểm tra:
 - ✅ **CardSeason Field:** Replaces legacy "Season" field
 - ✅ **Position Tracking:** Per-match position group + detailed position
 - ✅ **Discipline & Aggression:** Tracked per match (yellowCards, redCards, fouls)
-- ✅ **Fraud Detection:** 5-condition alert with REPLACE priority
+- ✅ **Unusual-form alert:** neutral 5-condition monitoring signal with REPLACE priority
 - ✅ **Trend Analysis:** Integrated into recommendations (UP/DOWN/STABLE)
 - ✅ **Bug Fixed:** Match 2 no longer overwrites Match 1 (uses matchId in SK)
 - ⚠️ **Legacy Rating Flow:** `POST /api/rating` deprecated (410 Gone)

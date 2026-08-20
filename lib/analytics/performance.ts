@@ -1,4 +1,4 @@
-import type { MatchResult, PerformanceAnalysis, PlayerAssessment, RecentMatch } from '../types';
+import type { AnalysisBreakdownItem, AnalysisWindow, MatchResult, PerformanceAnalysis, PlayerAssessment, PredictionBacktest, RecentMatch } from '../types';
 import {
   calculateAdjustedScore,
   calculateAverageScore,
@@ -16,6 +16,7 @@ import { getConfidenceLevel, predictPlayerScore } from '../prediction';
 import { calculateRiskScore } from '../risk';
 import { generateRecommendation } from '../recommendation';
 import { sortRecentMatchesNewestFirst } from '../match-history';
+import { DEFAULT_ANALYSIS_WINDOW, MIN_BACKTEST_HISTORY, normalizeAnalysisWindow } from './config';
 
 function roundToOneDecimal(value: number): number {
   return Number(value.toFixed(1));
@@ -53,8 +54,8 @@ function toAssessment(score: number): PlayerAssessment {
 
   return {
     averageScore: roundedScore,
-    status: 'Fraud',
-    action: 'Thanh lý ngay lập tức',
+    status: 'Needs Monitoring',
+    action: 'Cần theo dõi thêm',
     color: 'red'
   };
 }
@@ -63,9 +64,66 @@ function getRecentResults(matches: RecentMatch[]): MatchResult[] {
   return matches.slice(0, 3).map((match) => match.result);
 }
 
-export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysis {
+function predictFromHistory(matches: RecentMatch[]) {
+  const adjusted = matches.map((match) =>
+    calculateAdjustedScore(match.score, calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss))
+  );
+  const scores = matches.map((match) => match.score);
+  const trend = calculateTrend(adjusted);
+  const variance = calculateVariance(adjusted);
+  const momentum = calculateMomentum(adjusted);
+  return predictPlayerScore({
+    wmaScore: calculateWMA(adjusted), recentScore: scores[0] ?? 0,
+    trendValue: trend.trendValue, variance: variance.variance, momentum: momentum.momentum,
+    lossStreak: calculateLossStreak(getRecentResults(matches)),
+    averageScore: calculateAverageScore(scores), matchCount: matches.length
+  }).predictedScore;
+}
+
+export function calculatePredictionBacktest(matches: RecentMatch[], window: AnalysisWindow): PredictionBacktest {
+  const chronological = [...sortRecentMatchesNewestFirst(matches)].reverse();
+  const items = chronological.slice(MIN_BACKTEST_HISTORY).map((target, index) => {
+    const history = chronological.slice(0, index + MIN_BACKTEST_HISTORY).reverse().slice(0, window);
+    const predicted = predictFromHistory(history);
+    return {
+      matchKey: target.sk,
+      matchDate: target.matchDateTime ?? target.matchDate ?? target.createdAt,
+      predicted,
+      actual: target.score,
+      error: Number(Math.abs(predicted - target.score).toFixed(2))
+    };
+  });
+  const average = (values: number[]) => values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : null;
+  return {
+    sampleSize: items.length,
+    mae: average(items.map((item) => item.error)),
+    averagePrediction: average(items.map((item) => item.predicted)),
+    averageActual: average(items.map((item) => item.actual)),
+    recent: items.slice(-5).reverse()
+  };
+}
+
+function createBreakdown(input: {
+  wma: number; average: number; trend: number; variance: number; momentum: number;
+  discipline: number; risk: number; count: number;
+}): AnalysisBreakdownItem[] {
+  const impact = (value: number, positive: number, negative: number) => value >= positive ? 'POSITIVE' as const : value <= negative ? 'NEGATIVE' as const : 'NEUTRAL' as const;
+  return [
+    { key: 'wma', label: 'WMA hiện tại', value: input.wma.toFixed(2), meaning: 'Ưu tiên các trận gần nhất trong cửa sổ.', impact: impact(input.wma, 7, 5), contribution: Number(((input.wma - 6) * 0.65).toFixed(2)) },
+    { key: 'average', label: 'Rating trung bình', value: input.average.toFixed(2), meaning: 'Mặt bằng rating trong các trận được phân tích.', impact: impact(input.average, 7, 5), contribution: Number(((input.average - 6) * 0.25).toFixed(2)) },
+    { key: 'trend', label: 'Xu hướng', value: input.trend.toFixed(2), meaning: input.trend > 1 ? 'Phong độ đang tăng.' : input.trend < -1 ? 'Phong độ đang giảm.' : 'Phong độ tương đối ổn định.', impact: impact(input.trend, 1, -1), contribution: Number((input.trend * 0.08).toFixed(2)) },
+    { key: 'variance', label: 'Độ dao động', value: input.variance.toFixed(2), meaning: input.variance > 4 ? 'Dao động cao, kết quả khó ổn định.' : input.variance >= 1 ? 'Có dao động cần theo dõi.' : 'Các rating khá ổn định.', impact: input.variance > 4 ? 'NEGATIVE' : input.variance >= 1 ? 'NEUTRAL' : 'POSITIVE' },
+    { key: 'momentum', label: 'Đà phong độ', value: input.momentum.toFixed(2), meaning: input.momentum > .35 ? 'Đà gần đây tích cực.' : input.momentum < -.35 ? 'Đà gần đây suy giảm.' : 'Chưa có thay đổi rõ rệt.', impact: impact(input.momentum, .35, -.35), contribution: Number((input.momentum * .04).toFixed(2)) },
+    { key: 'discipline', label: 'Kỷ luật', value: `${input.discipline.toFixed(0)}/100`, meaning: input.discipline < 60 ? 'Thẻ và lỗi đang ảnh hưởng đánh giá.' : 'Mức kỷ luật trong ngưỡng chấp nhận.', impact: input.discipline < 60 ? 'NEGATIVE' : input.discipline >= 80 ? 'POSITIVE' : 'NEUTRAL' },
+    { key: 'risk', label: 'Điểm rủi ro', value: `${input.risk.toFixed(1)}/100`, meaning: input.risk >= 70 ? 'Rủi ro cao, cần theo dõi thêm.' : input.risk >= 35 ? 'Có một số tín hiệu cần chú ý.' : 'Chưa có tín hiệu rủi ro đáng kể.', impact: input.risk >= 70 ? 'NEGATIVE' : input.risk >= 35 ? 'NEUTRAL' : 'POSITIVE' },
+    { key: 'sample', label: 'Cỡ mẫu', value: `${input.count} trận`, meaning: 'Số trận thực tế được dùng để tính.', impact: input.count >= 5 ? 'POSITIVE' : 'NEUTRAL' }
+  ];
+}
+
+export function analyzeRecentMatches(matches: RecentMatch[], requestedWindow: number = DEFAULT_ANALYSIS_WINDOW): PerformanceAnalysis {
+  const analysisWindow = normalizeAnalysisWindow(requestedWindow);
   const orderedMatches = sortRecentMatchesNewestFirst(matches);
-  const recentMatches = orderedMatches.slice(0, 5);
+  const recentMatches = orderedMatches.slice(0, analysisWindow);
   const scores = recentMatches.map((match) => match.score);
   const adjustedScores = recentMatches.map((match) =>
     calculateAdjustedScore(match.score, calculateMatchImpact(match.result, match.isBigWin, match.isBigLoss))
@@ -125,10 +183,10 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     lossStreak >= 3;
 
   if (hasFraudRisk) {
-    fraudReasons.push('predictedScore < 4.5');
-    fraudReasons.push('trend = DOWN');
-    fraudReasons.push('variance = VOLATILE');
-    fraudReasons.push('lossStreak >= 3');
+    fraudReasons.push('Điểm dự đoán dưới 4,5');
+    fraudReasons.push('Xu hướng giảm');
+    fraudReasons.push('Phong độ dao động cao');
+    fraudReasons.push('Chuỗi thua từ 3 trận');
   }
 
   // Extended fraud logic (hybrid): include discipline and red card rate
@@ -141,8 +199,8 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
 
   if (extendedFraud) {
     hasFraudRisk = true;
-    fraudReasons.push('disciplineScore < 60');
-    fraudReasons.push('redRate >= 0.2');
+    fraudReasons.push('Điểm kỷ luật dưới 60');
+    fraudReasons.push('Tỷ lệ thẻ đỏ cao');
   }
 
   const hybridFraudAlert =
@@ -153,10 +211,10 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
 
   if (hybridFraudAlert) {
     hasFraudRisk = true;
-    fraudReasons.push('adjusted_wma < 4.5');
-    fraudReasons.push('trend = DOWN');
-    fraudReasons.push('big_loss_count_last_5 >= 2');
-    fraudReasons.push('variance = VOLATILE');
+    fraudReasons.push('WMA điều chỉnh dưới 4,5');
+    fraudReasons.push('Xu hướng giảm');
+    fraudReasons.push('Có ít nhất 2 trận thua đậm');
+    fraudReasons.push('Phong độ dao động cao');
 
     if (riskAnalysis.riskScore < 70) {
       riskAnalysis = {
@@ -187,6 +245,8 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
   const matchImpactAvg = matchImpacts.length > 0 ? calculateAverageScore(matchImpacts) : 0;
   const bigWinRate = calculateBigWinRate(bigWinCountLast5, recentMatches.length);
   const bigLossRate = calculateBigLossRate(bigLossCountLast5, recentMatches.length);
+  const breakdown = createBreakdown({ wma: wmaScore, average: averageScore, trend: trend.trendValue, variance: variance.variance, momentum: momentum.momentum, discipline: discipline.disciplineScore, risk: riskAnalysis.riskScore, count: recentMatches.length });
+  const backtest = calculatePredictionBacktest(orderedMatches, analysisWindow);
 
   return {
     averageScore,
@@ -216,7 +276,11 @@ export function analyzeRecentMatches(matches: RecentMatch[]): PerformanceAnalysi
     bigLossCountLast5,
     bigWinRate,
     bigLossRate,
-    matchImpactAvg
+    matchImpactAvg,
+    analysisWindow,
+    analyzedMatchCount: recentMatches.length,
+    breakdown,
+    backtest
   };
 }
 

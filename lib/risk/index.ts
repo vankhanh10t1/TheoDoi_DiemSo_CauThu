@@ -1,4 +1,5 @@
 import type { RiskLevel, StabilityLevel, TrendStatus } from '../types';
+import { PERFORMANCE_THRESHOLDS } from '../analytics/config';
 
 export interface RiskInput {
   trendStatus: TrendStatus;
@@ -17,11 +18,11 @@ export interface RiskAnalysis {
 }
 
 function clampRiskLevel(riskScore: number): RiskLevel {
-  if (riskScore >= 70) {
+  if (riskScore >= PERFORMANCE_THRESHOLDS.highRisk) {
     return 'HIGH';
   }
 
-  if (riskScore >= 35) {
+  if (riskScore >= PERFORMANCE_THRESHOLDS.mediumRisk) {
     return 'MEDIUM';
   }
 

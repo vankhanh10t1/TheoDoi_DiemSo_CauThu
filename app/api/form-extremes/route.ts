@@ -69,7 +69,7 @@ export async function GET() {
             wmaScore: analysis.wmaScore,
             currentFormScore: analysis.currentFormScore,
             matchCount: recentMatches.length,
-            status: analysis.currentFormScore > 8 ? 'Star Player' : analysis.currentFormScore >= 6 ? 'Stable' : analysis.currentFormScore >= 4.5 ? 'Under Review' : 'Fraud',
+            status: analysis.currentFormScore > 8 ? 'Star Player' : analysis.currentFormScore >= 6 ? 'Stable' : analysis.currentFormScore >= 4.5 ? 'Under Review' : 'Needs Monitoring',
             color: analysis.currentFormScore > 8 ? 'green' : analysis.currentFormScore >= 6 ? 'white' : analysis.currentFormScore >= 4.5 ? 'orange' : 'red',
             trendStatus: analysis.trendStatus,
             stabilityLevel: analysis.stabilityLevel,
