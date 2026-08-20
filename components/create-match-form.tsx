@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import type { Match } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
 import { createSubmitMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
+import { FORMATION_HELP, isValidFormation, normalizeFormation } from '../lib/formation';
 
 interface CreateMatchFormProps {
   onMatchCreated?: (match: Match) => void;
@@ -17,6 +18,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
     myScore: 0,
     opponentScore: 0,
     formation: '4-3-3',
+    customFormation: '',
     note: ''
   });
 
@@ -69,6 +71,12 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         setLoading(false);
         return;
       }
+      const formation = formData.formation === 'custom' ? normalizeFormation(formData.customFormation) : formData.formation;
+      if (!isValidFormation(formation)) {
+        setMessage({ type: 'error', text: FORMATION_HELP });
+        setLoading(false);
+        return;
+      }
 
       const matchDateTime = createSubmitMatchDateTime();
       const response = await fetchWithDebug('/api/matches', {
@@ -80,7 +88,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
           opponentName: formData.opponentName,
           myScore: formData.myScore,
           opponentScore: formData.opponentScore,
-          formation: formData.formation,
+          formation,
           note: formData.note
         })
       }, { caller: 'CreateMatchForm.handleSubmit' });
@@ -103,6 +111,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         myScore: 0,
         opponentScore: 0,
         formation: '4-3-3',
+        customFormation: '',
         note: ''
       });
 
@@ -218,6 +227,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
 
         {/* Note */}
         <div className="field"><label htmlFor="formation">Sơ đồ đội hình</label><select id="formation" value={formData.formation} onChange={(e)=>setFormData({...formData,formation:e.target.value})}><option>4-3-3</option><option>4-2-3-1</option><option>4-4-2</option><option>3-5-2</option><option value="custom">Tùy chỉnh</option></select></div>
+        {formData.formation === 'custom' ? <div className="field"><label htmlFor="customFormation">Sơ đồ tùy chỉnh</label><input id="customFormation" value={formData.customFormation} onChange={(e)=>setFormData({...formData,customFormation:e.target.value})} placeholder="Ví dụ: 4-5-1, 4-1-4-1" inputMode="numeric" required/><small>{FORMATION_HELP}</small></div> : null}
 
         {/* Note */}
         <div className="field">

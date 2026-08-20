@@ -13,6 +13,7 @@ import {
   sortRecentMatchesNewestFirst
 } from '../lib/match-history';
 import { createSubmitMatchDateTime, getVietnamDateInputValue } from '../lib/match-datetime';
+import { FORMATION_HELP, isValidFormation, normalizeFormation } from '../lib/formation';
 import { TrendDashboard } from './trend-dashboard';
 
 const RATING_HISTORY_ITEMS_PER_PAGE = 5;
@@ -97,6 +98,7 @@ export function TrackerApp() {
     myScore: 0,
     opponentScore: 0,
     formation: '4-3-3',
+    customFormation: '',
     note: ''
   });
   const [creatingMatch, setCreatingMatch] = useState(false);
@@ -235,6 +237,11 @@ export function TrackerApp() {
       setCreateMessage({ tone: 'error', text: 'Tỉ số phải là số nguyên không âm' });
       return;
     }
+    const formation = createForm.formation === 'custom' ? normalizeFormation(createForm.customFormation) : createForm.formation;
+    if (!isValidFormation(formation)) {
+      setCreateMessage({ tone: 'error', text: FORMATION_HELP });
+      return;
+    }
 
     setCreatingMatch(true);
     try {
@@ -248,7 +255,7 @@ export function TrackerApp() {
           opponentName: createForm.opponentName,
           myScore: createForm.myScore,
           opponentScore: createForm.opponentScore,
-          formation: createForm.formation,
+          formation,
           note: createForm.note
         })
       }, { caller: 'TrackerApp.handleCreateMatch' });
@@ -348,6 +355,9 @@ export function TrackerApp() {
                   <option value="4-3-3">4-3-3</option><option value="4-2-3-1">4-2-3-1</option><option value="4-4-2">4-4-2</option><option value="3-5-2">3-5-2</option><option value="custom">Tùy chỉnh</option>
                 </select>
               </label>
+              {createForm.formation === 'custom' ? (
+                <label className="field"><span>Sơ đồ tùy chỉnh</span><input value={createForm.customFormation} onChange={(e) => setCreateForm({ ...createForm, customFormation: e.target.value })} placeholder="Ví dụ: 4-5-1, 4-1-4-1" inputMode="numeric" required/><small>{FORMATION_HELP}</small></label>
+              ) : null}
 
               <div className="field-grid">
                 <label className="field">

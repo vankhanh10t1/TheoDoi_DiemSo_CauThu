@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMatch, listMatches } from '../../../lib/matchService';
 import type { CreateMatchPayload } from '../../../lib/types';
 import { createSubmitMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
+import { isValidFormation, normalizeFormation } from '../../../lib/formation';
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,6 +47,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (body.formation !== undefined && !isValidFormation(body.formation)) {
+      return NextResponse.json({ error: 'Sơ đồ không hợp lệ. Hãy nhập 3–5 tuyến có tổng bằng 10, ví dụ 4-5-1.', code: 'INVALID_FORMATION' }, { status: 400 });
+    }
 
     const payload: CreateMatchPayload = {
       matchDate: body.matchDate,
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
       myScore: body.myScore,
       opponentScore: body.opponentScore,
       note: body.note
-      ,formation: typeof body.formation === 'string' ? body.formation.trim() || undefined : undefined
+      ,formation: normalizeFormation(body.formation)
     };
 
     const match = await createMatch(payload);

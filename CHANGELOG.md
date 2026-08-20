@@ -1,5 +1,11 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - Nhập sơ đồ tùy chỉnh
+
+- Công việc đã làm: khi chọn `Tùy chỉnh`, form hiển thị ô nhập các sơ đồ như `4-5-1`, `4-1-4-1`, `4-3-3-0` hoặc `3-2-4-1`.
+- Cách xử lý: chuẩn hóa khoảng trắng, kiểm tra 3–5 tuyến phân cách bằng dấu `-` và tổng số cầu thủ bằng 10 ở cả client lẫn API.
+- File liên quan: `lib/formation.ts`, hai form tạo trận, API tạo/sửa trận và `tests/formation.test.ts`.
+
 ## 20/08/2026 - Đội hình xuất phát và hiệu quả vị trí
 
 - Công việc đã làm: thêm sơ đồ trận, vị trí theo trận, đá chính/dự bị, phút thi đấu/phút thay người; mở rộng form, API upsert, lịch sử cầu thủ và analytics 5/10/20 trận theo vị trí/sơ đồ.

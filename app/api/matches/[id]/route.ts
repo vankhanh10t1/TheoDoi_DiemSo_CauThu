@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchById, updateMatch, deleteMatch, getMatchWithRatings } from '../../../../lib/matchService';
 import { isValidMatchDate, isValidMatchDateTime } from '../../../../lib/match-datetime';
+import { isValidFormation, normalizeFormation } from '../../../../lib/formation';
 
 /**
  * GET /api/matches/:id - Get match by ID
@@ -66,9 +67,10 @@ export async function PATCH(
     if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > 1000)) {
       return NextResponse.json({ error: 'Ghi chú phải là chuỗi tối đa 1000 ký tự', code: 'INVALID_NOTE' }, { status: 400 });
     }
-    if (body.formation !== undefined && (typeof body.formation !== 'string' || body.formation.length > 30)) {
-      return NextResponse.json({ error: 'Sơ đồ phải là chuỗi tối đa 30 ký tự', code: 'INVALID_FORMATION' }, { status: 400 });
+    if (body.formation !== undefined && !isValidFormation(body.formation)) {
+      return NextResponse.json({ error: 'Sơ đồ không hợp lệ. Hãy nhập 3–5 tuyến có tổng bằng 10, ví dụ 4-5-1.', code: 'INVALID_FORMATION' }, { status: 400 });
     }
+    if (body.formation !== undefined) body.formation = normalizeFormation(body.formation);
 
     // Validate scores if provided
     if (body.myScore !== undefined || body.opponentScore !== undefined) {
