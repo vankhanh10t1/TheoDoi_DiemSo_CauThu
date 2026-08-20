@@ -1,7 +1,7 @@
 import type { AnalysisWindow } from '../types';
 
 export const DEFAULT_ANALYSIS_WINDOW: AnalysisWindow = 5;
-export const ANALYSIS_WINDOW_OPTIONS: readonly AnalysisWindow[] = [5, 10];
+export const ANALYSIS_WINDOW_OPTIONS: readonly AnalysisWindow[] = [5, 10, 20];
 export const MIN_BACKTEST_HISTORY = 3;
 
 export const PERFORMANCE_THRESHOLDS = {
@@ -17,5 +17,5 @@ export const PERFORMANCE_THRESHOLDS = {
 } as const;
 
 export function normalizeAnalysisWindow(value?: number): AnalysisWindow {
-  return value === 10 ? 10 : DEFAULT_ANALYSIS_WINDOW;
+  return value === 10 || value === 20 ? value : DEFAULT_ANALYSIS_WINDOW;
 }

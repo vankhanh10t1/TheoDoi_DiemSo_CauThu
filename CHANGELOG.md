@@ -1,5 +1,30 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - So sánh cầu thủ
+
+- Công việc đã làm: thêm tab so sánh 2–4 cầu thủ cùng nhóm vị trí, bộ lọc 5/10/20 trận hoặc khoảng ngày, radar SVG, bảng metric có highlight, mở chi tiết và endpoint batch `POST /api/analytics/players/compare`.
+- Bug gặp phải: analytics chỉ khai báo cửa sổ 5/10 trận; gọi từng cầu thủ có nguy cơ N+1 query; metric tổng gây bất lợi khi số trận lệch nhau.
+- Cách xử lý: mở rộng cửa sổ lên 20; đọc metadata và lịch sử theo mảng ID bằng batch query; dùng metric theo trận và cảnh báo cỡ mẫu yếu/chênh lệch.
+- File/khu vực liên quan: `components/player-comparison.tsx`, `components/app-shell.tsx`, `components/app-context.tsx`, `app/api/analytics/players/compare/route.ts`, `lib/analytics/**`, `lib/playerService.ts`, `lib/types.ts`, `app/globals.css`, `README.md`.
+- Ghi chú: radar dùng SVG thuần React, không thêm dependency; kết quả mẫu nhỏ không phải kết luận tuyệt đối.
+
+## 20/08/2026 - Chuẩn hóa tài liệu và vòng đời Neon/PostgreSQL
+
+- Công việc đã làm: đồng bộ `README.md`/`FEATURES.md` theo runtime Neon; thêm baseline SQL có version, migration status, hướng dẫn bootstrap/deploy/backup/restore/rollback, index/view/constraint và seed dev ẩn danh có chốt an toàn.
+- Bug gặp phải: schema trước đây chỉ có thể suy ra từ query và script import; seed là no-op; `FEATURES.md` vẫn mô tả DynamoDB là runtime; chưa có lịch sử migration trong database.
+- Cách xử lý: tạo `database/migrations/001_baseline.sql`, bảng `schema_migrations`, runner transaction qua Neon, `db:migrate`/`db:status`/`db:seed`; xóa AWS SDK cùng toàn bộ helper/script DynamoDB để backend chỉ còn Neon/PostgreSQL.
+- File/khu vực liên quan: `database/**`, `scripts/db-migrate.ts`, `scripts/seed.ts`, `README.md`, `FEATURES.md`, `.env.example`, `package.json` và `package-lock.json`.
+- Ghi chú: không kết nối hoặc thay đổi production; cấu hình retention/point-in-time restore theo Neon plan và độ khớp baseline với database đang tồn tại **cần xác minh thêm** trước lần apply production đầu tiên. `npm test` pass 39/39 và `npm run build` thành công.
+
+### Sửa lỗi migration runner
+
+- Bug gặp phải: runner tách SQL tại mọi dấu chấm phẩy, bao gồm dấu chấm phẩy trong comment, khiến Neon nhận fragment `also supports...` và trả lỗi cú pháp `42601`.
+- Cách xử lý: chuyển sang delimiter tường minh `-- statement-breakpoint`; toàn bộ DDL và bản ghi migration tiếp tục chạy trong cùng một transaction.
+- Ghi chú: lần chạy lỗi rollback transaction của `001_baseline.sql`; chỉ bảng theo dõi rỗng `schema_migrations` có thể đã được tạo trước transaction.
+- Bug tiếp theo trên branch thử nghiệm: view hiện hữu có 24 cột trong khi baseline khai báo tập cột ngắn hơn, nên PostgreSQL từ chối `CREATE OR REPLACE VIEW` với lỗi `42P16`.
+- Cách xử lý: đối chiếu metadata chỉ đọc và giữ nguyên đầy đủ contract 24 cột của view hiện hữu trong baseline; xác nhận trước khi sửa có 34 players, 77 matches và 279 ratings.
+- Đối soát dữ liệu: không có rating ngoài `1–10`, tên chuẩn hóa trùng hoặc khóa ngoại mồ côi; bổ sung migration `002_rating_constraint.sql` để đồng bộ constraint database với validation của app.
+
 ## 20/08/2026 - Minh bạch hóa và hiệu chỉnh đánh giá phong độ
 
 - Công việc đã làm: bổ sung cửa sổ phân tích 5/10 trận; truyền lựa chọn từ UI qua API vào toàn bộ pipeline WMA, trend, variance, momentum, risk và recommendation; thêm breakdown theo từng yếu tố, bảng dữ liệu đầu vào có thể thu gọn và backtest walk-forward với MAE, số mẫu, prediction/rating trung bình.

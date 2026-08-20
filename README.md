@@ -24,7 +24,7 @@ View hỗ trợ:
 
 - `v_player_match_history`: lịch sử phong độ theo cầu thủ, dùng cho status/recommendations
 
-DynamoDB hiện chỉ còn dùng cho script audit/migration legacy, không còn là database runtime của app.
+Mọi hoạt động database của backend đều dùng Neon/PostgreSQL. Repository không còn client, script hay dependency DynamoDB.
 
 ### Cài đặt local
 
@@ -44,15 +44,6 @@ Biến runtime bắt buộc:
 DATABASE_URL=postgresql://...
 ```
 
-Nếu cần chạy script migrate/audit DynamoDB cũ, bổ sung:
-
-```env
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=...
-DYNAMODB_TABLE_NAME=...
-```
-
 Chạy local:
 
 ```bash
@@ -69,15 +60,20 @@ Mở `http://localhost:3000`.
 | `npm test` | Chạy Vitest |
 | `npm run build` | Build production và kiểm tra TypeScript |
 | `npm start` | Chạy production sau khi build |
-| `npm run migrate:neon` | Migrate dữ liệu DynamoDB sang Neon |
-| `npm run audit:data` | Audit dữ liệu DynamoDB legacy |
-| `npm run seed` | No-op seed script |
+| `npm run db:migrate` | Áp dụng SQL migration chưa chạy |
+| `npm run db:status` | Kiểm tra migration đã áp dụng/chờ chạy |
+| `npm run db:seed` | Tạo dữ liệu mẫu ẩn danh với chốt an toàn dev/test |
+
+### Vòng đời database
+
+Schema có version nằm trong `database/migrations`. Với database mới, chạy `npm run db:migrate` rồi `npm run db:status` trước khi chạy app. Hướng dẫn index, view, seed an toàn, backup/restore, rollback và quy trình production nằm tại `database/README.md`. Không sửa migration đã áp dụng và không chạy thay đổi destructive khi chưa có backup đã kiểm thử.
 
 ### API chính
 
 - Players: `/api/players`, `/api/players/{id}`, `/api/players/bulk-delete`, `/api/players/{id}/reset`
 - Matches: `/api/matches`, `/api/matches/{id}`, `/api/matches/{id}/ratings`
 - Analytics: `/api/player-status`, `/api/form-extremes`, `/api/recommendations`
+- Player comparison: `POST /api/analytics/players/compare` nhận 2–4 `playerIds`, nhóm vị trí, cửa sổ 5/10/20 trận và khoảng ngày tùy chọn. Tab so sánh có radar SVG 0–100, metric theo trận, cỡ mẫu và cảnh báo dữ liệu yếu.
 
 `POST /api/rating` là endpoint cũ và trả `410 Gone`.
 
@@ -121,7 +117,7 @@ npm run build
 ### Lưu ý an toàn
 
 - Không commit `.env`, `.env.local`, connection string Neon hoặc AWS credentials.
-- Giữ DynamoDB một thời gian sau migration để backup/đối chiếu.
+- Chỉ cấu hình `DATABASE_URL`; không thêm lại AWS/DynamoDB credentials vào backend.
 - App hiện chưa có đăng nhập/phân quyền; nếu public rộng rãi cần bổ sung lớp bảo vệ.
 
 ---
@@ -150,7 +146,7 @@ Supporting view:
 
 - `v_player_match_history`: player form history used by status and recommendation APIs
 
-DynamoDB is now only used by legacy audit/migration scripts, not by the runtime app.
+All backend database activity uses Neon/PostgreSQL. The repository no longer contains a DynamoDB client, scripts, or dependencies.
 
 ### Local Setup
 
@@ -170,15 +166,6 @@ Required runtime variable:
 DATABASE_URL=postgresql://...
 ```
 
-Optional variables for legacy DynamoDB migration/audit scripts:
-
-```env
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=...
-DYNAMODB_TABLE_NAME=...
-```
-
 Run locally:
 
 ```bash
@@ -195,9 +182,13 @@ Open `http://localhost:3000`.
 | `npm test` | Run Vitest |
 | `npm run build` | Build production and check TypeScript |
 | `npm start` | Run production after build |
-| `npm run migrate:neon` | Migrate DynamoDB data to Neon |
-| `npm run audit:data` | Audit legacy DynamoDB data |
-| `npm run seed` | No-op seed script |
+| `npm run db:migrate` | Apply pending versioned SQL migrations |
+| `npm run db:status` | Show applied and pending migrations |
+| `npm run db:seed` | Add anonymous samples with the dev/test safety latch |
+
+### Database lifecycle
+
+Versioned schema lives in `database/migrations`. For a new database, run `npm run db:migrate` and then `npm run db:status` before starting the app. See `database/README.md` for indexes, views, safe seed data, backup/restore, rollback, and the production procedure. Never edit an applied migration or run destructive changes without a tested backup.
 
 ### Main APIs
 
@@ -238,7 +229,7 @@ npm run build
 ### Safety Notes
 
 - Do not commit `.env`, `.env.local`, Neon connection strings, or AWS credentials.
-- Keep DynamoDB for a while after migration for backup/comparison.
+- Configure only `DATABASE_URL`; do not reintroduce AWS/DynamoDB credentials into the backend.
 - The app currently has no authentication/authorization; add protection before making it broadly public.
 
 ### Dashboard xu hướng (20/08/2026)

@@ -6,7 +6,7 @@ export type MomentumStatus = 'HOT' | 'NORMAL' | 'COLD';
 export type PredictionConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type RecommendationAction = 'KEEP' | 'MONITOR' | 'BENCH' | 'SELL' | 'REPLACE';
-export type AnalysisWindow = 5 | 10;
+export type AnalysisWindow = 5 | 10 | 20;
 export type ContributionImpact = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
 
 export interface AnalysisBreakdownItem {
@@ -58,38 +58,6 @@ export interface PlayerSeed {
 }
 
 export interface PlayerSummary extends PlayerSeed {}
-
-export interface PlayerMetadataItem {
-  PK: string;
-  SK: 'METADATA';
-  Name: string;
-  CardSeason: string; // Card season/version
-  Position: string;
-}
-
-export interface StoredMatchItem {
-  PK: string;
-  SK: string;
-  MatchId?: string;
-  MatchDateTime?: string;
-  MatchDate?: string;
-  MatchTime?: string;
-  CreatedAt?: string;
-  UpdatedAt?: string;
-  Score: number;
-  IsStarter: boolean;
-  Result: MatchResult;
-  PositionGroup?: PositionGroup;
-  DetailedPosition?: DetailedPosition;
-  YellowCards?: number;
-  RedCards?: number;
-  Fouls?: number;
-  Goals?: number;
-  Assists?: number;
-  Note?: string;
-  IsBigWin?: boolean;
-  IsBigLoss?: boolean;
-}
 
 export interface RecentMatch {
   sk: string;
@@ -249,31 +217,7 @@ export interface Match {
 }
 
 /**
- * StoredMatch - DynamoDB item for Match
- */
-export interface StoredMatch {
-  PK: string; // MATCH#{matchId}
-  SK: 'METADATA';
-  MatchDate?: string;
-  MatchDateTime?: string;
-  MatchTime?: string;
-  OpponentName?: string;
-  MyScore: number;
-  OpponentScore: number;
-  Result: 'WIN' | 'DRAW' | 'LOSE';
-  IsBigWin?: boolean;
-  IsBigLoss?: boolean;
-  Note?: string;
-  RatingCount?: number;
-  RatingVersion?: number;
-  CreatedAt: string;
-  UpdatedAt: string;
-}
-
-/**
  * PlayerMatchRating model - represents a player's rating for a single match
- * PK: MATCH#{matchId}
- * SK: RATING#{playerId}
  */
 export interface PlayerMatchRating {
   id: string;
@@ -289,25 +233,6 @@ export interface PlayerMatchRating {
   note?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-/**
- * StoredPlayerMatchRating - DynamoDB item for PlayerMatchRating
- */
-export interface StoredPlayerMatchRating {
-  PK: string; // MATCH#{matchId}
-  SK: string; // RATING#{playerId}
-  PlayerId: string;
-  Rating: number;
-  Position?: DetailedPosition;
-  YellowCards?: number;
-  RedCards?: number;
-  Fouls?: number;
-  Goals?: number;
-  Assists?: number;
-  Note?: string;
-  CreatedAt: string;
-  UpdatedAt: string;
 }
 
 /**

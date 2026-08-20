@@ -7,13 +7,12 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "audit:data": "ts-node scripts/audit-data.ts",
-    "seed": "ts-node scripts/seed.ts",
-    "migrate:neon": "ts-node scripts/migrate-dynamodb-to-neon.ts"
+    "db:migrate": "ts-node scripts/db-migrate.ts",
+    "db:status": "ts-node scripts/db-migrate.ts --status",
+    "db:inspect": "ts-node scripts/db-inspect.ts",
+    "db:seed": "ts-node scripts/seed.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/lib-dynamodb": "^3.0.0",
     "@neondatabase/serverless": "^1.1.0",
     "next": "^15.3.2",
     "react": "^19.0.0",

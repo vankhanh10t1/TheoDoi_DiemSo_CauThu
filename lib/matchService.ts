@@ -1,11 +1,8 @@
 import { sql } from './db';
-import { getPositionGroup } from './positions';
 import { createMatchDateTime } from './match-datetime';
 import type {
   Match,
-  MatchResult,
   PlayerMatchRating,
-  StoredPlayerMatchRating,
   CreateMatchPayload,
   SaveMatchRatingsPayload
 } from './types';
@@ -111,12 +108,6 @@ function mapRatingRow(row: RatingRow): PlayerMatchRating {
     createdAt: toIsoLike(row.created_at),
     updatedAt: toIsoLike(row.updated_at)
   };
-}
-
-function toPlayerResult(result: Match['result']): MatchResult {
-  if (result === 'WIN') return 'Win';
-  if (result === 'DRAW') return 'Draw';
-  return 'Loss';
 }
 
 function toDbMatchTime(matchDateTime?: string): string | null {
@@ -504,34 +495,4 @@ export async function getMatchWithRatings(matchId: string): Promise<{ match: Mat
 
   const ratings = await getMatchRatings(matchId);
   return { match, ratings };
-}
-
-export function createPlayerMatchItem(
-  match: Match,
-  rating: StoredPlayerMatchRating,
-  createdAt: string
-): Record<string, unknown> {
-  return {
-    PK: `PLAYER#${rating.PlayerId}`,
-    SK: `MATCH#${match.id}`,
-    MatchId: match.id,
-    MatchDateTime: match.matchDateTime,
-    MatchDate: match.matchDate,
-    MatchTime: match.matchTime,
-    CreatedAt: createdAt,
-    UpdatedAt: rating.UpdatedAt,
-    Score: roundToOneDecimal(rating.Rating),
-    IsStarter: true,
-    Result: toPlayerResult(match.result),
-    PositionGroup: getPositionGroup(rating.Position),
-    DetailedPosition: rating.Position,
-    YellowCards: rating.YellowCards ?? 0,
-    RedCards: rating.RedCards ?? 0,
-    Fouls: rating.Fouls ?? 0,
-    Goals: rating.Goals ?? 0,
-    Assists: rating.Assists ?? 0,
-    Note: rating.Note,
-    IsBigWin: !!match.isBigWin,
-    IsBigLoss: !!match.isBigLoss
-  };
 }

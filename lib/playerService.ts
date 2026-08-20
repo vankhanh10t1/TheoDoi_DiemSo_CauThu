@@ -154,6 +154,29 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
   return typeof limit === 'number' ? matches.slice(0, limit) : matches;
 }
 
+export async function getPlayersWithMatches(playerIds: string[]): Promise<Array<PlayerSummary & { matches: RecentMatch[] }>> {
+  const uniqueIds = Array.from(new Set(playerIds));
+  const [rawPlayerRows, rawHistoryRows] = await Promise.all([
+    sql`select player_id, name, card_season, position from players where is_active = true and player_id = any(${uniqueIds}::text[])`,
+    sql`
+      select player_id, match_id, match_date, match_time::text as match_time, match_datetime,
+        result, is_big_win, is_big_loss, rating, rated_position, yellow_cards, red_cards,
+        fouls, goals, assists, note, created_at, updated_at
+      from v_player_match_history
+      where player_id = any(${uniqueIds}::text[])
+      order by match_date desc, match_time desc nulls last, created_at desc
+    `
+  ]);
+  const playerRows = rawPlayerRows as PlayerRow[];
+  const historyRows = rawHistoryRows as PlayerHistoryRow[];
+  const histories = new Map<string, RecentMatch[]>();
+  for (const row of historyRows) {
+    const match = mapRecentMatchRow(row);
+    if (Number.isFinite(match.score)) histories.set(row.player_id, [...(histories.get(row.player_id) ?? []), match]);
+  }
+  return playerRows.map((row) => ({ ...mapPlayerRow(row), matches: sortRecentMatchesNewestFirst(histories.get(row.player_id) ?? []) }));
+}
+
 export async function findDuplicatePlayerByName(
   playerName: string,
   excludePlayerId?: string

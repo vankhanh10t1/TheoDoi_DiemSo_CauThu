@@ -1,6 +1,6 @@
 # FCON Performance Tracker — Hệ thống quản lý đội hình và phong độ (May 18, 2026)
 
-Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận (match-first flow), phân tích phong độ dựa trên WMA, phát hiện xu hướng, ước lượng rủi ro và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu thực tế từ DynamoDB.
+Ứng dụng web Next.js để quản lý cầu thủ, nhập điểm trận (match-first flow), phân tích phong độ dựa trên WMA, phát hiện xu hướng, ước lượng rủi ro và đưa ra khuyến nghị giữ/bán cầu thủ dựa trên dữ liệu trong Neon/PostgreSQL.
 
 ## Tính Năng
 
@@ -22,7 +22,7 @@
 **Note:** Endpoint cũ `POST /api/rating` deprecated (trả về 410 Gone)
 
 ### 2. Squad Management (`👥 Đội Hình`)
-- Xem danh sách cầu thủ lấy từ DynamoDB
+- Xem danh sách cầu thủ lấy từ Neon/PostgreSQL
 - Thêm cầu thủ mới với tên, vị trí và **cardSeason**; `playerId` được tạo tự động
 - **Duplicate Check:** Tên cầu thủ được kiểm tra trùng lặp (case-insensitive, trimmed)
   - Không thể thêm 2 cầu thủ cùng tên (trả về 409 Conflict)
@@ -65,25 +65,8 @@ Dựa trên WMA, trend, variance, prediction, risk, discipline và cảnh báo b
 
 ## Kiến Trúc Hệ Thống
 
-```
-┌─────────────────────────────────┐
-│   React/Next.js App             │
-│   ├─ AppShell (Navigation)      │
-│   ├─ TrackerApp (Rating)        │
-│   ├─ SquadManagement            │
-│   ├─ TransferRecommendation     │
-│   └─ PlayerDetail               │
-└────────────────────┬────────────┘
-                     │
-         ┌───────────┴──────────────┐
-         │                          │
-    ┌────▼─────┐           ┌────────▼──────┐
-    │ Vercel   │           │ AWS DynamoDB  │
-    │ Functions│◄────────►│ FCON_Table     │
-    │ API      │           │ (Single-table  │
-    │ Routes   │           │ design)        │
-    └──────────┘           └───────────────┘
-```
+`React UI → Next.js App Router/Route Handlers → @neondatabase/serverless → Neon PostgreSQL`.
+Runtime sử dụng ba bảng `players`, `matches`, `match_ratings` và view `v_player_match_history`. Toàn bộ backend chỉ dùng Neon/PostgreSQL; repository không còn AWS SDK hoặc đường thực thi DynamoDB.
 
 ## API Routes (Match-First Flow, May 18, 2026)
 
@@ -106,15 +89,15 @@ Dựa trên WMA, trend, variance, prediction, risk, discipline và cảnh báo b
 - `GET /api/form-extremes` - Top/bottom performers
 
 ### Debug
-- `GET /api/debug-env` - Kiểm tra AWS config
+- `GET /api/debug-env` - Kiểm tra cấu hình runtime (không trả secret)
 - `GET /api/debug-ratings?matchId={matchId}` - Verify ratings
 
 **Legacy:**
 - `POST /api/rating` - Deprecated (410 Gone)
 
-## DynamoDB Schema (Match-First, May 18, 2026)
+## Lịch sử schema trước khi chuyển đổi (không còn hỗ trợ)
 
-**Bảng:** `FCON_Table`
+Phần bên dưới chỉ là ghi chép định dạng dữ liệu cũ để truy vết lịch sử. Không còn code, command, client hay dependency nào có thể đọc/ghi nguồn này. **Không dùng cho vận hành hiện tại.**
 
 | Loại Item | PK | SK | Nội dung |
 | :-- | :-- | :-- | :-- |
@@ -164,24 +147,22 @@ Dựa trên WMA, trend, variance, prediction, risk, discipline và cảnh báo b
 npm install
 ```
 
-### 2. Cấu hình AWS Credentials
+### 2. Cấu hình database runtime
 
 Cập nhật `.env.local`:
 
 ```env
-AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
-AWS_REGION=ap-southeast-1
-DYNAMODB_TABLE_NAME=FCON_Table
-# Nếu dùng local DynamoDB:
-# DYNAMODB_ENDPOINT=http://localhost:8000
+DATABASE_URL=postgresql://user:password@host.neon.tech/neondb?sslmode=require
 ```
 
-### 3. Tạo bảng DynamoDB
+### 3. Dựng schema PostgreSQL
 
-- Table name: `FCON_Table`
-- Partition Key: `PK` (String)
-- Sort Key: `SK` (String)
+```bash
+npm run db:migrate
+npm run db:status
+```
+
+Schema, index, view, backup/restore và rollback được mô tả tại `database/README.md`.
 
 ### 4. Chạy ứng dụng
 
@@ -265,7 +246,7 @@ Kiểm tra:
 - ✅ **Trend Analysis:** Integrated into recommendations (UP/DOWN/STABLE)
 - ✅ **Bug Fixed:** Match 2 no longer overwrites Match 1 (uses matchId in SK)
 - ⚠️ **Legacy Rating Flow:** `POST /api/rating` deprecated (410 Gone)
-- 📝 **No Seeding Required:** App loads players from DynamoDB (seed script optional)
+- 📝 **Safe dev seed:** `ALLOW_DATABASE_SEED=true npm run db:seed` chỉ dành cho database dev/test cô lập
 - ✅ **Build & Test:** `npm test` passes, `npm run build` passes
 
 ## Các Tính Năng Mở Rộng
@@ -277,7 +258,7 @@ Kiểm tra:
 - Machine learning để dự đoán phong độ
 - Gemini AI chatbot để tư vấn chuyển nhượng
 
-**Version:** 2.0 | **Status:** Production Ready | **Tech:** Next.js 15 + AWS DynamoDB
+**Version:** 2.1 | **Status:** Runtime on Neon/PostgreSQL; production restore settings cần xác minh thêm | **Tech:** Next.js 15 + Neon PostgreSQL
 
 ## Nhật ký cập nhật - 20/08/2026
 
