@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMatchById, updateMatch, deleteMatch, getMatchWithRatings } from '../../../../lib/matchService';
 import { isValidMatchDate, isValidMatchDateTime } from '../../../../lib/match-datetime';
 import { isValidFormation, normalizeFormation } from '../../../../lib/formation';
+import { normalizeMatchTag, validateMatchTag } from '../../../../lib/match-tags';
 
 /**
  * GET /api/matches/:id - Get match by ID
@@ -57,7 +58,7 @@ export async function PATCH(
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: 'Body phải là một object JSON', code: 'INVALID_REQUEST' }, { status: 400 });
     }
-    const allowed = new Set(['matchDate', 'matchDateTime', 'opponentName', 'myScore', 'opponentScore', 'note', 'formation']);
+    const allowed = new Set(['matchDate', 'matchDateTime', 'opponentName', 'myScore', 'opponentScore', 'note', 'formation', 'season', 'competition', 'matchType']);
     if (Object.keys(body).some((key) => !allowed.has(key)) || Object.keys(body).length === 0) {
       return NextResponse.json({ error: 'Body không có trường cập nhật hợp lệ', code: 'INVALID_REQUEST' }, { status: 400 });
     }
@@ -71,6 +72,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Sơ đồ không hợp lệ. Hãy nhập 3–5 tuyến có tổng bằng 10, ví dụ 4-5-1.', code: 'INVALID_FORMATION' }, { status: 400 });
     }
     if (body.formation !== undefined) body.formation = normalizeFormation(body.formation);
+    for (const key of ['season', 'competition', 'matchType'] as const) {
+      if (!validateMatchTag(body[key])) return NextResponse.json({ error: `${key} phải là chuỗi tối đa 80 ký tự`, code: 'INVALID_MATCH_TAG' }, { status: 400 });
+      if (body[key] !== undefined) body[key] = normalizeMatchTag(body[key]);
+    }
 
     // Validate scores if provided
     if (body.myScore !== undefined || body.opponentScore !== undefined) {

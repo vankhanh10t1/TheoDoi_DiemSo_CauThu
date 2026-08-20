@@ -19,6 +19,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
     opponentScore: 0,
     formation: '4-3-3',
     customFormation: '',
+    season: '', competition: '', matchType: '',
     note: ''
   });
 
@@ -89,6 +90,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
           myScore: formData.myScore,
           opponentScore: formData.opponentScore,
           formation,
+          season: formData.season, competition: formData.competition, matchType: formData.matchType,
           note: formData.note
         })
       }, { caller: 'CreateMatchForm.handleSubmit' });
@@ -112,6 +114,7 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
         opponentScore: 0,
         formation: '4-3-3',
         customFormation: '',
+        season: '', competition: '', matchType: '',
         note: ''
       });
 
@@ -224,6 +227,8 @@ export default function CreateMatchForm({ onMatchCreated, onCancel }: CreateMatc
             {result === 'LOSE' && `❌ Kết quả: ${formData.myScore} - ${formData.opponentScore} (THUA)`}
           </div>
         )}
+
+        <details className="match-tag-fields"><summary>Phân loại trận (không bắt buộc)</summary><div className="field-grid"><label className="field">Mùa giải<input name="season" maxLength={80} value={formData.season} onChange={handleInputChange} placeholder="Ví dụ: 2026-S1"/></label><label className="field">Giải đấu<input name="competition" maxLength={80} value={formData.competition} onChange={handleInputChange} placeholder="Ví dụ: FVPL, Cup nội bộ"/></label><label className="field">Loại trận<select value={formData.matchType} onChange={e=>setFormData({...formData,matchType:e.target.value})}><option value="">Chưa phân loại</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label></div></details>
 
         {/* Note */}
         <div className="field"><label htmlFor="formation">Sơ đồ đội hình</label><select id="formation" value={formData.formation} onChange={(e)=>setFormData({...formData,formation:e.target.value})}><option>4-3-3</option><option>4-2-3-1</option><option>4-4-2</option><option>3-5-2</option><option value="custom">Tùy chỉnh</option></select></div>

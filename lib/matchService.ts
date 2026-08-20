@@ -20,6 +20,9 @@ type MatchRow = {
   is_big_loss: boolean;
   note: string | null;
   formation: string | null;
+  season: string | null;
+  competition: string | null;
+  match_type: string | null;
   rating_count?: number;
   average_rating?: string | number | null;
   rating_version: number;
@@ -89,6 +92,9 @@ function mapMatchRow(row: MatchRow): Match {
     isBigLoss: !!row.is_big_loss,
     note: row.note ?? undefined,
     formation: row.formation ?? undefined,
+    season: row.season ?? undefined,
+    competition: row.competition ?? undefined,
+    matchType: row.match_type ?? undefined,
     ratingCount: row.rating_count,
     averageRating: row.average_rating == null ? undefined : Number(row.average_rating),
     ratingVersion: row.rating_version,
@@ -154,6 +160,7 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
         is_big_loss,
         note,
         formation,
+        season, competition, match_type,
         rating_version,
         created_at,
         updated_at
@@ -171,6 +178,7 @@ export async function createMatch(payload: CreateMatchPayload): Promise<Match> {
         ${isBigLoss},
         ${payload.note ?? null},
         ${payload.formation ?? null},
+        ${payload.season ?? null}, ${payload.competition ?? null}, ${payload.matchType ?? null},
         0,
         ${now},
         ${now}
@@ -207,6 +215,9 @@ export type MatchListOptions = {
   playerId?: string;
   dateFrom?: string;
   dateTo?: string;
+  season?: string;
+  competition?: string;
+  matchType?: string;
   sortBy: 'date' | 'rating';
   sortOrder: 'asc' | 'desc';
 };
@@ -236,6 +247,9 @@ export async function listMatches(options?: Partial<MatchListOptions>): Promise<
   if (options?.playerId) addCondition('exists (select 1 from match_ratings pr where pr.match_id = m.match_id and pr.player_id = ?)', options.playerId);
   if (options?.dateFrom) addCondition('m.match_date >= ?::date', options.dateFrom);
   if (options?.dateTo) addCondition('m.match_date <= ?::date', options.dateTo);
+  if (options?.season) addCondition('lower(m.season) = lower(?)', options.season);
+  if (options?.competition) addCondition('lower(m.competition) = lower(?)', options.competition);
+  if (options?.matchType) addCondition('lower(m.match_type) = lower(?)', options.matchType);
 
   const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
   const countRows = (await sql.query(`select count(*)::int as total from matches m ${where}`, params)) as Array<{ total: number }>;
@@ -277,6 +291,9 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
   const opponentName = Object.prototype.hasOwnProperty.call(payload, 'opponentName') ? payload.opponentName?.trim() || null : existing.opponentName ?? null;
   const note = Object.prototype.hasOwnProperty.call(payload, 'note') ? payload.note?.trim() || null : existing.note ?? null;
   const formation = Object.prototype.hasOwnProperty.call(payload, 'formation') ? payload.formation?.trim() || null : existing.formation ?? null;
+  const season = Object.prototype.hasOwnProperty.call(payload, 'season') ? payload.season?.trim() || null : existing.season ?? null;
+  const competition = Object.prototype.hasOwnProperty.call(payload, 'competition') ? payload.competition?.trim() || null : existing.competition ?? null;
+  const matchType = Object.prototype.hasOwnProperty.call(payload, 'matchType') ? payload.matchType?.trim() || null : existing.matchType ?? null;
 
   const rows = (await sql`
     update matches
@@ -292,6 +309,7 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
       is_big_loss = ${isBigLoss},
       note = ${note},
       formation = ${formation},
+      season = ${season}, competition = ${competition}, match_type = ${matchType},
       updated_at = ${now}
     where match_id = ${matchId}
       and rating_version = ${existing.ratingVersion ?? 0}

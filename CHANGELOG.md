@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 20/08/2026 - Tag mùa giải, giải đấu và loại trận
+
+- Công việc đã làm: thêm tag tùy chọn `season`, `competition`, `matchType` cho tạo/sửa trận; hiển thị và lọc lịch sử theo tag; lọc KPI, rating, WMA và biểu đồ dashboard theo từng nhóm dữ liệu.
+- Bug gặp phải: trận cũ không có tag và tag do người dùng nhập có thể dư khoảng trắng hoặc khác hoa/thường.
+- Cách xử lý: migration chỉ thêm cột nullable, fallback `Chưa phân loại`, trim/gộp khoảng trắng, giới hạn 80 ký tự và filter database không phân biệt hoa/thường; trạng thái rỗng của biểu đồ được giữ an toàn.
+- File/khu vực liên quan: `database/migrations/004_match_tags.sql`, `lib/match-tags.ts`, `lib/types.ts`, `lib/matchService.ts`, `lib/playerService.ts`, `app/api/matches/**`, `app/api/player-status/route.ts`, `components/create-match-form.tsx`, `components/tracker-app.tsx`, `components/match-history.tsx`, `components/trend-dashboard.tsx`, `app/globals.css`, `tests/matchTags.test.ts`, `README.md`.
+- Ghi chú: phase này chưa xây màn hình quản trị taxonomy riêng.
+
 ## 20/08/2026 - Nhập sơ đồ tùy chỉnh
 
 - Công việc đã làm: khi chọn `Tùy chỉnh`, form hiển thị ô nhập các sơ đồ như `4-5-1`, `4-1-4-1`, `4-3-3-0` hoặc `3-2-4-1`.

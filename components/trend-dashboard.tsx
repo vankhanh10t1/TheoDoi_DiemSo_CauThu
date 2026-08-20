@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { calculateAdjustedScore, calculateMatchImpact, calculateWMA } from '../lib/analytics/calculations';
 import { formatMatchDateValue, getMatchChronologyValue } from '../lib/match-history';
 import type { RecentMatch } from '../lib/types';
+import { displayMatchTag } from '../lib/match-tags';
 
 type Range = '5' | '10' | '20' | 'custom';
 type Point = RecentMatch & { label: string; wma: number };
@@ -20,14 +21,20 @@ export function TrendDashboard({ matches, prediction }: { matches: RecentMatch[]
   const [range, setRange] = useState<Range>('5');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [season, setSeason] = useState(''), [competition, setCompetition] = useState(''), [matchType, setMatchType] = useState('');
+  const tagOptions = useMemo(() => ({
+    seasons: Array.from(new Set(matches.map(m => m.season).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,'vi')),
+    competitions: Array.from(new Set(matches.map(m => m.competition).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,'vi')),
+    matchTypes: Array.from(new Set(matches.map(m => m.matchType).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,'vi'))
+  }), [matches]);
   const points = useMemo(() => {
-    const chronological = [...matches].filter((m) => Number.isFinite(m.score)).sort((a, b) => getMatchChronologyValue(a) - getMatchChronologyValue(b));
+    const chronological = [...matches].filter((m) => Number.isFinite(m.score) && (!season || m.season?.toLocaleLowerCase('vi') === season.toLocaleLowerCase('vi')) && (!competition || m.competition?.toLocaleLowerCase('vi') === competition.toLocaleLowerCase('vi')) && (!matchType || m.matchType?.toLocaleLowerCase('vi') === matchType.toLocaleLowerCase('vi'))).sort((a, b) => getMatchChronologyValue(a) - getMatchChronologyValue(b));
     const filtered = range === 'custom' ? chronological.filter((m) => { const day = m.matchDate?.slice(0, 10); return (!from || Boolean(day && day >= from)) && (!to || Boolean(day && day <= to)); }) : chronological.slice(-Number(range));
     return filtered.map((match, index): Point => {
       const adjusted = filtered.slice(Math.max(0, index - 2), index + 1).reverse().map((m) => calculateAdjustedScore(m.score, calculateMatchImpact(m.result, m.isBigWin, m.isBigLoss)));
       return { ...match, label: formatMatchDateValue(match), wma: calculateWMA(adjusted) };
     });
-  }, [from, matches, range, to]);
+  }, [from, matches, range, to, season, competition, matchType]);
   const kpi = useMemo(() => {
     const wins = points.filter((m) => m.result === 'Win').length;
     return { wins, draws: points.filter((m) => m.result === 'Draw').length, losses: points.filter((m) => m.result === 'Loss').length, goals: points.reduce((s, m) => s + (m.goals ?? 0), 0), assists: points.reduce((s, m) => s + (m.assists ?? 0), 0), average: points.length ? points.reduce((s, m) => s + m.score, 0) / points.length : 0, winRate: points.length ? wins * 100 / points.length : 0, wma: points.at(-1)?.wma };
@@ -39,6 +46,7 @@ export function TrendDashboard({ matches, prediction }: { matches: RecentMatch[]
       {(['5', '10', '20'] as Range[]).map((value) => <button type="button" key={value} className={range === value ? 'active' : ''} onClick={() => setRange(value)}>{value} trận</button>)}
       <button type="button" className={range === 'custom' ? 'active' : ''} onClick={() => setRange('custom')}>Khoảng ngày</button></div></div>
     {range === 'custom' ? <div className="trend-dates"><label>Từ ngày<input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></label><label>Đến ngày<input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></label></div> : null}
+    <div className="trend-dates"><label>Mùa giải<select value={season} onChange={e=>setSeason(e.target.value)}><option value="">Tất cả</option>{tagOptions.seasons.map(v=><option key={v}>{displayMatchTag(v)}</option>)}</select></label><label>Giải đấu<select value={competition} onChange={e=>setCompetition(e.target.value)}><option value="">Tất cả</option>{tagOptions.competitions.map(v=><option key={v}>{displayMatchTag(v)}</option>)}</select></label><label>Loại trận<select value={matchType} onChange={e=>setMatchType(e.target.value)}><option value="">Tất cả</option>{tagOptions.matchTypes.map(v=><option key={v}>{displayMatchTag(v)}</option>)}</select></label><button type="button" className="secondary-button" onClick={()=>{setSeason('');setCompetition('');setMatchType('');setFrom('');setTo('');}}>Đặt lại bộ lọc</button></div>
     <div className="trend-kpis"><div><span>Số trận</span><strong>{points.length}</strong></div><div><span>Thắng</span><strong>{kpi.wins}</strong></div><div><span>Hòa</span><strong>{kpi.draws}</strong></div><div><span>Thua</span><strong>{kpi.losses}</strong></div><div><span>Tỷ lệ thắng</span><strong>{kpi.winRate.toFixed(0)}%</strong></div><div><span>Bàn thắng</span><strong>{kpi.goals}</strong></div><div><span>Kiến tạo</span><strong>{kpi.assists}</strong></div><div><span>Rating TB</span><strong>{points.length ? kpi.average.toFixed(1) : '—'}</strong></div><div><span>WMA hiện tại</span><strong>{kpi.wma?.toFixed(1) ?? '—'}</strong></div></div>
     {!points.length ? <div className="trend-empty">Chưa có dữ liệu trong phạm vi đã chọn.</div> : <div className="trend-chart-wrap"><div className="trend-legend"><span className="rating">Rating</span><span className="wma">WMA</span>{predictionPath ? <span className="prediction">Dự đoán hiện tại</span> : null}</div><svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Biểu đồ rating, WMA và dự đoán theo từng trận">
       {[0, 2, 4, 6, 8, 10].map((tick) => { const y = 12 + (10 - tick) * (height - 38) / 10; return <g key={tick}><line x1="42" x2={width - 22} y1={y} y2={y} className="grid-line" /><text x="32" y={y + 4} textAnchor="end">{tick}</text></g>; })}

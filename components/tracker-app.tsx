@@ -89,6 +89,7 @@ export function TrackerApp() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [ratingHistoryPage, setRatingHistoryPage] = useState(1);
+  const [analyticsFilters, setAnalyticsFilters] = useState({ season: '', competition: '', matchType: '' });
   const [allPlayersFormData, setAllPlayersFormData] = useState<AllPlayersFormRow[]>([]);
   const [formDataLoading, setFormDataLoading] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
@@ -99,12 +100,18 @@ export function TrackerApp() {
     opponentScore: 0,
     formation: '4-3-3',
     customFormation: '',
+    season: '', competition: '', matchType: '',
     note: ''
   });
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [createMessage, setCreateMessage] = useState<{ tone: 'idle' | 'success' | 'error'; text: string } | null>(null);
 
   const selectedPlayer = players.find((player) => player.playerId === selectedPlayerId) ?? null;
+  const statusUrl = (playerId: string) => {
+    const query = new URLSearchParams({ id: playerId });
+    Object.entries(analyticsFilters).forEach(([key, value]) => { if (value.trim()) query.set(key, value.trim()); });
+    return `/api/player-status?${query}`;
+  };
   const sortedRatingHistory =
     statusData && 'recentMatches' in statusData
       ? sortRecentMatchesNewestFirst(statusData.recentMatches)
@@ -177,7 +184,7 @@ export function TrackerApp() {
       setStatusError(null);
 
       try {
-        const response = await fetchWithDebug(`/api/player-status?id=${encodeURIComponent(selectedPlayerId)}`, {
+        const response = await fetchWithDebug(statusUrl(selectedPlayerId), {
           signal: controller.signal
         }, { caller: 'TrackerApp.loadStatus' });
 
@@ -207,11 +214,11 @@ export function TrackerApp() {
     return () => {
       controller.abort();
     };
-  }, [selectedPlayerId]);
+  }, [selectedPlayerId, analyticsFilters.season, analyticsFilters.competition, analyticsFilters.matchType]);
 
   async function refreshPlayerStatus(playerId: string) {
     try {
-      const response = await fetchWithDebug(`/api/player-status?id=${encodeURIComponent(playerId)}`, undefined, { caller: 'TrackerApp.refreshPlayerStatus' });
+      const response = await fetchWithDebug(statusUrl(playerId), undefined, { caller: 'TrackerApp.refreshPlayerStatus' });
       const errorPayload = (await response.json()) as { message?: string };
 
       if (!response.ok) {
@@ -256,6 +263,7 @@ export function TrackerApp() {
           myScore: createForm.myScore,
           opponentScore: createForm.opponentScore,
           formation,
+          season: createForm.season, competition: createForm.competition, matchType: createForm.matchType,
           note: createForm.note
         })
       }, { caller: 'TrackerApp.handleCreateMatch' });
@@ -315,6 +323,7 @@ export function TrackerApp() {
                 <div><strong>Ngày:</strong> {formatMatchDateValue(currentMatch)}</div>
                 <div><strong>Kết quả:</strong> {currentMatch.result}</div>
                 <div><strong>Sơ đồ:</strong> {currentMatch.formation || 'Chưa nhập'}</div>
+                <div><strong>Phân loại:</strong> {currentMatch.season || 'Chưa phân loại'} · {currentMatch.competition || 'Chưa phân loại'} · {currentMatch.matchType || 'Chưa phân loại'}</div>
               </div>
 
               <button
@@ -327,6 +336,8 @@ export function TrackerApp() {
             </div>
           ) : (
             <form className="form-stack" onSubmit={handleCreateMatch}>
+              <details className="match-tag-fields"><summary>Phân loại trận (không bắt buộc)</summary><div className="field-grid"><label className="field"><span>Mùa giải</span><input maxLength={80} value={createForm.season} onChange={e=>setCreateForm({...createForm,season:e.target.value})} placeholder="2026-S1"/></label><label className="field"><span>Giải đấu</span><input maxLength={80} value={createForm.competition} onChange={e=>setCreateForm({...createForm,competition:e.target.value})} placeholder="FVPL, Cup nội bộ"/></label><label className="field"><span>Loại trận</span><select value={createForm.matchType} onChange={e=>setCreateForm({...createForm,matchType:e.target.value})}><option value="">Chưa phân loại</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label></div></details>
+
               <div className="field-grid">
                 <label className="field">
                   <span>Ngày thi đấu</span>
@@ -479,6 +490,7 @@ export function TrackerApp() {
             </label>
           </div>
 
+          <div className="panel match-history-filters"><label>Mùa giải<input maxLength={80} value={analyticsFilters.season} onChange={e=>setAnalyticsFilters({...analyticsFilters,season:e.target.value})} placeholder="2026-S1"/></label><label>Giải đấu<input maxLength={80} value={analyticsFilters.competition} onChange={e=>setAnalyticsFilters({...analyticsFilters,competition:e.target.value})} placeholder="FVPL"/></label><label>Loại trận<select value={analyticsFilters.matchType} onChange={e=>setAnalyticsFilters({...analyticsFilters,matchType:e.target.value})}><option value="">Tất cả</option><option value="FRIENDLY">Giao hữu</option><option value="LEAGUE">Giải đấu</option><option value="CUP">Cúp</option><option value="RANKED">Xếp hạng</option><option value="TRAINING">Tập luyện</option></select></label><button type="button" className="secondary-button" onClick={()=>setAnalyticsFilters({season:'',competition:'',matchType:''})}>Đặt lại</button></div>
           <div className={`status-card ${statusTone}`}>
             <div className="status-topline">
               <strong>{selectedPlayer?.name ?? 'Chưa chọn cầu thủ'}</strong>

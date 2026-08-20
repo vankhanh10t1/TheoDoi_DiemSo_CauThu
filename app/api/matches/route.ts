@@ -3,6 +3,7 @@ import { createMatch, listMatches } from '../../../lib/matchService';
 import type { CreateMatchPayload } from '../../../lib/types';
 import { createSubmitMatchDateTime, isValidMatchDate, isValidMatchDateTime } from '../../../lib/match-datetime';
 import { isValidFormation, normalizeFormation } from '../../../lib/formation';
+import { normalizeMatchTag, validateMatchTag } from '../../../lib/match-tags';
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     if (body.formation !== undefined && !isValidFormation(body.formation)) {
       return NextResponse.json({ error: 'Sơ đồ không hợp lệ. Hãy nhập 3–5 tuyến có tổng bằng 10, ví dụ 4-5-1.', code: 'INVALID_FORMATION' }, { status: 400 });
     }
+    for (const key of ['season', 'competition', 'matchType'] as const) if (!validateMatchTag(body[key])) return NextResponse.json({ error: `${key} phải là chuỗi tối đa 80 ký tự`, code: 'INVALID_MATCH_TAG' }, { status: 400 });
 
     const payload: CreateMatchPayload = {
       matchDate: body.matchDate,
@@ -59,6 +61,7 @@ export async function POST(request: NextRequest) {
       opponentScore: body.opponentScore,
       note: body.note
       ,formation: normalizeFormation(body.formation)
+      ,season: normalizeMatchTag(body.season), competition: normalizeMatchTag(body.competition), matchType: normalizeMatchTag(body.matchType)
     };
 
     const match = await createMatch(payload);
@@ -98,6 +101,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = params.get('sortOrder') ?? 'desc';
     const dateFrom = params.get('dateFrom') || undefined;
     const dateTo = params.get('dateTo') || undefined;
+    for (const key of ['season', 'competition', 'matchType'] as const) if (!validateMatchTag(params.get(key))) throw new Error(`${key} phải là chuỗi tối đa 80 ký tự`);
     if (result && !['WIN', 'DRAW', 'LOSE'].includes(result)) throw new Error('result không hợp lệ');
     if (!['date', 'rating'].includes(sortBy)) throw new Error('sortBy không hợp lệ');
     if (!['asc', 'desc'].includes(sortOrder)) throw new Error('sortOrder không hợp lệ');
@@ -108,6 +112,7 @@ export async function GET(request: NextRequest) {
       search: params.get('search') || undefined, opponent: params.get('opponent') || undefined,
       result: (result || undefined) as 'WIN' | 'DRAW' | 'LOSE' | undefined,
       playerId: params.get('playerId') || undefined, dateFrom, dateTo,
+      season: normalizeMatchTag(params.get('season')), competition: normalizeMatchTag(params.get('competition')), matchType: normalizeMatchTag(params.get('matchType')),
       sortBy: sortBy as 'date' | 'rating', sortOrder: sortOrder as 'asc' | 'desc'
     });
 

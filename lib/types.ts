@@ -87,6 +87,9 @@ export interface RecentMatch {
   minutesPlayed?: number;
   substitutionMinute?: number;
   prediction?: number;
+  season?: string;
+  competition?: string;
+  matchType?: string;
 }
 
 export interface PlayerStatusTrackingResponse {
@@ -215,6 +218,9 @@ export interface Match {
   isBigLoss?: boolean;
   note?: string;
   formation?: string;
+  season?: string;
+  competition?: string;
+  matchType?: string;
   ratingCount?: number;
   averageRating?: number;
   ratingVersion?: number;
@@ -256,6 +262,9 @@ export interface CreateMatchPayload {
   opponentScore: number;
   note?: string;
   formation?: string;
+  season?: string;
+  competition?: string;
+  matchType?: string;
 }
 
 /**

@@ -3,6 +3,7 @@ import { sortRecentMatchesNewestFirst } from './match-history';
 import { getPositionGroup, isDetailedPositionForGroup, isPositionGroup } from './positions';
 import { normalizePlayerName } from './player-name';
 import type { PlayerSummary, RecentMatch } from './types';
+import type { MatchTagFilters } from './match-tags';
 
 type PlayerRow = {
   player_id: string;
@@ -34,6 +35,9 @@ type PlayerHistoryRow = {
   is_starter: boolean | null;
   minutes_played: number | null;
   substitution_minute: number | null;
+  season: string | null;
+  competition: string | null;
+  match_type: string | null;
 };
 
 export type DeletePlayersResult = {
@@ -96,6 +100,7 @@ function mapRecentMatchRow(row: PlayerHistoryRow): RecentMatch {
     substitutionMinute: row.substitution_minute ?? undefined,
     isBigWin: !!row.is_big_win,
     isBigLoss: !!row.is_big_loss
+    ,season: row.season ?? undefined, competition: row.competition ?? undefined, matchType: row.match_type ?? undefined
   };
 }
 
@@ -130,7 +135,7 @@ export async function getPlayerMetadata(playerId: string): Promise<PlayerSummary
   return rows[0] ? mapPlayerRow(rows[0]) : null;
 }
 
-export async function getRecentMatches(playerId: string, limit?: number): Promise<RecentMatch[]> {
+export async function getRecentMatches(playerId: string, limit?: number, filters: MatchTagFilters = {}): Promise<RecentMatch[]> {
   const rows = (await sql`
     select
       player_id,
@@ -149,11 +154,14 @@ export async function getRecentMatches(playerId: string, limit?: number): Promis
       goals,
       assists,
       note,
-      formation, is_starter, minutes_played, substitution_minute,
+      formation, is_starter, minutes_played, substitution_minute, season, competition, match_type,
       created_at,
       updated_at
     from v_player_match_history
     where player_id = ${playerId}
+      and (${filters.season ?? null}::text is null or lower(season) = lower(${filters.season ?? null}))
+      and (${filters.competition ?? null}::text is null or lower(competition) = lower(${filters.competition ?? null}))
+      and (${filters.matchType ?? null}::text is null or lower(match_type) = lower(${filters.matchType ?? null}))
     order by match_date desc, match_time desc nulls last, created_at desc
   `) as PlayerHistoryRow[];
 

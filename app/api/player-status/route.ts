@@ -4,6 +4,7 @@ import { getPlayerMetadata, getRecentMatches } from '../../../lib/playerService'
 import { sortRecentMatchesNewestFirst } from '../../../lib/match-history';
 import { MIN_MATCHES_FOR_EVALUATION } from '../../../lib/evaluation-policy';
 import { normalizeAnalysisWindow } from '../../../lib/analytics/config';
+import { normalizeMatchTag } from '../../../lib/match-tags';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Player not found' }, { status: 404 });
   }
 
-  const allMatches = sortRecentMatchesNewestFirst(await getRecentMatches(playerId));
+  const filters = { season: normalizeMatchTag(request.nextUrl.searchParams.get('season')), competition: normalizeMatchTag(request.nextUrl.searchParams.get('competition')), matchType: normalizeMatchTag(request.nextUrl.searchParams.get('matchType')) };
+  const allMatches = sortRecentMatchesNewestFirst(await getRecentMatches(playerId, undefined, filters));
 
   if (allMatches.length < MIN_MATCHES_FOR_EVALUATION) {
     return NextResponse.json(

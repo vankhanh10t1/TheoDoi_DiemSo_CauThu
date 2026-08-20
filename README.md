@@ -2,7 +2,7 @@
 
 ## Đội hình xuất phát và hiệu quả vị trí
 
-Mỗi trận hỗ trợ lưu sơ đồ (`formation`); mỗi rating lưu vị trí theo trận, trạng thái đá chính/dự bị, số phút thi đấu và phút thay người. Tab **Hiệu quả đội hình** tổng hợp 5/10/20 trận gần nhất theo vị trí và sơ đồ, đồng thời cảnh báo khi có dưới 3 mẫu. Chạy `npm run db:migrate` để áp dụng migration `003_starting_lineup.sql` trước khi dùng tính năng.
+Mỗi trận hỗ trợ lưu sơ đồ (`formation`) và ba tag tùy chọn `season`, `competition`, `matchType`; dữ liệu cũ không có tag hiển thị **Chưa phân loại**. Lịch sử và dashboard có thể lọc theo tag mà không làm dài flow nhập rating. Chạy `npm run db:migrate` để áp dụng các migration mới trước khi dùng tính năng.
 
 ## Tiếng Việt
 
@@ -242,4 +242,4 @@ Dashboard cầu thủ có biểu đồ SVG responsive cho rating, WMA và dự �
 
 ### Match history API update (20/08/2026)
 
-`GET /api/matches` now uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. The UI supports filtering, match edit/delete, and rating updates without a full-page reload.
+`GET /api/matches` uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `season`, `competition`, `matchType`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. `POST` and `PATCH` accept the three optional match tags with an 80-character limit.
