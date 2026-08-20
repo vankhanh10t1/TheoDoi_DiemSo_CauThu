@@ -45,9 +45,19 @@ export async function POST(
     if (body.ratings.length > 49) {
       return NextResponse.json(
         {
-          error: 'Chỉ có thể lưu tối đa 49 rating trong một request để đảm bảo transaction atomic.',
+          error: 'Mỗi lần chỉ có thể lưu tối đa 49 đánh giá. Vui lòng giảm số cầu thủ đã chọn.',
           code: 'TOO_MANY_RATINGS'
         },
+        { status: 400 }
+      );
+    }
+
+    const normalizedIds = body.ratings.map((rating: { playerId?: unknown }) =>
+      typeof rating.playerId === 'string' ? rating.playerId.trim().toLowerCase() : ''
+    );
+    if (new Set(normalizedIds).size !== normalizedIds.length) {
+      return NextResponse.json(
+        { error: 'Mỗi cầu thủ chỉ được xuất hiện một lần trong danh sách đánh giá.', code: 'DUPLICATE_PLAYER' },
         { status: 400 }
       );
     }
@@ -61,7 +71,7 @@ export async function POST(
       if (!rating.playerId || rating.rating === undefined) {
         return NextResponse.json(
           {
-            error: 'Each rating must have playerId and rating',
+            error: 'Mỗi đánh giá phải có cầu thủ và rating.',
             code: 'INVALID_RATING'
           },
           { status: 400 }
@@ -73,7 +83,7 @@ export async function POST(
       if (parsedRating === null || parsedRating < 1 || parsedRating > 10) {
         return NextResponse.json(
           {
-            error: `Rating must be between 1 and 10 (got ${rating.rating})`,
+            error: `Rating của cầu thủ ${rating.playerId} phải nằm trong khoảng 1 đến 10.`,
             code: 'INVALID_RATING_SCORE'
           },
           { status: 400 }
@@ -83,7 +93,7 @@ export async function POST(
       if (!hasAtMostOneDecimalPlace(parsedRating)) {
         return NextResponse.json(
           {
-            error: 'Rating must have at most 1 decimal place',
+            error: 'Rating chỉ được có tối đa 1 chữ số sau dấu thập phân.',
             code: 'INVALID_RATING_PRECISION'
           },
           { status: 400 }
@@ -105,7 +115,7 @@ export async function POST(
       if (rating.goals !== undefined && (!Number.isInteger(rating.goals) || rating.goals < 0)) {
         return NextResponse.json(
           {
-            error: 'Goals must be non-negative integers',
+            error: 'Bàn thắng phải là số nguyên không âm.',
             code: 'INVALID_GOALS'
           },
           { status: 400 }
@@ -115,7 +125,7 @@ export async function POST(
       if (rating.yellowCards !== undefined && (!Number.isInteger(rating.yellowCards) || rating.yellowCards < 0)) {
         return NextResponse.json(
           {
-            error: 'Yellow cards must be non-negative integers',
+            error: 'Số thẻ vàng phải là số nguyên không âm.',
             code: 'INVALID_YELLOW_CARDS'
           },
           { status: 400 }
@@ -125,7 +135,7 @@ export async function POST(
       if (rating.redCards !== undefined && (!Number.isInteger(rating.redCards) || rating.redCards < 0)) {
         return NextResponse.json(
           {
-            error: 'Red cards must be non-negative integers',
+            error: 'Số thẻ đỏ phải là số nguyên không âm.',
             code: 'INVALID_RED_CARDS'
           },
           { status: 400 }
@@ -135,7 +145,7 @@ export async function POST(
       if (rating.fouls !== undefined && (!Number.isInteger(rating.fouls) || rating.fouls < 0)) {
         return NextResponse.json(
           {
-            error: 'Fouls must be non-negative integers',
+            error: 'Số lỗi phải là số nguyên không âm.',
             code: 'INVALID_FOULS'
           },
           { status: 400 }
@@ -145,7 +155,7 @@ export async function POST(
       if (rating.assists !== undefined && (!Number.isInteger(rating.assists) || rating.assists < 0)) {
         return NextResponse.json(
           {
-            error: 'Assists must be non-negative integers',
+            error: 'Kiến tạo phải là số nguyên không âm.',
             code: 'INVALID_ASSISTS'
           },
           { status: 400 }

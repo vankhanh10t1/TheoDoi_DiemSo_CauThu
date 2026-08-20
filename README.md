@@ -81,6 +81,15 @@ Mở `http://localhost:3000`.
 
 `POST /api/rating` là endpoint cũ và trả `410 Gone`.
 
+### Luồng nhập và chỉnh sửa rating
+
+- Form nhập rating gồm 3 bước: chọn cầu thủ, nhập chỉ số và xác nhận trước khi lưu.
+- Rating mặc định để trống; chỉ chấp nhận giá trị từ 1 đến 10 với tối đa 1 chữ số thập phân.
+- Bản nháp của trận hiện tại được tự động lưu trên thiết bị bằng `localStorage`, có thể khôi phục hoặc xóa. Bản nháp được xóa sau khi lưu thành công.
+- Có thể sao chép danh sách cầu thủ từ trận gần nhất có rating; rating và các chỉ số cũ không được sao chép.
+- Mỗi request lưu tối đa 49 rating. `POST /api/matches/{id}/ratings` upsert theo cặp match/cầu thủ nên chỉnh sửa không tạo rating trùng.
+- Rating đã lưu có thể chỉnh sửa từ màn hình lịch sử trận; UI liên quan được tải lại mà không reload toàn trang.
+
 ### Logic đánh giá
 
 Pipeline đánh giá nằm ở:
@@ -193,6 +202,10 @@ Open `http://localhost:3000`.
 - Analytics: `/api/player-status`, `/api/form-extremes`, `/api/recommendations`
 
 `POST /api/rating` is deprecated and returns `410 Gone`.
+
+### Rating entry and editing
+
+Rating entry now uses a three-step player selection, stat entry, and review flow. Ratings start empty, drafts are autosaved per match in local storage, and the latest available lineup can be copied without copying old stats. A save accepts at most 49 unique players and upserts by match/player, so editing an existing rating does not create duplicates.
 
 ### Evaluation Logic
 
