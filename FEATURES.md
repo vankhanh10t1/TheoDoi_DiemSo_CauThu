@@ -278,3 +278,12 @@ Kiểm tra:
 - Gemini AI chatbot để tư vấn chuyển nhượng
 
 **Version:** 2.0 | **Status:** Production Ready | **Tech:** Next.js 15 + AWS DynamoDB
+
+## Nhật ký cập nhật - 20/08/2026
+
+- **Ngày thực hiện:** 20/08/2026
+- **Công việc đã làm:** Chuyển lịch sử trận sang phân trang server-side; thêm tìm đối thủ, lọc ngày/kết quả/cầu thủ, sắp xếp ngày/rating; thêm modal sửa/xóa trận và form sửa rating.
+- **Bug gặp phải:** Client cũ tải tối đa 100 trận rồi tự cắt trang; API danh sách chưa có metadata và thao tác rating chỉ có giao diện xem.
+- **Cách xử lý:** Đưa điều kiện lọc, đếm tổng, `limit/offset` và thứ tự ổn định vào truy vấn Postgres; tái sử dụng `PATCH`, `DELETE` và API upsert rating hiện có; tự lùi trang khi xóa phần tử cuối.
+- **File/khu vực liên quan:** `components/match-history.tsx`, `app/api/matches/**`, `lib/matchService.ts`, `lib/types.ts`, `lib/client-api.ts`, `app/globals.css`, `README.md`.
+- **Ghi chú:** Khoảng ngày lọc trực tiếp trên cột `match_date` dạng ngày để không dịch ngày theo timezone. Build production đã vượt qua kiểm tra TypeScript.

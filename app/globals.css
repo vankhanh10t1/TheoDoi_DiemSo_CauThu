@@ -562,6 +562,38 @@ h2 {
   gap: 14px;
 }
 
+.match-history-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.match-history-filters label,
+.match-edit-modal > label,
+.match-edit-modal .field-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.match-history-filters input,
+.match-history-filters select,
+.match-edit-modal input,
+.match-edit-modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  color: var(--text);
+}
+
+.match-history-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.match-edit-modal { width: min(620px, calc(100vw - 28px)); max-height: calc(100vh - 28px); overflow-y: auto; }
+.match-edit-modal .field-grid { margin: 14px 0; }
+
 .match-history-card {
   display: grid;
   gap: 14px;
@@ -1344,6 +1376,8 @@ h2 {
   .recent-item {
     grid-template-columns: 1fr;
   }
+
+  .match-history-filters { grid-template-columns: 1fr; }
 
   .match-rating-row {
     grid-template-columns: minmax(0, 1fr) auto;

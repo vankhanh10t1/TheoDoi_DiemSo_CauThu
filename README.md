@@ -223,3 +223,7 @@ npm run build
 - Do not commit `.env`, `.env.local`, Neon connection strings, or AWS credentials.
 - Keep DynamoDB for a while after migration for backup/comparison.
 - The app currently has no authentication/authorization; add protection before making it broadly public.
+
+### Match history API update (20/08/2026)
+
+`GET /api/matches` now uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. The UI supports filtering, match edit/delete, and rating updates without a full-page reload.

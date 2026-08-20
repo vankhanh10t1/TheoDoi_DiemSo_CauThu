@@ -39,7 +39,11 @@ function getClientDebugContext() {
   };
 }
 
-export async function fetchWithDebug(input: RequestInfo | URL, init: RequestInit | undefined, meta: FetchDebugMeta) {
+export async function fetchWithDebug(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined = undefined,
+  meta: FetchDebugMeta = { caller: 'unknown' }
+) {
   const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
   const method = init?.method ?? 'GET';
 

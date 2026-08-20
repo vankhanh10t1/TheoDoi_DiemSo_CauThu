@@ -1,6 +1,5 @@
 import { sql } from './db';
 import { getPositionGroup } from './positions';
-import { sortMatchHistoryNewestFirst } from './match-history';
 import { createMatchDateTime } from './match-datetime';
 import type {
   Match,
@@ -24,6 +23,7 @@ type MatchRow = {
   is_big_loss: boolean;
   note: string | null;
   rating_count?: number;
+  average_rating?: string | number | null;
   rating_version: number;
   created_at: string | Date;
   updated_at: string | Date;
@@ -88,6 +88,7 @@ function mapMatchRow(row: MatchRow): Match {
     isBigLoss: !!row.is_big_loss,
     note: row.note ?? undefined,
     ratingCount: row.rating_count,
+    averageRating: row.average_rating == null ? undefined : Number(row.average_rating),
     ratingVersion: row.rating_version,
     createdAt: toIsoLike(row.created_at),
     updatedAt: toIsoLike(row.updated_at)
@@ -195,17 +196,64 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
   return rows[0] ? mapMatchRow(rows[0]) : null;
 }
 
-export async function listMatches(): Promise<Match[]> {
-  const rows = (await sql`
-    select m.*, count(r.player_id)::int as rating_count
-    from matches m
-    left join match_ratings r on r.match_id = m.match_id
-    group by m.match_id
-    order by m.match_date desc, m.match_time desc nulls last, m.created_at desc
-    limit 100
-  `) as MatchRow[];
+export type MatchListOptions = {
+  page: number;
+  pageSize: number;
+  search?: string;
+  opponent?: string;
+  result?: Match['result'];
+  playerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy: 'date' | 'rating';
+  sortOrder: 'asc' | 'desc';
+};
 
-  return sortMatchHistoryNewestFirst(rows.map(mapMatchRow)).slice(0, 100);
+export type PaginatedMatches = {
+  items: Match[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export async function listMatches(options?: Partial<MatchListOptions>): Promise<PaginatedMatches> {
+  const page = options?.page ?? 1;
+  const pageSize = options?.pageSize ?? 10;
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  const addCondition = (condition: string, value: unknown) => {
+    params.push(value);
+    conditions.push(condition.replace('?', `$${params.length}`));
+  };
+  const search = options?.search?.trim();
+  const opponent = options?.opponent?.trim();
+  if (search) addCondition("m.opponent_name ilike '%' || ? || '%'", search);
+  if (opponent) addCondition("m.opponent_name ilike '%' || ? || '%'", opponent);
+  if (options?.result) addCondition('m.result = ?', options.result);
+  if (options?.playerId) addCondition('exists (select 1 from match_ratings pr where pr.match_id = m.match_id and pr.player_id = ?)', options.playerId);
+  if (options?.dateFrom) addCondition('m.match_date >= ?::date', options.dateFrom);
+  if (options?.dateTo) addCondition('m.match_date <= ?::date', options.dateTo);
+
+  const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
+  const countRows = (await sql.query(`select count(*)::int as total from matches m ${where}`, params)) as Array<{ total: number }>;
+  const total = Number(countRows[0]?.total ?? 0);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+  const direction = options?.sortOrder === 'asc' ? 'asc' : 'desc';
+  const orderBy = options?.sortBy === 'rating'
+    ? `average_rating ${direction} nulls last, m.match_date desc, m.match_id asc`
+    : `m.match_date ${direction}, m.match_time ${direction} nulls last, m.created_at ${direction}, m.match_id asc`;
+  const rows = (await sql.query(
+    `select m.*, count(r.player_id)::int as rating_count, avg(r.rating)::numeric(4,2) as average_rating
+     from matches m left join match_ratings r on r.match_id = m.match_id ${where}
+     group by m.match_id order by ${orderBy}
+     limit $${params.length + 1} offset $${params.length + 2}`,
+    [...params, pageSize, offset]
+  )) as MatchRow[];
+
+  return { items: rows.map(mapMatchRow), page: safePage, pageSize, total, totalPages };
 }
 
 export async function updateMatch(matchId: string, payload: Partial<CreateMatchPayload>): Promise<Match | null> {
@@ -224,6 +272,8 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
     payload.matchDateTime ??
     (payload.matchDate ? createMatchDateTime(payload.matchDate, existing.matchTime ?? '07:00') : existing.matchDateTime);
   const matchTime = toDbMatchTime(matchDateTime) ?? existing.matchTime ?? null;
+  const opponentName = Object.prototype.hasOwnProperty.call(payload, 'opponentName') ? payload.opponentName?.trim() || null : existing.opponentName ?? null;
+  const note = Object.prototype.hasOwnProperty.call(payload, 'note') ? payload.note?.trim() || null : existing.note ?? null;
 
   const rows = (await sql`
     update matches
@@ -231,13 +281,13 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
       match_date = ${matchDate},
       match_time = ${matchTime},
       match_datetime = ${matchDateTime ?? null},
-      opponent_name = ${payload.opponentName ?? existing.opponentName ?? null},
+      opponent_name = ${opponentName},
       my_score = ${myScore},
       opponent_score = ${opponentScore},
       result = ${result},
       is_big_win = ${isBigWin},
       is_big_loss = ${isBigLoss},
-      note = ${payload.note ?? existing.note ?? null},
+      note = ${note},
       updated_at = ${now}
     where match_id = ${matchId}
       and rating_version = ${existing.ratingVersion ?? 0}

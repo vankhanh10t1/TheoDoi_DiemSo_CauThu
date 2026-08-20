@@ -53,6 +53,20 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Body phải là một object JSON', code: 'INVALID_REQUEST' }, { status: 400 });
+    }
+    const allowed = new Set(['matchDate', 'matchDateTime', 'opponentName', 'myScore', 'opponentScore', 'note']);
+    if (Object.keys(body).some((key) => !allowed.has(key)) || Object.keys(body).length === 0) {
+      return NextResponse.json({ error: 'Body không có trường cập nhật hợp lệ', code: 'INVALID_REQUEST' }, { status: 400 });
+    }
+    if (body.opponentName !== undefined && (typeof body.opponentName !== 'string' || body.opponentName.length > 120)) {
+      return NextResponse.json({ error: 'Tên đối thủ phải là chuỗi tối đa 120 ký tự', code: 'INVALID_OPPONENT' }, { status: 400 });
+    }
+    if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > 1000)) {
+      return NextResponse.json({ error: 'Ghi chú phải là chuỗi tối đa 1000 ký tự', code: 'INVALID_NOTE' }, { status: 400 });
+    }
+
     // Validate scores if provided
     if (body.myScore !== undefined || body.opponentScore !== undefined) {
       if (

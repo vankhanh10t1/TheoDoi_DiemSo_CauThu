@@ -205,6 +205,7 @@ export interface Match {
   isBigLoss?: boolean;
   note?: string;
   ratingCount?: number;
+  averageRating?: number;
   ratingVersion?: number;
   createdAt: string;
   updatedAt: string;

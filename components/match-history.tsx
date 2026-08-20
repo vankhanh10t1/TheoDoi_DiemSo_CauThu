@@ -1,232 +1,61 @@
 'use client';
-
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { Match, PlayerMatchRatingDetail } from '../lib/types';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import type { Match, PlayerMatchRatingDetail, PlayerSummary } from '../lib/types';
 import { fetchWithDebug } from '../lib/client-api';
-import { formatMatchDateTimeValue, sortMatchHistoryNewestFirst } from '../lib/match-history';
+import { formatMatchDateTimeValue } from '../lib/match-history';
+import { ConfirmationDialog } from './confirmation-dialog';
 
-const ITEMS_PER_PAGE = 10;
-
-type MatchListResponse = {
-  matches?: Match[];
-  error?: string;
-};
-
-type MatchDetailResponse = {
-  ratings?: PlayerMatchRatingDetail[];
-  error?: string;
-};
-
-function formatMatchDateTime(match: Match): string {
-  return formatMatchDateTimeValue(match);
-}
-
-function getResultLabel(result: Match['result']): string {
-  if (result === 'WIN') return 'Thắng';
-  if (result === 'DRAW') return 'Hòa';
-  return 'Thua';
-}
+const PAGE_SIZE = 10;
+type Filters = { search: string; result: string; playerId: string; dateFrom: string; dateTo: string; sort: string };
+const EMPTY: Filters = { search: '', result: '', playerId: '', dateFrom: '', dateTo: '', sort: 'date-desc' };
+const label = (result: Match['result']) => result === 'WIN' ? 'Thắng' : result === 'DRAW' ? 'Hòa' : 'Thua';
 
 export function MatchHistory() {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageInput, setPageInput] = useState('1');
-  const [pageError, setPageError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
-  const [ratingsByMatch, setRatingsByMatch] = useState<Record<string, PlayerMatchRatingDetail[]>>({});
-  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [matches, setMatches] = useState<Match[]>([]), [players, setPlayers] = useState<PlayerSummary[]>([]);
+  const [filters, setFilters] = useState(EMPTY), [search, setSearch] = useState(''), [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ total: 0, totalPages: 0 }), [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null), [message, setMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null), [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Record<string, PlayerMatchRatingDetail[]>>({});
+  const [editing, setEditing] = useState<Match | null>(null), [deleting, setDeleting] = useState<Match | null>(null);
+  const [ratingEdit, setRatingEdit] = useState<PlayerMatchRatingDetail | null>(null), [busy, setBusy] = useState(false);
 
-  async function loadMatches() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetchWithDebug('/api/matches', undefined, { caller: 'MatchHistory.loadMatches' });
-      const payload = (await response.json()) as MatchListResponse;
-      if (!response.ok) throw new Error(payload.error || 'Không thể tải lịch sử trận.');
-      setMatches(Array.isArray(payload.matches) ? sortMatchHistoryNewestFirst(payload.matches).slice(0, 100) : []);
-      setPage(1);
-      setPageInput('1');
-      setPageError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải lịch sử trận.');
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => { const timer = setTimeout(() => setSearch(filters.search.trim()), 350); return () => clearTimeout(timer); }, [filters.search]);
+  useEffect(() => { fetch('/api/players').then(r => r.json()).then(p => setPlayers(p.items ?? [])).catch(() => undefined); }, []);
+  const load = useCallback(async (target = page) => {
+    setLoading(true); setError(null); const [sortBy, sortOrder] = filters.sort.split('-');
+    const q = new URLSearchParams({ page: String(target), pageSize: String(PAGE_SIZE), sortBy, sortOrder });
+    Object.entries({ search, result: filters.result, playerId: filters.playerId, dateFrom: filters.dateFrom, dateTo: filters.dateTo }).forEach(([k,v]) => { if (v) q.set(k,v); });
+    try { const res = await fetchWithDebug(`/api/matches?${q}`, undefined, { caller: 'MatchHistory.load' }); const data = await res.json(); if (!res.ok) throw new Error(data.error); setMatches(data.items ?? data.matches ?? []); setPage(data.page ?? target); setMeta({ total: data.total ?? 0, totalPages: data.totalPages ?? 0 }); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Không thể tải lịch sử trận.'); } finally { setLoading(false); }
+  }, [page, search, filters.result, filters.playerId, filters.dateFrom, filters.dateTo, filters.sort]);
+  useEffect(() => { void load(page); }, [load, page]);
+  useEffect(() => { setPage(1); }, [search, filters.result, filters.playerId, filters.dateFrom, filters.dateTo, filters.sort]);
+
+  async function detail(id: string, force = false) {
+    if (!force && expanded === id) return setExpanded(null); setExpanded(id); if (!force && ratings[id]) return;
+    setDetailLoading(id); try { const res = await fetchWithDebug(`/api/matches/${id}/ratings`, undefined, { caller: 'MatchHistory.detail' }); const data = await res.json(); if (!res.ok) throw new Error(data.error); setRatings(old => ({...old, [id]: data.ratings ?? []})); } catch(e) { setError(e instanceof Error ? e.message : 'Không thể tải chi tiết.'); } finally { setDetailLoading(null); }
   }
-
-  useEffect(() => {
-    void loadMatches();
-  }, []);
-
-  const totalPages = Math.max(1, Math.ceil(matches.length / ITEMS_PER_PAGE));
-  const visibleMatches = useMemo(
-    () => matches.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE),
-    [matches, page]
-  );
-
-  function goToPage(nextPage: number) {
-    const clampedPage = Math.min(totalPages, Math.max(1, Math.trunc(nextPage)));
-    setPage(clampedPage);
-    setPageInput(String(clampedPage));
-    setPageError(null);
+  async function saveMatch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!editing) return; const d = new FormData(e.currentTarget); setBusy(true); setError(null);
+    try { const res = await fetchWithDebug(`/api/matches/${editing.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({matchDate:d.get('matchDate'),opponentName:d.get('opponentName'),myScore:Number(d.get('myScore')),opponentScore:Number(d.get('opponentScore')),note:d.get('note')})}); const data=await res.json(); if(!res.ok) throw new Error(data.error); setEditing(null); setMessage('Đã cập nhật trận đấu.'); await load(page); } catch(e){setError(e instanceof Error?e.message:'Không thể cập nhật trận.');} finally{setBusy(false);}
   }
-
-  function handlePageJump(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!pageInput.trim()) {
-      setPageError('Vui lòng nhập số trang.');
-      return;
-    }
-
-    const requestedPage = Number(pageInput);
-    if (!Number.isFinite(requestedPage)) {
-      setPageError('Số trang không hợp lệ.');
-      return;
-    }
-    goToPage(requestedPage);
+  async function remove() {
+    if(!deleting)return; setBusy(true); setError(null); try{const res=await fetchWithDebug(`/api/matches/${deleting.id}`,{method:'DELETE'});const data=await res.json();if(!res.ok)throw new Error(data.error);const next=matches.length===1&&page>1?page-1:page;setDeleting(null);setExpanded(null);setMessage('Đã xóa trận đấu.');setPage(next);await load(next);}catch(e){setError(e instanceof Error?e.message:'Không thể xóa trận.');}finally{setBusy(false);}
   }
-
-  async function toggleDetail(matchId: string) {
-    if (expandedMatchId === matchId) {
-      setExpandedMatchId(null);
-      return;
-    }
-
-    setExpandedMatchId(matchId);
-    setDetailError(null);
-    if (ratingsByMatch[matchId]) return;
-
-    setDetailLoadingId(matchId);
-    try {
-      const response = await fetchWithDebug(`/api/matches/${matchId}/ratings`, undefined, {
-        caller: 'MatchHistory.toggleDetail'
-      });
-      const payload = (await response.json()) as MatchDetailResponse;
-      if (!response.ok) throw new Error(payload.error || 'Không thể tải chi tiết trận.');
-      setRatingsByMatch((current) => ({
-        ...current,
-        [matchId]: (payload.ratings ?? []).filter((rating) => Number.isFinite(rating.rating))
-      }));
-    } catch (loadError) {
-      setDetailError(loadError instanceof Error ? loadError.message : 'Không thể tải chi tiết trận.');
-    } finally {
-      setDetailLoadingId(null);
-    }
+  async function saveRating(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();if(!ratingEdit)return;const d=new FormData(e.currentTarget),score=Number(d.get('rating'));if(score<1||score>10||Math.round(score*10)!==score*10)return setError('Điểm phải từ 1 đến 10 và có tối đa 1 chữ số thập phân.');const num=(k:string)=>Math.max(0,Number(d.get(k))||0);setBusy(true);setError(null);
+    try{const res=await fetchWithDebug(`/api/matches/${ratingEdit.matchId}/ratings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ratings:[{playerId:ratingEdit.playerId,rating:score,position:ratingEdit.position,goals:num('goals'),assists:num('assists'),yellowCards:num('yellowCards'),redCards:num('redCards'),fouls:num('fouls'),note:d.get('note')}]})});const data=await res.json();if(!res.ok)throw new Error(data.error);const id=ratingEdit.matchId;setRatingEdit(null);setMessage('Đã cập nhật rating.');await detail(id,true);await load(page);}catch(e){setError(e instanceof Error?e.message:'Không thể cập nhật rating.');}finally{setBusy(false);}
   }
-
-  return (
-    <section className="screen-panel">
-      <div className="screen-header">
-        <div>
-          <p className="panel-kicker">Tối đa 100 trận gần nhất</p>
-          <h2>Lịch sử trận</h2>
-        </div>
-        <button className="secondary-button" type="button" onClick={() => void loadMatches()} disabled={loading}>
-          Làm mới
-        </button>
-      </div>
-
-      {loading ? <div className="panel tracking-state">Đang tải lịch sử trận...</div> : null}
-      {error ? <div className="panel inline-message error">{error}</div> : null}
-      {!loading && !error && matches.length === 0 ? (
-        <div className="panel tracking-state">
-          <p>Chưa có trận đấu nào được lưu.</p>
-          <span>Tạo trận mới ở mục Rating để bắt đầu lịch sử.</span>
-        </div>
-      ) : null}
-
-      {!loading && !error && matches.length > 0 ? (
-        <>
-          <div className="match-history-list">
-            {visibleMatches.map((match) => {
-              const ratings = ratingsByMatch[match.id];
-              const expanded = expandedMatchId === match.id;
-              const displayedRatingCount = match.ratingCount ?? ratings?.length;
-              return (
-                <article className="panel match-history-card" key={match.id}>
-                  <div className="match-history-main">
-                    <div>
-                      <p className="match-history-time">{formatMatchDateTime(match)}</p>
-                      <h3>{match.opponentName ? `Đối thủ: ${match.opponentName}` : 'Không ghi tên đối thủ'}</h3>
-                    </div>
-                    <span className={`match-result-badge ${match.result.toLowerCase()}`}>
-                      {getResultLabel(match.result)}
-                    </span>
-                  </div>
-
-                  <div className="match-history-meta">
-                    <span><strong>Tỉ số:</strong> {match.myScore} - {match.opponentScore}</span>
-                    {typeof displayedRatingCount === 'number' ? (
-                      <span><strong>Đã chấm:</strong> {displayedRatingCount} cầu thủ</span>
-                    ) : null}
-                    {match.note ? <span className="match-history-note"><strong>Ghi chú:</strong> {match.note}</span> : null}
-                  </div>
-
-                  <button className="tertiary-button" type="button" onClick={() => void toggleDetail(match.id)}>
-                    {expanded ? 'Ẩn chi tiết' : 'Xem chi tiết'}
-                  </button>
-
-                  {expanded ? (
-                    <div className="match-history-detail">
-                      {detailLoadingId === match.id ? <p>Đang tải chi tiết...</p> : null}
-                      {detailError && detailLoadingId !== match.id ? <p className="status-error">{detailError}</p> : null}
-                      {ratings && ratings.length === 0 ? <p>Trận này chưa có điểm cầu thủ.</p> : null}
-                      {ratings?.map((rating) => (
-                        <div className="match-rating-row" key={rating.id}>
-                          <div className="match-rating-player">
-                            <strong>{rating.playerName}</strong>
-                            <span>
-                              {rating.cardSeason || 'Không có mùa thẻ'} · {rating.position || rating.playerPosition || 'Không có vị trí'}
-                            </span>
-                          </div>
-                          <strong className="match-rating-score">{rating.rating.toFixed(1)}</strong>
-                          <div className="match-rating-stats">
-                            <span>Bàn thắng: {rating.goals ?? 0}</span>
-                            <span>Kiến tạo: {rating.assists ?? 0}</span>
-                            <span>Thẻ vàng: {rating.yellowCards ?? 0}</span>
-                            <span>Thẻ đỏ: {rating.redCards ?? 0}</span>
-                            <span>Lỗi: {rating.fouls ?? 0}</span>
-                          </div>
-                          {rating.note ? <p className="match-rating-note">Ghi chú: {rating.note}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="match-history-pagination" aria-label="Phân trang lịch sử trận">
-            <button className="secondary-button" type="button" disabled={page === 1} onClick={() => goToPage(page - 1)}>
-              Trang trước
-            </button>
-            <span>Trang {page}/{totalPages} · {matches.length} trận</span>
-            <button className="secondary-button" type="button" disabled={page === totalPages} onClick={() => goToPage(page + 1)}>
-              Trang sau
-            </button>
-            <form className="match-page-jump" onSubmit={handlePageJump}>
-              <label htmlFor="match-history-page">Đến trang</label>
-              <input
-                id="match-history-page"
-                type="text"
-                inputMode="numeric"
-                value={pageInput}
-                onChange={(event) => {
-                  setPageInput(event.target.value);
-                  setPageError(null);
-                }}
-                aria-invalid={Boolean(pageError)}
-              />
-              <button className="secondary-button" type="submit">Mở</button>
-            </form>
-          </div>
-          {pageError ? <p className="match-page-error">{pageError}</p> : null}
-        </>
-      ) : null}
-    </section>
-  );
+  const change=(key:keyof Filters,value:string)=>setFilters(old=>({...old,[key]:value}));
+  return <section className="screen-panel">
+    <div className="screen-header"><div><p className="panel-kicker">Tìm kiếm và quản lý theo từng trang</p><h2>Lịch sử trận</h2></div><button className="secondary-button" onClick={()=>void load(page)} disabled={loading}>Làm mới</button></div>
+    <div className="panel match-history-filters"><label>Tìm đối thủ<input value={filters.search} onChange={e=>change('search',e.target.value)} placeholder="Nhập tên đối thủ..."/></label><label>Từ ngày<input type="date" value={filters.dateFrom} onChange={e=>change('dateFrom',e.target.value)}/></label><label>Đến ngày<input type="date" value={filters.dateTo} onChange={e=>change('dateTo',e.target.value)}/></label><label>Kết quả<select value={filters.result} onChange={e=>change('result',e.target.value)}><option value="">Tất cả</option><option value="WIN">Thắng</option><option value="DRAW">Hòa</option><option value="LOSE">Thua</option></select></label><label>Cầu thủ<select value={filters.playerId} onChange={e=>change('playerId',e.target.value)}><option value="">Tất cả</option>{players.map(p=><option key={p.playerId} value={p.playerId}>{p.name}</option>)}</select></label><label>Sắp xếp<select value={filters.sort} onChange={e=>change('sort',e.target.value)}><option value="date-desc">Ngày mới nhất</option><option value="date-asc">Ngày cũ nhất</option><option value="rating-desc">Rating cao nhất</option><option value="rating-asc">Rating thấp nhất</option></select></label><button className="secondary-button" onClick={()=>{setFilters(EMPTY);setSearch('');setPage(1);}}>Đặt lại</button></div>
+    {message?<div className="panel inline-message success">{message}</div>:null}{error?<div className="panel inline-message error">{error}</div>:null}{loading?<div className="panel tracking-state">Đang tải lịch sử trận...</div>:null}
+    {!loading&&!error&&matches.length===0?<div className="panel tracking-state"><p>Không tìm thấy trận đấu phù hợp.</p><span>Hãy thay đổi bộ lọc hoặc tạo trận mới.</span></div>:null}
+    {!loading&&matches.length?<><div className="match-history-list">{matches.map(m=><article className="panel match-history-card" key={m.id}><div className="match-history-main"><div><p className="match-history-time">{formatMatchDateTimeValue(m)}</p><h3>{m.opponentName?`Đối thủ: ${m.opponentName}`:'Không ghi tên đối thủ'}</h3></div><span className={`match-result-badge ${m.result.toLowerCase()}`}>{label(m.result)}</span></div><div className="match-history-meta"><span><strong>Tỷ số:</strong> {m.myScore} - {m.opponentScore}</span><span><strong>Đã chấm:</strong> {m.ratingCount??0} cầu thủ</span>{m.averageRating!==undefined?<span><strong>Rating TB:</strong> {m.averageRating.toFixed(2)}</span>:null}{m.note?<span className="match-history-note"><strong>Ghi chú:</strong> {m.note}</span>:null}</div><div className="match-history-actions"><button className="tertiary-button" onClick={()=>void detail(m.id)}>{expanded===m.id?'Ẩn chi tiết':'Xem chi tiết'}</button><button className="secondary-button" onClick={()=>setEditing(m)}>Sửa</button><button className="danger-button" onClick={()=>setDeleting(m)}>Xóa</button></div>{expanded===m.id?<div className="match-history-detail">{detailLoading===m.id?<p>Đang tải chi tiết...</p>:null}{ratings[m.id]?.length===0?<p>Trận này chưa có điểm cầu thủ.</p>:null}{ratings[m.id]?.map(r=><div className="match-rating-row" key={r.id}><div className="match-rating-player"><strong>{r.playerName}</strong><span>{r.cardSeason||'Không có mùa thẻ'} · {r.position||r.playerPosition||'Không có vị trí'}</span></div><strong className="match-rating-score">{r.rating.toFixed(1)}</strong><div className="match-rating-stats"><span>Bàn: {r.goals??0}</span><span>Kiến tạo: {r.assists??0}</span><span>Thẻ vàng: {r.yellowCards??0}</span><span>Thẻ đỏ: {r.redCards??0}</span><span>Lỗi: {r.fouls??0}</span></div><button className="tertiary-button" onClick={()=>setRatingEdit(r)}>Sửa rating</button>{r.note?<p className="match-rating-note">Ghi chú: {r.note}</p>:null}</div>)}</div>:null}</article>)}</div><div className="match-history-pagination"><button className="secondary-button" disabled={page<=1} onClick={()=>setPage(page-1)}>Trang trước</button><span>Trang {page}/{Math.max(1,meta.totalPages)} · {meta.total} trận</span><button className="secondary-button" disabled={page>=meta.totalPages} onClick={()=>setPage(page+1)}>Trang sau</button></div></>:null}
+    {editing?<div className="modal-backdrop"><form className="confirmation-modal match-edit-modal" onSubmit={saveMatch}><h3>Sửa trận đấu</h3><div className="field-grid"><label>Ngày<input name="matchDate" type="date" required defaultValue={editing.matchDate}/></label><label>Đối thủ<input name="opponentName" defaultValue={editing.opponentName} maxLength={120}/></label><label>Tỷ số đội mình<input name="myScore" type="number" min="0" required defaultValue={editing.myScore}/></label><label>Tỷ số đối thủ<input name="opponentScore" type="number" min="0" required defaultValue={editing.opponentScore}/></label></div><label>Ghi chú<textarea name="note" defaultValue={editing.note} maxLength={1000}/></label><div className="confirmation-modal-actions"><button type="button" className="secondary-button" onClick={()=>setEditing(null)} disabled={busy}>Hủy</button><button className="primary-button" disabled={busy}>{busy?'Đang lưu...':'Lưu thay đổi'}</button></div></form></div>:null}
+    {ratingEdit?<div className="modal-backdrop"><form className="confirmation-modal match-edit-modal" onSubmit={saveRating}><h3>Sửa rating · {ratingEdit.playerName}</h3><div className="field-grid"><label>Điểm<input name="rating" type="number" min="1" max="10" step="0.1" required defaultValue={ratingEdit.rating}/></label>{(['goals','assists','yellowCards','redCards','fouls'] as const).map(k=><label key={k}>{({goals:'Bàn thắng',assists:'Kiến tạo',yellowCards:'Thẻ vàng',redCards:'Thẻ đỏ',fouls:'Lỗi'})[k]}<input name={k} type="number" min="0" step="1" defaultValue={ratingEdit[k]??0}/></label>)}</div><label>Ghi chú<textarea name="note" defaultValue={ratingEdit.note} maxLength={1000}/></label><div className="confirmation-modal-actions"><button type="button" className="secondary-button" onClick={()=>setRatingEdit(null)} disabled={busy}>Hủy</button><button className="primary-button" disabled={busy}>{busy?'Đang lưu...':'Lưu rating'}</button></div></form></div>:null}
+    <ConfirmationDialog open={Boolean(deleting)} title="Xóa trận đấu?" description={`Trận với ${deleting?.opponentName||'đối thủ chưa đặt tên'} và toàn bộ rating liên quan sẽ bị xóa.`} confirmLabel="Xóa trận" busy={busy} danger onCancel={()=>setDeleting(null)} onConfirm={()=>void remove()}/>
+  </section>;
 }

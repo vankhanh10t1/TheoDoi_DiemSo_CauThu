@@ -78,15 +78,39 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const matches = await listMatches();
+    const params = request.nextUrl.searchParams;
+    const parseInteger = (name: string, fallback: number, maximum: number) => {
+      const raw = params.get(name);
+      if (raw === null) return fallback;
+      const value = Number(raw);
+      if (!Number.isInteger(value) || value < 1 || value > maximum) throw new Error(`${name} phải là số nguyên từ 1 đến ${maximum}`);
+      return value;
+    };
+    const result = params.get('result');
+    const sortBy = params.get('sortBy') ?? 'date';
+    const sortOrder = params.get('sortOrder') ?? 'desc';
+    const dateFrom = params.get('dateFrom') || undefined;
+    const dateTo = params.get('dateTo') || undefined;
+    if (result && !['WIN', 'DRAW', 'LOSE'].includes(result)) throw new Error('result không hợp lệ');
+    if (!['date', 'rating'].includes(sortBy)) throw new Error('sortBy không hợp lệ');
+    if (!['asc', 'desc'].includes(sortOrder)) throw new Error('sortOrder không hợp lệ');
+    if ((dateFrom && !isValidMatchDate(dateFrom)) || (dateTo && !isValidMatchDate(dateTo))) throw new Error('Khoảng ngày phải có định dạng YYYY-MM-DD');
+    if (dateFrom && dateTo && dateFrom > dateTo) throw new Error('Ngày bắt đầu không được sau ngày kết thúc');
+    const matches = await listMatches({
+      page: parseInteger('page', 1, 1_000_000), pageSize: parseInteger('pageSize', 10, 100),
+      search: params.get('search') || undefined, opponent: params.get('opponent') || undefined,
+      result: (result || undefined) as 'WIN' | 'DRAW' | 'LOSE' | undefined,
+      playerId: params.get('playerId') || undefined, dateFrom, dateTo,
+      sortBy: sortBy as 'date' | 'rating', sortOrder: sortOrder as 'asc' | 'desc'
+    });
 
     return NextResponse.json(
       {
         success: true,
-        matches,
-        total: matches.length
+        ...matches,
+        matches: matches.items
       },
       { status: 200 }
     );
@@ -97,7 +121,7 @@ export async function GET() {
         error: error instanceof Error ? error.message : 'Failed to list matches',
         code: 'INTERNAL_ERROR'
       },
-      { status: 500 }
+      { status: error instanceof Error && /không hợp lệ|phải|không được/.test(error.message) ? 400 : 500 }
     );
   }
 }
