@@ -53,15 +53,26 @@ export function isValidMatchDateTime(value: unknown): value is string {
   );
 }
 
+export function normalizeMatchTime(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = match[3] === undefined ? 0 : Number(match[3]);
+  if (hour > 23 || minute > 59 || second > 59) return null;
+  return `${match[1]}:${match[2]}`;
+}
+
 // Legacy/backfill helper only. New matches must use createSubmitMatchDateTime().
 export function createMatchDateTime(matchDate: string, matchTime = '07:00'): string {
-  if (!isValidMatchDate(matchDate) || !/^\d{2}:\d{2}$/.test(matchTime)) {
-    throw new Error('Invalid match date or time');
-  }
+  if (!isValidMatchDate(matchDate)) throw new Error('Ngày thi đấu không hợp lệ (cần định dạng YYYY-MM-DD)');
+  const normalizedTime = normalizeMatchTime(matchTime);
+  if (!normalizedTime) throw new Error('Giờ thi đấu không hợp lệ (cần định dạng HH:mm)');
 
-  const matchDateTime = `${matchDate}T${matchTime}:00+07:00`;
+  const matchDateTime = `${matchDate}T${normalizedTime}:00+07:00`;
   if (!isValidMatchDateTime(matchDateTime)) {
-    throw new Error('Invalid match date or time');
+    throw new Error('Ngày hoặc giờ thi đấu không hợp lệ');
   }
 
   return matchDateTime;

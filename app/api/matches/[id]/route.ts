@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchById, updateMatch, deleteMatch, getMatchWithRatings } from '../../../../lib/matchService';
-import { isValidMatchDate, isValidMatchDateTime } from '../../../../lib/match-datetime';
+import { isValidMatchDate, isValidMatchDateTime, normalizeMatchTime } from '../../../../lib/match-datetime';
 import { isValidFormation, normalizeFormation } from '../../../../lib/formation';
 import { normalizeMatchTag, validateMatchTag } from '../../../../lib/match-tags';
 
@@ -93,18 +93,19 @@ export async function PATCH(
       }
     }
 
-    // Validate date format if provided
-    if (body.matchDate && !isValidMatchDate(body.matchDate)) {
+    // Empty/undefined date fields are invalid when explicitly included. Metadata-only
+    // PATCHes omit them and preserve the current database values.
+    if (Object.prototype.hasOwnProperty.call(body, 'matchDate') && !isValidMatchDate(body.matchDate)) {
       return NextResponse.json(
         {
-          error: 'matchDate must be in YYYY-MM-DD format',
+          error: 'Ngày thi đấu không hợp lệ (cần định dạng YYYY-MM-DD)',
           code: 'INVALID_DATE_FORMAT'
         },
         { status: 400 }
       );
     }
 
-    if (body.matchDateTime && !isValidMatchDateTime(body.matchDateTime)) {
+    if (Object.prototype.hasOwnProperty.call(body, 'matchDateTime') && !isValidMatchDateTime(body.matchDateTime)) {
       return NextResponse.json(
         {
           error: 'matchDateTime phải là thời gian ISO hợp lệ',
@@ -114,7 +115,14 @@ export async function PATCH(
       );
     }
 
-    const updated = await updateMatch(id, body);
+    const existing = await getMatchById(id);
+    if (!existing) {
+      return NextResponse.json({ error: `Không tìm thấy trận đấu ${id}`, code: 'NOT_FOUND' }, { status: 404 });
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'matchDate') && !Object.prototype.hasOwnProperty.call(body, 'matchDateTime') && existing.matchTime && !normalizeMatchTime(existing.matchTime)) {
+      return NextResponse.json({ error: 'Giờ thi đấu hiện tại không hợp lệ; hãy sửa dữ liệu giờ trước khi đổi ngày.', code: 'INVALID_MATCH_TIME' }, { status: 400 });
+    }
+    const updated = await updateMatch(id, body, existing);
     if (!updated) {
       return NextResponse.json(
         {

@@ -244,7 +244,7 @@ Dashboard cầu thủ có biểu đồ SVG responsive cho rating, WMA và dự �
 
 ### Match history API update (20/08/2026)
 
-`GET /api/matches` uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `season`, `competition`, `matchType`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. `POST` and `PATCH` accept the three optional match tags with an 80-character limit.
+`GET /api/matches` uses server-side pagination and supports `page`, `pageSize`, `search`, `opponent`, `result`, `playerId`, `dateFrom`, `dateTo`, `season`, `competition`, `matchType`, `sortBy=date|rating`, and `sortOrder=asc|desc`. The response includes `items`, `page`, `pageSize`, `total`, and `totalPages`; `matches` remains as a compatibility alias. `POST` and `PATCH` accept the three optional match tags with an 80-character limit. `PATCH` is partial: omitting `matchDate` and `matchDateTime` preserves the stored date, time, and datetime (including legacy rows); sending either date field validates it and rebuilds the related values when needed.
 
 ### Phase 3 backtest (20/08/2026)
 

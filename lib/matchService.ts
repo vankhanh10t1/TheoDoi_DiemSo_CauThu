@@ -272,8 +272,8 @@ export async function listMatches(options?: Partial<MatchListOptions>): Promise<
   return { items: rows.map(mapMatchRow), page: safePage, pageSize, total, totalPages };
 }
 
-export async function updateMatch(matchId: string, payload: Partial<CreateMatchPayload>): Promise<Match | null> {
-  const existing = await getMatchById(matchId);
+export async function updateMatch(matchId: string, payload: Partial<CreateMatchPayload>, currentMatch?: Match): Promise<Match | null> {
+  const existing = currentMatch ?? await getMatchById(matchId);
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -283,11 +283,18 @@ export async function updateMatch(matchId: string, payload: Partial<CreateMatchP
   const goalDiff = myScore - opponentScore;
   const isBigWin = goalDiff >= 3;
   const isBigLoss = goalDiff <= -3;
-  const matchDate = payload.matchDate ?? payload.matchDateTime?.slice(0, 10) ?? existing.matchDate;
-  const matchDateTime =
-    payload.matchDateTime ??
-    (payload.matchDate ? createMatchDateTime(payload.matchDate, existing.matchTime ?? '07:00') : existing.matchDateTime);
-  const matchTime = toDbMatchTime(matchDateTime) ?? existing.matchTime ?? null;
+  const hasMatchDate = Object.prototype.hasOwnProperty.call(payload, 'matchDate');
+  const hasMatchDateTime = Object.prototype.hasOwnProperty.call(payload, 'matchDateTime');
+  const matchDate = hasMatchDateTime ? payload.matchDateTime!.slice(0, 10) : hasMatchDate ? payload.matchDate! : existing.matchDate;
+  const matchDateTime = hasMatchDateTime
+    ? payload.matchDateTime
+    : hasMatchDate
+      ? createMatchDateTime(payload.matchDate!, existing.matchTime ?? '07:00')
+      : existing.matchDateTime;
+  // Metadata-only PATCHes preserve legacy date/time columns byte-for-byte.
+  const matchTime = hasMatchDate || hasMatchDateTime
+    ? toDbMatchTime(matchDateTime) ?? existing.matchTime ?? null
+    : existing.matchTime ?? null;
   const opponentName = Object.prototype.hasOwnProperty.call(payload, 'opponentName') ? payload.opponentName?.trim() || null : existing.opponentName ?? null;
   const note = Object.prototype.hasOwnProperty.call(payload, 'note') ? payload.note?.trim() || null : existing.note ?? null;
   const formation = Object.prototype.hasOwnProperty.call(payload, 'formation') ? payload.formation?.trim() || null : existing.formation ?? null;

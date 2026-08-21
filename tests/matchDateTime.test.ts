@@ -4,7 +4,8 @@ import {
   createSubmitMatchDateTime,
   getVietnamDateInputValue,
   isValidMatchDate,
-  isValidMatchDateTime
+  isValidMatchDateTime,
+  normalizeMatchTime
 } from '../lib/match-datetime';
 
 describe('match datetime validation', () => {
@@ -25,7 +26,9 @@ describe('match datetime validation', () => {
   it('tạo thời gian trận từ ngày thi đấu thay vì thời điểm nhập dữ liệu', () => {
     expect(createMatchDateTime('2026-06-10')).toBe('2026-06-10T07:00:00+07:00');
     expect(createMatchDateTime('2026-06-10', '20:30')).toBe('2026-06-10T20:30:00+07:00');
-    expect(() => createMatchDateTime('2026-02-31')).toThrow('Invalid match date or time');
+    expect(createMatchDateTime('2026-06-10', '20:30:00')).toBe('2026-06-10T20:30:00+07:00');
+    expect(normalizeMatchTime('07:00:00.000000')).toBe('07:00');
+    expect(() => createMatchDateTime('2026-02-31')).toThrow('Ngày thi đấu không hợp lệ');
   });
 
   it('lấy ngày mặc định theo múi giờ Việt Nam thay vì ngày UTC', () => {

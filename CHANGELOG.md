@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 21/08/2026 - Sửa lỗi ngày/giờ khi chỉnh sửa trận đấu
+
+- Công việc đã làm: đổi form lịch sử trận sang PATCH theo field thực sự thay đổi; cho phép sửa `season`, `competition`, `matchType`, đối thủ và tỷ số mà không gửi lại ngày; chuẩn hóa giờ PostgreSQL dạng `HH:mm:ss`; giữ nguyên dữ liệu ngày/giờ legacy khi chỉ sửa metadata.
+- Bug gặp phải: form luôn gửi `matchDate`, khiến service dựng lại `matchDateTime`; `match_time` cũ có thể là `HH:mm:ss` trong khi parser chỉ chấp nhận `HH:mm`, nên phát sinh `Invalid match date or time` dù người dùng không sửa ngày/giờ.
+- Cách xử lý: API đọc bản ghi hiện tại trước khi update, phân biệt field ngày có thực sự xuất hiện trong PATCH, chỉ validate/tái dựng timestamp khi ngày/datetime thay đổi, và trả lỗi tiếng Việt theo đúng field nếu dữ liệu ngày/giờ không hợp lệ.
+- File/khu vực liên quan: `components/match-history.tsx`, `lib/match-edit.ts`, `lib/matchService.ts`, `lib/match-datetime.ts`, `app/api/matches/[id]/route.ts`, test, README.
+- Ghi chú: thứ tự lịch sử tiếp tục dùng `match_date`, `match_time`, `created_at`; metadata-only update không làm thay đổi các khóa sắp xếp này.
+
 ## 20/08/2026 - Player Evaluation Algorithm Phase 2
 
 - Công việc đã làm: thêm profile WMA/Decay; giảm trọng số và confidence theo phút thi đấu/vai trò đá chính; bổ sung raw + per 90 cho bàn thắng, kiến tạo, thẻ, lỗi và discipline; thêm profile vị trí GK/DF/MF/FW với fallback; truyền đồng nhất filter mùa giải/giải đấu/loại trận qua analytics; tách Prediction/Risk/Recommendation Breakdown; thêm trạng thái `Chưa đủ cơ sở để khuyến nghị`.

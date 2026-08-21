@@ -156,4 +156,23 @@ describe('match service Postgres synchronization', () => {
     expect(updated?.isBigWin).toBe(true);
     expect(updated?.matchDateTime).toBe('2026-06-10T07:00:00+07:00');
   });
+
+  it('updates metadata without rebuilding legacy date/time values', async () => {
+    const legacyRow = { ...matchRow, match_time: '07:00:00', match_datetime: null, season: null, competition: null };
+    sqlMock.mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join('$');
+      sqlCalls.push({ text, values });
+      if (text.includes('from matches m')) return Promise.resolve([legacyRow]);
+      if (text.includes('update matches')) return Promise.resolve([{ ...legacyRow, season: '2026-S1', competition: 'Cup' }]);
+      return Promise.resolve([]);
+    });
+
+    const updated = await updateMatch('match-1', { season: ' 2026-S1 ', competition: ' Cup ' });
+    expect(updated?.season).toBe('2026-S1');
+    expect(updated?.matchDate).toBe('2026-06-01');
+    expect(updated?.matchDateTime).toBeUndefined();
+    const update = sqlCalls.find((call) => call.text.includes('update matches'))!;
+    expect(update.values).toContain('07:00:00');
+    expect(update.values).toContain(null);
+  });
 });

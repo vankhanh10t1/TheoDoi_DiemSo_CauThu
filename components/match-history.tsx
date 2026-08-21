@@ -5,6 +5,7 @@ import { fetchWithDebug } from '../lib/client-api';
 import { formatMatchDateTimeValue } from '../lib/match-history';
 import { ConfirmationDialog } from './confirmation-dialog';
 import { displayMatchTag } from '../lib/match-tags';
+import { buildMatchPatch } from '../lib/match-edit';
 
 const PAGE_SIZE = 10;
 type Filters = { search: string; result: string; playerId: string; dateFrom: string; dateTo: string; season: string; competition: string; matchType: string; sort: string };
@@ -39,7 +40,7 @@ export function MatchHistory() {
   }
   async function saveMatch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); if (!editing) return; const d = new FormData(e.currentTarget); setBusy(true); setError(null);
-    try { const res = await fetchWithDebug(`/api/matches/${editing.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({matchDate:d.get('matchDate'),opponentName:d.get('opponentName'),myScore:Number(d.get('myScore')),opponentScore:Number(d.get('opponentScore')),note:d.get('note'),season:d.get('season'),competition:d.get('competition'),matchType:d.get('matchType')})}); const data=await res.json(); if(!res.ok) throw new Error(data.error); setEditing(null); setMessage('Đã cập nhật trận đấu.'); await load(page); } catch(e){setError(e instanceof Error?e.message:'Không thể cập nhật trận.');} finally{setBusy(false);}
+    try { const patch=buildMatchPatch(editing,d); if(Object.keys(patch).length===0){setEditing(null);setMessage('Không có thay đổi cần lưu.');return;} const res = await fetchWithDebug(`/api/matches/${editing.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)}); const data=await res.json(); if(!res.ok) throw new Error(data.error || 'Không thể cập nhật trận đấu.'); setEditing(null); setMessage('Đã cập nhật trận đấu.'); await load(page); } catch(e){setError(e instanceof Error?e.message:'Không thể cập nhật trận.');} finally{setBusy(false);}
   }
   async function remove() {
     if(!deleting)return; setBusy(true); setError(null); try{const res=await fetchWithDebug(`/api/matches/${deleting.id}`,{method:'DELETE'});const data=await res.json();if(!res.ok)throw new Error(data.error);const next=matches.length===1&&page>1?page-1:page;setDeleting(null);setExpanded(null);setMessage('Đã xóa trận đấu.');setPage(next);await load(next);}catch(e){setError(e instanceof Error?e.message:'Không thể xóa trận.');}finally{setBusy(false);}
