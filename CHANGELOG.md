@@ -1,5 +1,13 @@
 # Nhật ký thay đổi
 
+## 21/08/2026 - Tách cửa sổ hiệu quả theo sơ đồ
+
+- Công việc đã làm: tách analytics sơ đồ khỏi cửa sổ 5/10/20 trận chung; mỗi sơ đồ dùng tối đa 10 trận gần nhất của chính nó; bổ sung số trận, thắng-hòa-thua, tỷ lệ thắng, rating đội, bàn thắng, kiến tạo, hiệu số và cảnh báo mẫu nhỏ; thêm filter mùa giải, giải đấu, loại trận và khoảng ngày trên màn hình đội hình.
+- Bug gặp phải: truy vấn cũ cắt 5/10/20 trận toàn cục trước rồi mới group, làm mất hoặc đánh giá thiếu các sơ đồ ít xuất hiện.
+- Cách xử lý: áp dụng filter trước, đọc thống kê từng trận, group theo formation rồi mới sắp xếp và cắt giới hạn riêng trong `calculateFormationAnalytics`; giữ window chung chỉ cho bảng vị trí.
+- File/khu vực liên quan: `lib/analytics/lineup.ts`, `app/api/analytics/lineup/route.ts`, `components/lineup-analytics.tsx`, test analytics đội hình và README.
+- Ghi chú: dữ liệu legacy thiếu formation hiển thị `Chưa phân loại`; dưới 3 trận hiển thị “Dữ liệu còn ít, chỉ nên tham khảo.”
+
 ## 21/08/2026 - Sửa lỗi ngày/giờ khi chỉnh sửa trận đấu
 
 - Công việc đã làm: đổi form lịch sử trận sang PATCH theo field thực sự thay đổi; cho phép sửa `season`, `competition`, `matchType`, đối thủ và tỷ số mà không gửi lại ngày; chuẩn hóa giờ PostgreSQL dạng `HH:mm:ss`; giữ nguyên dữ liệu ngày/giờ legacy khi chỉ sửa metadata.

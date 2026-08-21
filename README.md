@@ -4,6 +4,8 @@
 
 Mỗi trận hỗ trợ lưu sơ đồ (`formation`) và ba tag tùy chọn `season`, `competition`, `matchType`; dữ liệu cũ không có tag hiển thị **Chưa phân loại**. Lịch sử và dashboard có thể lọc theo tag mà không làm dài flow nhập rating. Chạy `npm run db:migrate` để áp dụng các migration mới trước khi dùng tính năng.
 
+Mục **Hiệu quả theo sơ đồ** áp dụng filter mùa giải, giải đấu, loại trận và khoảng ngày trước, sau đó group theo sơ đồ và dùng tối đa 10 trận gần nhất của riêng từng sơ đồ. Vì vậy lựa chọn 5/10/20 trận của analytics chung hoặc bảng vị trí không làm mất các sơ đồ xuất hiện rải rác; mẫu dưới 3 trận được ghi rõ là chỉ nên tham khảo.
+
 ## Tiếng Việt
 
 Web app cá nhân để theo dõi phong độ cầu thủ bóng đá: quản lý đội hình, tạo trận, nhập rating, xem lịch sử phong độ và đưa ra khuyến nghị dựa trên dữ liệu trận đấu.
